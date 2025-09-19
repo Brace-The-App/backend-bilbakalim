@@ -14,9 +14,7 @@ trait ModelTrait
     public function find($id, $throwIfNotFound = false)
     {
         $query = $this->query();
-        if (isset($this->requiredAccountId) && $this->requiredAccountId) {
-            $query->where('account_id', Auth::user()->account_id);
-        }
+        // Account ID kontrolü kaldırıldı - User modeli ile çalışıyor
 
         $item = $query->find($id);
 
@@ -35,8 +33,7 @@ trait ModelTrait
     public function create($data)
     {
         $query = $this->query();
-        if (isset($this->requiredAccountId) && $this->requiredAccountId && Auth::check())
-            $data['account_id'] = Auth::user()->account_id;
+        // Account ID kontrolü kaldırıldı - User modeli ile çalışıyor
 
         return $query->create($data);
     }

@@ -9,7 +9,6 @@ use App\Http\Requests\UserUpdateRequest;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use App\Http\Custom\Response;
-use App\Http\Repositories\UserRepository;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -18,12 +17,13 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 use App\Http\Services\AuthServices;
-use App\Models\Account;
 use Illuminate\Support\Arr;
 
 /**
- * @group Auth
- * @unauthenticated
+ * @OA\Tag(
+ *     name="Auth",
+ *     description="Authentication endpoints"
+ * )
  */
 class AuthController extends Controller
 {
@@ -39,19 +39,45 @@ class AuthController extends Controller
     }
 
     /**
-     * Login
-     *
-     * Login the user with given data if valid.
-     *
-     * @bodyParam email    string The email of the user.
-     * @bodyParam password string Password for the user.
-     *
-     * @param LoginRequest $request
-     * @return void
-     */
-    /**
-     * @param LoginRequest $request
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *     path="/api/auth/login",
+     *     summary="User Login",
+     *     description="Authenticate user and return access token",
+     *     operationId="login",
+     *     tags={"Auth"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 required={"email","password"},
+     *                 @OA\Property(property="email", type="string", format="email", example="user@example.com"),
+     *                 @OA\Property(property="password", type="string", format="password", example="password123")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Login successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Tebrikler başarılı bir şekilde giriş yaptınız."),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="user", type="object"),
+     *                 @OA\Property(property="accessToken", type="string", example="1|abc123...")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Lütfen bilgileri kontrol ediniz."),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     )
+     * )
      */
     public function login(LoginRequest $request)
     {
@@ -64,8 +90,7 @@ class AuthController extends Controller
             return true;
         })) {
             $user = $request->user();
-            $token = $user->createToken('ectaro');
-            $user = $user->load('account');
+            $token = $user->createToken('bilbakalim');
       
             $responseData = [];
             $responseData['user'] = UserResource::make($user);
@@ -85,17 +110,74 @@ class AuthController extends Controller
     }
 
 
+    /**
+     * @OA\Post(
+     *     path="/api/auth/register",
+     *     summary="User Registration",
+     *     description="Register a new user account",
+     *     operationId="register",
+     *     tags={"Auth"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 required={"name","email","phone","password","password_confirmation"},
+     *                 @OA\Property(property="name", type="string", example="John"),
+     *                 @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *                 @OA\Property(property="phone", type="string", example="+905551234567"),
+     *                 @OA\Property(property="password", type="string", format="password", example="password123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="password123")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Registration successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Kullanıcı başarılı bir şekilde oluşturuldu."),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="accessToken", type="string", example="1|abc123...")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     )
+     * )
+     */
     public function register(RegisterRequest $request)
     {
-        $UserRepository = new UserRepository;
-        $request['password'] = bcrypt($request['password']);
-        $request['role'] = 'member';
-        $request['status'] = 'active';
-        $data = Arr::only($request->all(), ['role', 'password', 'status', 'account_id', 'email', 'phone', 'surname', 'name']);
-        $user = $UserRepository->setNested(new Account(), $data['account_id'], 'account_id')->create($data);
-        $request['accessToken'] = $user->createToken('ectaro')->plainTextToken;
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'phone' => 'required|string|max:20',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
 
-        return $this->response->withData(true, "Kullanıcı başarılı bir şekilde oluşturuldu.", $request->all());
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'password' => bcrypt($request->password),
+        ]);
+
+        // Assign default role
+        $user->assignRole('uye');
+
+        $token = $user->createToken('bilbakalim')->plainTextToken;
+
+        return $this->response->withData(true, "Kullanıcı başarılı bir şekilde oluşturuldu.", [
+            'user' => UserResource::make($user),
+            'accessToken' => $token
+        ]);
     }
     /**
      * Profile Update
@@ -126,14 +208,25 @@ class AuthController extends Controller
     }
 
     /**
-     * Profile
-     *
-     * Profile Detail
-     *
-     * @authenticated
-     *
-     * @return void
-     *
+     * @OA\Get(
+     *     path="/api/auth/me",
+     *     summary="User Detail",
+     *     description="Get user detail",
+     *     operationId="detail",
+     *     tags={"Auth"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="User detail",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Kullanıcı detayı başarılı bir şekilde listelendi."),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="user", type="object")
+     *             )
+     *         )
+     *     )
+     * )
      */
     public function detail()
     {
@@ -171,5 +264,38 @@ class AuthController extends Controller
             "Başarılı bir şekilde çıkış yapıldı.",
             []
         );
+    }
+
+    /**
+     * Web Login for Admin Panel
+     */
+    public function login_post(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        $credentials = $request->only('email', 'password');
+        $remember = $request->has('remember');
+
+        if (Auth::attempt($credentials, $remember)) {
+            $user = Auth::user();
+            
+            // Check if user has admin or staff role
+            if (!$user->hasAnyRole(['admin', 'personel'])) {
+                Auth::logout();
+                return redirect()->back()->with('error', 'Bu panele erişim yetkiniz bulunmamaktadır.');
+            }
+
+            $user->last_login_at = now();
+            $user->save();
+
+            return redirect()->intended(route('admin.dashboard'));
+        }
+
+        return redirect()->back()
+            ->withInput($request->only('email'))
+            ->with('error', 'Email adresi veya şifre hatalı.');
     }
 }

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket Test - BilBakalim</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .question-item { border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 5px; }
+        .controls { margin: 20px 0; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 Socket.IO Test - BilBakalim</h1>
+        
+        <div id="status" class="status disconnected">
+            ❌ Socket Bağlantısı: Bağlanıyor...
+        </div>
+        
+        <div class="controls">
+            <button onclick="testQuestions()">📋 Soruları Getir</button>
+            <button onclick="testCategories()">📁 Kategorileri Getir</button>
+            <button onclick="testWebhook()">🚀 Webhook Test Et</button>
+            <button onclick="clearLogs()">🗑️ Logları Temizle</button>
+        </div>
+        
+        <div id="questions-container">
+            <h3>📋 Sorular:</h3>
+            <div id="questions-list"></div>
+        </div>
+        
+        <div id="logs-container">
+            <h3>📝 Loglar:</h3>
+            <div id="logs" style="background: #f8f9fa; padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+
+        // Socket bağlantısını başlat
+        function initSocket() {
+            socket = io('http://localhost:3001', {
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                isConnected = true;
+                updateStatus('✅ Socket Bağlantısı: Bağlandı', 'connected');
+                addLog('Socket bağlantısı kuruldu');
+            });
+
+            socket.on('disconnect', () => {
+                isConnected = false;
+                updateStatus('❌ Socket Bağlantısı: Bağlantı kesildi', 'disconnected');
+                addLog('Socket bağlantısı kesildi');
+            });
+
+            socket.on('connect_error', (error) => {
+                updateStatus('❌ Socket Bağlantısı: Hata - ' + error.message, 'disconnected');
+                addLog('Socket bağlantı hatası: ' + error.message);
+            });
+
+            // Soru eventlerini dinle
+            socket.on('question_created', (data) => {
+                addLog('🆕 Yeni soru oluşturuldu: ' + JSON.stringify(data));
+                toastr.success('Yeni soru eklendi!');
+                testQuestions(); // Soruları yenile
+            });
+
+            socket.on('question_updated', (data) => {
+                addLog('✏️ Soru güncellendi: ' + JSON.stringify(data));
+                toastr.info('Soru güncellendi!');
+                testQuestions(); // Soruları yenile
+            });
+
+            socket.on('question_deleted', (data) => {
+                addLog('🗑️ Soru silindi: ' + JSON.stringify(data));
+                toastr.warning('Soru silindi!');
+                testQuestions(); // Soruları yenile
+            });
+
+            socket.on('category_updated', (data) => {
+                addLog('📁 Kategori güncellendi: ' + JSON.stringify(data));
+                toastr.info('Kategori güncellendi!');
+            });
+        }
+
+        // Durum güncelle
+        function updateStatus(message, className) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + className;
+        }
+
+        // Log ekle
+        function addLog(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        // Soruları getir
+        async function testQuestions() {
+            try {
+                addLog('📋 Sorular getiriliyor...');
+                const response = await fetch('http://localhost:3001/api/questions');
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog('✅ Sorular başarıyla getirildi: ' + data.data.length + ' adet');
+                    displayQuestions(data.data);
+                } else {
+                    addLog('❌ Soru getirme hatası: ' + data.message);
+                }
+            } catch (error) {
+                addLog('❌ Soru getirme hatası: ' + error.message);
+            }
+        }
+
+        // Kategorileri getir
+        async function testCategories() {
+            try {
+                addLog('📁 Kategoriler getiriliyor...');
+                const response = await fetch('http://localhost:3001/api/categories');
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog('✅ Kategoriler başarıyla getirildi: ' + data.data.length + ' adet');
+                } else {
+                    addLog('❌ Kategori getirme hatası: ' + data.message);
+                }
+            } catch (error) {
+                addLog('❌ Kategori getirme hatası: ' + error.message);
+            }
+        }
+
+        // Webhook test et
+        async function testWebhook() {
+            try {
+                addLog('🚀 Webhook test ediliyor...');
+                const response = await fetch('http://localhost:3001/webhook/question-created', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: {
+                            id: 999,
+                            question: {
+                                tr: 'Test Soru',
+                                en: 'Test Question'
+                            }
+                        },
+                        categoryId: 1
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    addLog('✅ Webhook test başarılı: ' + data.message);
+                } else {
+                    addLog('❌ Webhook test hatası: ' + data.message);
+                }
+            } catch (error) {
+                addLog('❌ Webhook test hatası: ' + error.message);
+            }
+        }
+
+        // Soruları göster
+        function displayQuestions(questions) {
+            const container = document.getElementById('questions-list');
+            container.innerHTML = '';
+            
+            questions.forEach(question => {
+                const div = document.createElement('div');
+                div.className = 'question-item';
+                div.innerHTML = `
+                    <strong>ID:</strong> ${question.id}<br>
+                    <strong>Soru (TR):</strong> ${question.question?.tr || 'N/A'}<br>
+                    <strong>Soru (EN):</strong> ${question.question?.en || 'N/A'}<br>
+                    <strong>Kategori:</strong> ${question.category?.name?.tr || 'N/A'}<br>
+                    <strong>Zorluk:</strong> ${question.question_level || 'N/A'}<br>
+                    <strong>Aktif:</strong> ${question.is_active ? 'Evet' : 'Hayır'}
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Logları temizle
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Sayfa yüklendiğinde socket'i başlat
+        document.addEventListener('DOMContentLoaded', function() {
+            initSocket();
+        });
+    </script>
+</body>
+</html>
+
+
