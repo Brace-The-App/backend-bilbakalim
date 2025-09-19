@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Http;
 
 class WebhookController extends Controller
 {
-    private $socketServerUrl = 'http://socket-server:3001';
+    private $socketServerUrl = 'http://bilbakalim.online:3001';
 
     /**
      * Soru oluşturulduğunda Socket.IO'ya bildir
