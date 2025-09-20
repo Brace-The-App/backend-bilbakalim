@@ -141,5 +141,13 @@ class User extends Authenticatable
         return $total > 0 ? round(($this->correct_answers_count / $total) * 100, 2) : 0;
     }
 
+    /**
+     * Get the FCM token for the user.
+     */
+    public function routeNotificationForFcm()
+    {
+        return $this->device_token;
+    }
+
     // Account relationships kaldırıldı
 }

@@ -658,7 +658,7 @@ $(document).ready(function() {
         $('#edit-type').val(type);
         $('#edit-description').val(description || '');
         $('#edit-is_active').prop('checked', active == 1 || active === true);
-        $('#settingEditForm').attr('action', '/admin/general-settings/' + id);
+        $('#settingEditForm').attr('action', '/private/lesley/admin/general-settings/' + id);
     });
 
     // Update Setting
@@ -711,7 +711,7 @@ $(document).ready(function() {
             console.log('Sending logo upload request...');
             
             $.ajax({
-                url: '/admin/general-settings/upload-logo',
+                url: '/private/lesley/admin/general-settings/upload-logo',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -753,7 +753,7 @@ $(document).ready(function() {
             console.log('Sending favicon upload request...');
             
             $.ajax({
-                url: '/admin/general-settings/upload-favicon',
+                url: '/private/lesley/admin/general-settings/upload-favicon',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -798,7 +798,7 @@ $(document).ready(function() {
     window.deleteSetting = function(id) {
         if (confirm('Bu ayarı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/admin/general-settings/' + id,
+                url: '/private/lesley/admin/general-settings/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

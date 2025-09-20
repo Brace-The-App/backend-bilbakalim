@@ -94,7 +94,7 @@
                                            name="email" 
                                            value="{{ old('email') }}" 
                                            required 
-                                           placeholder="admin@bilbakalim.com"
+                                           placeholder="example@mail.com"
                                            autocomplete="email">
                                     @error('email')
                                         <div class="invalid-feedback">{{ $message }}</div>

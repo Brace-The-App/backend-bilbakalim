@@ -23,7 +23,12 @@ class Tournament extends Model
         'difficulty_level',
         'status',
         'image',
-        'is_featured'
+        'is_featured',
+        'tournament_type',
+        'max_participants',
+        'current_participants',
+        'is_ranked',
+        'ranking_type'
     ];
 
     protected $casts = [
@@ -38,7 +43,12 @@ class Tournament extends Model
         'question_count' => 'integer',
         'difficulty_level' => 'string',
         'status' => 'string',
-        'is_featured' => 'boolean'
+        'is_featured' => 'boolean',
+        'tournament_type' => 'string',
+        'max_participants' => 'integer',
+        'current_participants' => 'integer',
+        'is_ranked' => 'boolean',
+        'ranking_type' => 'string'
     ];
 
     // Relationships

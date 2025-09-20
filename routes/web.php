@@ -16,7 +16,7 @@ Route::get('/', function () {
 })->name('welcome');
 
 // Admin login redirect
-Route::get('/admin', function () {
+Route::get('/private/lesley/admin', function () {
     if (auth()->check()) {
         return redirect()->route('admin.dashboard');
     }
@@ -24,7 +24,7 @@ Route::get('/admin', function () {
 })->name('admin');
 
 // Auth routes - Login & Logout
-Route::get('/login', function () {
+Route::get('/private/lesley/login', function () {
     return view('admin.auth.login');
 })->name('login')->middleware('guest');
 
@@ -36,7 +36,7 @@ Route::post('/logout', function () {
 })->name('logout');
 
 // Admin panel routes
-Route::prefix('admin')->name('admin.')->middleware(['auth'])->group(function () {
+Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
     // Users management
@@ -65,9 +65,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth'])->group(function () 
     
     // Notifications management
     Route::resource('notifications', NotificationController::class);
+    Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
 });
 
-Route::get('/api/documentation', function () {
+Route::get('private/lesley/jetwaldes/api/documentation', function () {
     $documentation = 'default';
     $documentationTitle = 'BilBakalim API Documentation';
     $useAbsolutePath = true;

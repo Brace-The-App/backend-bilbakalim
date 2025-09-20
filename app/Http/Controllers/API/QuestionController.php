@@ -132,11 +132,11 @@ class QuestionController extends Controller
         $perPage = $request->get('per_page', 15);
         $questions = $query->paginate($perPage);
 
-        return $this->response->withData(
-            true,
-            "Sorular başarılı bir şekilde listelendi.",
-            $questions
-        );
+        return response()->json([
+            'success' => true,
+            'message' => 'Sorular başarılı bir şekilde listelendi.',
+            'data' => $questions
+        ]);
     }
 
     /**
@@ -153,18 +153,18 @@ class QuestionController extends Controller
         $question = Question::with('category')->find($id);
 
         if (!$question) {
-            return $this->response->withData(
-                false,
-                "Soru bulunamadı.",
-                []
-            );
+            return response()->json([
+                'success' => false,
+                'message' => 'Soru bulunamadı.',
+                'data' => []
+            ]);
         }
 
-        return $this->response->withData(
-            true,
-            "Soru detayı başarılı bir şekilde getirildi.",
-            $question
-        );
+        return response()->json([
+            'success' => true,
+            'message' => 'Soru detayı başarılı bir şekilde getirildi.',
+            'data' => $question
+        ]);
     }
 
     /**
@@ -343,11 +343,11 @@ class QuestionController extends Controller
         $category = Category::find($categoryId);
 
         if (!$category) {
-            return $this->response->withData(
-                false,
-                "Kategori bulunamadı.",
-                []
-            );
+            return response()->json([
+                'success' => false,
+                'message' => 'Kategori bulunamadı.',
+                'data' => []
+            ]);
         }
 
         $query = Question::where('category_id', $categoryId)->with('category');
@@ -369,10 +369,217 @@ class QuestionController extends Controller
         $perPage = $request->get('per_page', 15);
         $questions = $query->paginate($perPage);
 
-        return $this->response->withData(
-            true,
-            "Kategoriye ait sorular başarılı bir şekilde listelendi.",
-            $questions
-        );
+        return response()->json([
+            'success' => true,
+            'message' => 'Kategoriye ait sorular başarılı bir şekilde listelendi.',
+            'data' => $questions
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/questions/for-game",
+     *     summary="Oyun için sorular getir",
+     *     description="Bireysel oyun veya turnuva için sorular getirir",
+     *     tags={"Questions"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="game_type",
+     *         in="query",
+     *         description="Oyun türü",
+     *         required=true,
+     *         @OA\Schema(type="string", enum={"individual","tournament","practice"}, example="individual")
+     *     ),
+     *     @OA\Parameter(
+     *         name="category_id",
+     *         in="query",
+     *         description="Kategori ID",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="difficulty_level",
+     *         in="query",
+     *         description="Zorluk seviyesi",
+     *         required=true,
+     *         @OA\Schema(type="string", enum={"easy","medium","hard"}, example="medium")
+     *     ),
+     *     @OA\Parameter(
+     *         name="question_count",
+     *         in="query",
+     *         description="Soru sayısı",
+     *         required=true,
+     *         @OA\Schema(type="integer", minimum=5, maximum=50, example=20)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Oyun soruları getirildi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Oyun soruları başarıyla getirildi"),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="questions", type="array", @OA\Items(type="object")),
+     *                 @OA\Property(property="total_questions", type="integer", example=20),
+     *                 @OA\Property(property="difficulty_level", type="string", example="medium"),
+     *                 @OA\Property(property="category", type="object")
+     *             )
+     *         )
+     *     )
+     * )
+     */
+    public function forGame(Request $request)
+    {
+        $request->validate([
+            'game_type' => 'required|in:individual,tournament,practice',
+            'category_id' => 'nullable|exists:categories,id',
+            'difficulty_level' => 'required|in:easy,medium,hard',
+            'question_count' => 'required|integer|min:5|max:50'
+        ]);
+
+        $query = Question::active()->byLevel($request->difficulty_level);
+
+        // Kategori filtresi
+        if ($request->category_id) {
+            $query->byCategory($request->category_id);
+        }
+
+        // Oyun türüne göre özel filtreler
+        switch ($request->game_type) {
+            case 'individual':
+                // Bireysel oyun için rastgele sorular
+                $questions = $query->inRandomOrder()->limit($request->question_count)->get();
+                break;
+            case 'tournament':
+                // Turnuva için zorluk seviyesine göre dengeli dağılım
+                $questions = $query->inRandomOrder()->limit($request->question_count)->get();
+                break;
+            case 'practice':
+                // Pratik için kolay sorular
+                $questions = $query->where('question_level', 'easy')
+                    ->inRandomOrder()->limit($request->question_count)->get();
+                break;
+        }
+
+        // Kategori bilgisini getir
+        $category = null;
+        if ($request->category_id) {
+            $category = Category::find($request->category_id);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Oyun soruları başarıyla getirildi.',
+            'data' => [
+                'questions' => $questions,
+                'total_questions' => $questions->count(),
+                'difficulty_level' => $request->difficulty_level,
+                'game_type' => $request->game_type,
+                'category' => $category
+            ]
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/questions/random",
+     *     summary="Rastgele soru getir",
+     *     description="Belirtilen kriterlere göre rastgele soru getirir",
+     *     tags={"Questions"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="category_id",
+     *         in="query",
+     *         description="Kategori ID",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="difficulty_level",
+     *         in="query",
+     *         description="Zorluk seviyesi",
+     *         required=false,
+     *         @OA\Schema(type="string", enum={"easy","medium","hard"})
+     *     ),
+     *     @OA\Parameter(
+     *         name="exclude_ids",
+     *         in="query",
+     *         description="Hariç tutulacak soru ID'leri (virgülle ayrılmış)",
+     *         required=false,
+     *         @OA\Schema(type="string", example="1,2,3")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Rastgele soru getirildi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Rastgele soru başarıyla getirildi"),
+     *             @OA\Property(property="data", type="object")
+     *         )
+     *     )
+     * )
+     */
+    public function random(Request $request)
+    {
+        $query = Question::active()->with('category');
+
+        // Kategori filtresi
+        if ($request->category_id) {
+            $query->byCategory($request->category_id);
+        }
+
+        // Zorluk seviyesi filtresi
+        if ($request->difficulty_level) {
+            $query->byLevel($request->difficulty_level);
+        }
+
+        // Hariç tutulacak sorular
+        if ($request->exclude_ids) {
+            $excludeIds = explode(',', $request->exclude_ids);
+            $query->whereNotIn('id', $excludeIds);
+        }
+
+        $question = $query->inRandomOrder()->first();
+
+        if (!$question) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kriterlere uygun soru bulunamadı.',
+                'data' => []
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rastgele soru başarıyla getirildi.',
+            'data' => $question
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/questions/categories",
+     *     summary="Kategorileri listele",
+     *     description="Aktif kategorileri listeler",
+     *     tags={"Questions"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Kategoriler listelendi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Kategoriler başarıyla listelendi"),
+     *             @OA\Property(property="data", type="array", @OA\Items(type="object"))
+     *         )
+     *     )
+     * )
+     */
+    public function categories()
+    {
+        $categories = Category::active()->ordered()->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kategoriler başarıyla listelendi.',
+            'data' => $categories
+        ]);
     }
 }

@@ -40,10 +40,9 @@ class Notification extends Model
     public function getTypeColorAttribute(): string
     {
         return match($this->type) {
-            'info' => 'primary',
-            'success' => 'success',
-            'warning' => 'warning',
-            'error' => 'danger',
+            'email' => 'info',
+            'sms' => 'warning',
+            'fcm' => 'dark',
             default => 'secondary'
         };
     }
@@ -52,10 +51,9 @@ class Notification extends Model
     public function getTypeIconAttribute(): string
     {
         return match($this->type) {
-            'info' => 'info',
-            'success' => 'check-circle',
-            'warning' => 'alert-triangle',
-            'error' => 'x-circle',
+            'email' => 'mail',
+            'sms' => 'message-circle',
+            'fcm' => 'smartphone',
             default => 'bell'
         };
     }

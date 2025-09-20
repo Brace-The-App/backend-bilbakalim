@@ -137,7 +137,7 @@
           @endif
           
           <!-- Tab Navigation -->
-          <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
+          <!-- <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="q-tr-tab" data-bs-toggle="tab" data-bs-target="#q-tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -148,7 +148,7 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul>
+          </ul> -->
           
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="createQuestionTabContent">
@@ -156,23 +156,23 @@
             <div class="tab-pane fade show active" id="q-tr-pane" role="tabpanel">
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">Soru (Türkçe) *</label>
+                  <!-- <label class="form-label">Soru  *</label> -->
                   <textarea name="question[tr]" class="form-control" rows="3" required></textarea>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 1 (Türkçe) *</label>
+                  <label class="form-label">Şık 1  *</label>
                   <input type="text" name="one_choice[tr]" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 2 (Türkçe) *</label>
+                  <label class="form-label">Şık 2  *</label>
                   <input type="text" name="two_choice[tr]" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 3 (Türkçe) *</label>
+                  <label class="form-label">Şık 3  *</label>
                   <input type="text" name="three_choice[tr]" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 4 (Türkçe) *</label>
+                  <label class="form-label">Şık 4  *</label>
                   <input type="text" name="four_choice[tr]" class="form-control" required>
                 </div>
               </div>
@@ -387,7 +387,7 @@
           @endif
           
           <!-- Tab Navigation -->
-          <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
+          <!-- <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="edit-q-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-q-tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -398,7 +398,7 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul>
+          </ul> -->
           
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="editQuestionTabContent">
@@ -406,23 +406,23 @@
             <div class="tab-pane fade show active" id="edit-q-tr-pane" role="tabpanel">
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">Soru (Türkçe) *</label>
+                  <label class="form-label">Soru  *</label>
                   <textarea name="question[tr]" id="edit-q" class="form-control" rows="3" required></textarea>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 1 (Türkçe) *</label>
+                  <label class="form-label">Şık 1  *</label>
                   <input type="text" name="one_choice[tr]" id="edit-a1" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 2 (Türkçe) *</label>
+                  <label class="form-label">Şık 2  *</label>
                   <input type="text" name="two_choice[tr]" id="edit-a2" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 3 (Türkçe) *</label>
+                  <label class="form-label">Şık 3  *</label>
                   <input type="text" name="three_choice[tr]" id="edit-a3" class="form-control" required>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label">Şık 4 (Türkçe) *</label>
+                  <label class="form-label">Şık 4  *</label>
                   <input type="text" name="four_choice[tr]" id="edit-a4" class="form-control" required>
                 </div>
               </div>
@@ -623,7 +623,7 @@ $(document).ready(function() {
     // Load Questions Function
     function loadQuestions(page = 1) {
         $.ajax({
-            url: '/admin/questions',
+            url: '/private/lesley/admin/questions',
             type: 'GET',
             data: { page: page },
             success: function(response) {
@@ -684,7 +684,7 @@ $(document).ready(function() {
             $('#edit-coin').val(coin);
             $('#edit-active').prop('checked', active == 1);
             $('#edit-category').val(category);
-            $('#questionEditForm').attr('action', '/admin/questions/' + id);
+            $('#questionEditForm').attr('action', '/private/lesley/admin/questions/' + id);
         });
     }
 
@@ -739,7 +739,7 @@ $(document).ready(function() {
     window.deleteQuestion = function(id) {
         if (confirm('Bu soruyu silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/admin/questions/' + id,
+                url: '/private/lesley/admin/questions/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

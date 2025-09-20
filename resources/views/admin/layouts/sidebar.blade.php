@@ -20,18 +20,19 @@
                     
                     <li class="sidebar-main-title">
                         <div>
-                            <h6 class="lan-1">Dashboard</h6>
+                          
                         </div>
                     </li>
                     
+                    
                     <li class="sidebar-list">
-                        <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" 
-                           href="{{ route('admin.dashboard') }}">
-                            <i data-feather="home"></i>
-                            <span class="lan-3">Dashboard</span>
-                        </a>
-                    </li>
+    <i class="fa fa-thumb-tack"></i>
+    <a class="sidebar-link sidebar-title  {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" 
+       href="{{ route('admin.dashboard') }}">
+        <i data-feather="home"></i>
+        <span class="lan-3">Dashboards</span>
+    </a>
+</li>
 
                     @can('view users')
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))

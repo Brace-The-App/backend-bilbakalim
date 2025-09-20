@@ -378,6 +378,1103 @@
                 ]
             }
         },
+        "/api/coin-packages": {
+            "get": {
+                "tags": [
+                    "Coin Packages"
+                ],
+                "summary": "Jeton paketlerini listele",
+                "description": "Mevcut jeton paketlerini listeler",
+                "operationId": "6b33544276aab344d926c210508ea575",
+                "parameters": [
+                    {
+                        "name": "currency",
+                        "in": "query",
+                        "description": "Para birimi",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "TRY"
+                        }
+                    },
+                    {
+                        "name": "show_inactive",
+                        "in": "query",
+                        "description": "Pasif paketleri göster",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jeton paketleri listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/coin-purchases": {
+            "get": {
+                "tags": [
+                    "Coin Purchases"
+                ],
+                "summary": "Jeton satın alma geçmişi",
+                "description": "Kullanıcının jeton satın alma geçmişini listeler",
+                "operationId": "fa7794152fe65ddec0af3d9a1b921ddf",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Satın alma durumu",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "pending",
+                                "completed",
+                                "failed",
+                                "cancelled",
+                                "refunded"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Sayfa başına kayıt sayısı",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Satın alma geçmişi listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/coin-purchases/{coinPurchase}": {
+            "get": {
+                "tags": [
+                    "Coin Purchases"
+                ],
+                "summary": "Jeton satın alma detayı",
+                "description": "Belirli bir jeton satın alma işleminin detayını getirir",
+                "operationId": "71ca881f2ee8b3da22f3487df64d694a",
+                "parameters": [
+                    {
+                        "name": "coinPurchase",
+                        "in": "path",
+                        "description": "Satın alma ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Satın alma detayı getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Bu satın alma kaydına erişim yetkiniz yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu satın alma kaydına erişim yetkiniz yok"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/friend-invites/create": {
+            "post": {
+                "tags": [
+                    "Friend Invites"
+                ],
+                "summary": "Davet linki oluştur",
+                "description": "Yeni bir arkadaş davet linki oluşturur",
+                "operationId": "671d69f927a724ce2c24d3047fa24cea",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "phone_number": {
+                                        "description": "Davet edilecek telefon numarası",
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "description": "Davet edilecek email adresi",
+                                        "type": "string"
+                                    },
+                                    "reward_coins": {
+                                        "description": "Ödül jeton miktarı",
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "bonus_coins": {
+                                        "description": "Bonus jeton miktarı",
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "expires_in_hours": {
+                                        "description": "Süre (saat)",
+                                        "type": "integer",
+                                        "maximum": 168,
+                                        "minimum": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Davet linki oluşturuldu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Davet linki başarıyla oluşturuldu"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "invite_code": {
+                                                    "type": "string",
+                                                    "example": "ABC12345"
+                                                },
+                                                "invite_link": {
+                                                    "type": "string",
+                                                    "example": "https://app.com/invite/ABC12345"
+                                                },
+                                                "expires_at": {
+                                                    "type": "string",
+                                                    "example": "2024-01-01 23:59:59"
+                                                },
+                                                "reward_coins": {
+                                                    "type": "integer",
+                                                    "example": 100
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/game-answers/submit": {
+            "post": {
+                "tags": [
+                    "Game Answers"
+                ],
+                "summary": "Cevap ver",
+                "description": "Oyun sırasında soruya cevap verir",
+                "operationId": "95a99f1d83a6d5a02b5a23ba101a1f58",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "session_id": {
+                                        "description": "Oyun oturum ID",
+                                        "type": "string"
+                                    },
+                                    "question_id": {
+                                        "description": "Soru ID",
+                                        "type": "integer"
+                                    },
+                                    "user_answer": {
+                                        "description": "Kullanıcı cevabı",
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ]
+                                    },
+                                    "time_taken": {
+                                        "description": "Cevap süresi (saniye)",
+                                        "type": "integer",
+                                        "maximum": 300,
+                                        "minimum": 0
+                                    },
+                                    "is_joker_used": {
+                                        "description": "Joker kullanıldı mı",
+                                        "type": "boolean"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevap kaydedildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cevap kaydedildi"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "is_correct": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "points_earned": {
+                                                    "type": "integer",
+                                                    "example": 120
+                                                },
+                                                "coins_earned": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "total_score": {
+                                                    "type": "integer",
+                                                    "example": 500
+                                                },
+                                                "correct_answers": {
+                                                    "type": "integer",
+                                                    "example": 8
+                                                },
+                                                "wrong_answers": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "joker_remaining": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "streak_count": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "progress_percentage": {
+                                                    "type": "number",
+                                                    "example": 50
+                                                },
+                                                "is_game_completed": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/game-sessions/create": {
+            "post": {
+                "tags": [
+                    "Game Sessions"
+                ],
+                "summary": "Oyun oturumu oluştur",
+                "description": "Yeni bir oyun oturumu oluşturur",
+                "operationId": "9b61140e806cea9279dcac71f427d6e1",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "individual_game_id": {
+                                        "description": "Bireysel oyun ID",
+                                        "type": "integer"
+                                    },
+                                    "tournament_id": {
+                                        "description": "Turnuva ID",
+                                        "type": "integer"
+                                    },
+                                    "game_type": {
+                                        "description": "Oyun türü",
+                                        "type": "string",
+                                        "enum": [
+                                            "individual",
+                                            "tournament",
+                                            "practice"
+                                        ]
+                                    },
+                                    "total_questions": {
+                                        "description": "Toplam soru sayısı",
+                                        "type": "integer",
+                                        "maximum": 50,
+                                        "minimum": 5
+                                    },
+                                    "time_remaining": {
+                                        "description": "Kalan süre (saniye)",
+                                        "type": "integer",
+                                        "maximum": 3600,
+                                        "minimum": 60
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Oyun oturumu oluşturuldu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Oyun oturumu oluşturuldu"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "session": {
+                                                    "type": "object"
+                                                },
+                                                "questions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/game-sessions/active": {
+            "get": {
+                "tags": [
+                    "Game Sessions"
+                ],
+                "summary": "Aktif oturumu getir",
+                "description": "Kullanıcının aktif oyun oturumunu getirir",
+                "operationId": "f8e42556f0bc9b730b200ad1649b1eb3",
+                "responses": {
+                    "200": {
+                        "description": "Aktif oturum bulundu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Aktif oturum bulunamadı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Aktif oturum bulunamadı"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/individual-games/create": {
+            "post": {
+                "tags": [
+                    "Individual Games"
+                ],
+                "summary": "Bireysel oyun oluştur",
+                "description": "Yeni bir bireysel oyun oluşturur",
+                "operationId": "98dcee2bdcfb2793b33e33bbfc91a7c3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "category_id": {
+                                        "description": "Kategori ID",
+                                        "type": "integer"
+                                    },
+                                    "game_type": {
+                                        "description": "Oyun türü",
+                                        "type": "string",
+                                        "enum": [
+                                            "individual",
+                                            "practice",
+                                            "daily_challenge"
+                                        ]
+                                    },
+                                    "difficulty_level": {
+                                        "description": "Zorluk seviyesi",
+                                        "type": "string",
+                                        "enum": [
+                                            "easy",
+                                            "medium",
+                                            "hard"
+                                        ]
+                                    },
+                                    "question_count": {
+                                        "description": "Soru sayısı",
+                                        "type": "integer",
+                                        "maximum": 50,
+                                        "minimum": 5
+                                    },
+                                    "time_limit_seconds": {
+                                        "description": "Zaman sınırı (saniye)",
+                                        "type": "integer",
+                                        "maximum": 3600,
+                                        "minimum": 60
+                                    },
+                                    "joker_count": {
+                                        "description": "Joker sayısı",
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 0
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Oyun başarıyla oluşturuldu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Oyun başarıyla oluşturuldu"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "game": {
+                                                    "type": "object"
+                                                },
+                                                "session": {
+                                                    "type": "object"
+                                                },
+                                                "questions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hatalı istek",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Zaten aktif bir oyununuz bulunmaktadır"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/individual-games/active": {
+            "get": {
+                "tags": [
+                    "Individual Games"
+                ],
+                "summary": "Aktif oyunu getir",
+                "description": "Kullanıcının aktif oyununu getirir",
+                "operationId": "8c9890379993be536f2039806840f39b",
+                "responses": {
+                    "200": {
+                        "description": "Aktif oyun bulundu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Aktif oyun bulunamadı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Aktif oyun bulunamadı"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/notifications/send": {
+            "post": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Send notification to users",
+                "description": "Send notification to users",
+                "operationId": "98e58f18a0ddb904c27a4334767f7071",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "content",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "description": "Notification title",
+                                        "type": "string"
+                                    },
+                                    "content": {
+                                        "description": "Notification content",
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "description": "Notification type",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "sms",
+                                            "fcm"
+                                        ]
+                                    },
+                                    "target_users": {
+                                        "description": "Comma-separated user IDs (optional)",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Notification sent successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bildirim başarıyla gönderildi."
+                                        },
+                                        "sent_count": {
+                                            "type": "integer",
+                                            "example": 150
+                                        },
+                                        "notification_id": {
+                                            "type": "integer",
+                                            "example": 123
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Validation error"
+                                        },
+                                        "errors": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bildirim gönderilirken bir hata oluştu."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/notifications/stats": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get notification statistics",
+                "description": "Get notification statistics",
+                "operationId": "b596ec983a2ec378fefa51dd079aecb7",
+                "responses": {
+                    "200": {
+                        "description": "Statistics retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "stats": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "type": {
+                                                        "type": "string",
+                                                        "example": "email"
+                                                    },
+                                                    "total_count": {
+                                                        "type": "integer",
+                                                        "example": 10
+                                                    },
+                                                    "total_sent": {
+                                                        "type": "integer",
+                                                        "example": 1500
+                                                    },
+                                                    "avg_sent_per_notification": {
+                                                        "type": "number",
+                                                        "example": 150
+                                                    },
+                                                    "last_sent": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/notifications/recent": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get recent notifications",
+                "description": "Get recent notifications",
+                "operationId": "0c8a83a993506bda0e15b371d085ce14",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of notifications to retrieve",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 10
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Recent notifications retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "notifications": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "Test Notification"
+                                                    },
+                                                    "content": {
+                                                        "type": "string",
+                                                        "example": "This is a test notification"
+                                                    },
+                                                    "type": {
+                                                        "type": "string",
+                                                        "example": "email"
+                                                    },
+                                                    "sent_count": {
+                                                        "type": "integer",
+                                                        "example": 150
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/payments/initiate": {
+            "post": {
+                "tags": [
+                    "Payments"
+                ],
+                "summary": "Ödeme başlat",
+                "description": "Jeton satın alma için ödeme işlemini başlatır",
+                "operationId": "f8e9cfbc3af173fa75cac87ebeee6962",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "coin_package_id": {
+                                        "description": "Jeton paketi ID",
+                                        "type": "integer"
+                                    },
+                                    "payment_method": {
+                                        "description": "Ödeme yöntemi",
+                                        "type": "string",
+                                        "enum": [
+                                            "credit_card",
+                                            "paypal",
+                                            "apple_pay",
+                                            "google_pay"
+                                        ]
+                                    },
+                                    "payment_provider": {
+                                        "description": "Ödeme sağlayıcısı",
+                                        "type": "string",
+                                        "enum": [
+                                            "stripe",
+                                            "paypal",
+                                            "iyzico",
+                                            "paytr"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ödeme başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ödeme başlatıldı"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "payment": {
+                                                    "type": "object"
+                                                },
+                                                "coin_purchase": {
+                                                    "type": "object"
+                                                },
+                                                "payment_url": {
+                                                    "type": "string",
+                                                    "example": "https://checkout.stripe.com/pay/..."
+                                                },
+                                                "amount": {
+                                                    "type": "string",
+                                                    "example": "39.99 TRY"
+                                                },
+                                                "total_coins": {
+                                                    "type": "integer",
+                                                    "example": 600
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/questions": {
             "get": {
                 "tags": [
@@ -517,6 +1614,1592 @@
                     }
                 ]
             }
+        },
+        "/api/questions/for-game": {
+            "get": {
+                "tags": [
+                    "Questions"
+                ],
+                "summary": "Oyun için sorular getir",
+                "description": "Bireysel oyun veya turnuva için sorular getirir",
+                "operationId": "4c2e10290ada9d5d0365309c9c1aa363",
+                "parameters": [
+                    {
+                        "name": "game_type",
+                        "in": "query",
+                        "description": "Oyun türü",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "individual",
+                                "tournament",
+                                "practice"
+                            ],
+                            "example": "individual"
+                        }
+                    },
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Kategori ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "difficulty_level",
+                        "in": "query",
+                        "description": "Zorluk seviyesi",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "easy",
+                                "medium",
+                                "hard"
+                            ],
+                            "example": "medium"
+                        }
+                    },
+                    {
+                        "name": "question_count",
+                        "in": "query",
+                        "description": "Soru sayısı",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 50,
+                            "minimum": 5,
+                            "example": 20
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Oyun soruları getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Oyun soruları başarıyla getirildi"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "questions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "total_questions": {
+                                                    "type": "integer",
+                                                    "example": 20
+                                                },
+                                                "difficulty_level": {
+                                                    "type": "string",
+                                                    "example": "medium"
+                                                },
+                                                "category": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/questions/random": {
+            "get": {
+                "tags": [
+                    "Questions"
+                ],
+                "summary": "Rastgele soru getir",
+                "description": "Belirtilen kriterlere göre rastgele soru getirir",
+                "operationId": "7af7d1842e333f0dc4261113fb22c1c6",
+                "parameters": [
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Kategori ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "difficulty_level",
+                        "in": "query",
+                        "description": "Zorluk seviyesi",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "easy",
+                                "medium",
+                                "hard"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "exclude_ids",
+                        "in": "query",
+                        "description": "Hariç tutulacak soru ID'leri (virgülle ayrılmış)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "1,2,3"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rastgele soru getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Rastgele soru başarıyla getirildi"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/questions/categories": {
+            "get": {
+                "tags": [
+                    "Questions"
+                ],
+                "summary": "Kategorileri listele",
+                "description": "Aktif kategorileri listeler",
+                "operationId": "b25f705d9f57af9c693632a09006bfcf",
+                "responses": {
+                    "200": {
+                        "description": "Kategoriler listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Kategoriler başarıyla listelendi"
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tournaments": {
+            "get": {
+                "tags": [
+                    "Tournaments"
+                ],
+                "summary": "Aktif turnuvaları listele",
+                "description": "Mevcut turnuvaları listeler",
+                "operationId": "727785a814ca9997ca891494c35712c5",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Turnuva durumu",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "upcoming",
+                                "active",
+                                "completed"
+                            ],
+                            "example": "upcoming"
+                        }
+                    },
+                    {
+                        "name": "difficulty",
+                        "in": "query",
+                        "description": "Zorluk seviyesi",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "easy",
+                                "medium",
+                                "hard"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "featured",
+                        "in": "query",
+                        "description": "Öne çıkan turnuvalar",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": true
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Sayfa başına kayıt sayısı",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuvalar listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 50
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tournaments/{tournament}/join": {
+            "post": {
+                "tags": [
+                    "Tournaments"
+                ],
+                "summary": "Turnuvaya katıl",
+                "description": "Belirtilen turnuvaya katılım sağlar",
+                "operationId": "608cfc6bcb9dab5248f938c336961be2",
+                "parameters": [
+                    {
+                        "name": "tournament",
+                        "in": "path",
+                        "description": "Turnuva ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "joker_count": {
+                                        "description": "Joker sayısı",
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 0
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Turnuvaya başarıyla katıldınız",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuvaya başarıyla katıldınız"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "tournament": {
+                                                    "type": "object"
+                                                },
+                                                "participation": {
+                                                    "type": "object"
+                                                },
+                                                "entry_fee_paid": {
+                                                    "type": "number",
+                                                    "example": 50
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hatalı istek",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu turnuvaya katılım için uygun değil"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournaments/{tournament}/test-start": {
+            "post": {
+                "tags": [
+                    "Tournaments"
+                ],
+                "summary": "Test turnuva başlat",
+                "description": "Test amaçlı turnuva başlatır",
+                "operationId": "be1d3308dd98c8e0d30b212ff8df1653",
+                "parameters": [
+                    {
+                        "name": "tournament",
+                        "in": "path",
+                        "description": "Turnuva ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Test turnuva başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Test turnuva başlatıldı"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tournaments/test/status": {
+            "get": {
+                "tags": [
+                    "Tournaments"
+                ],
+                "summary": "Test durumu",
+                "description": "Test turnuvalarının durumunu getirir",
+                "operationId": "00d04dca9ed507272487b2cb95aaadf0",
+                "responses": {
+                    "200": {
+                        "description": "Test durumu getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/tournament-users": {
+            "get": {
+                "tags": [
+                    "Tournament Users"
+                ],
+                "summary": "Kullanıcının turnuva katılımları",
+                "description": "Kullanıcının turnuva katılım geçmişini listeler",
+                "operationId": "7749f6295e9e5d81dcb2b83300476f7b",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Katılım durumu",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "joined",
+                                "active",
+                                "completed",
+                                "abandoned"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Sayfa başına kayıt sayısı",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Katılım geçmişi listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-users/{tournament}/start-game": {
+            "post": {
+                "tags": [
+                    "Tournament Users"
+                ],
+                "summary": "Turnuva oyun oturumu başlat",
+                "description": "Turnuva için oyun oturumunu başlatır",
+                "operationId": "1f186ef7db1f8ea93dbcb4efd1ebfd69",
+                "parameters": [
+                    {
+                        "name": "tournament",
+                        "in": "path",
+                        "description": "Turnuva ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuva oyunu başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuva oyunu başlatıldı"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "session": {
+                                                    "type": "object"
+                                                },
+                                                "questions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "tournament": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Bu turnuvaya katılmamışsınız veya turnuva aktif değil",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu turnuvaya katılmamışsınız veya turnuva aktif değil"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-users/submit-answer": {
+            "post": {
+                "tags": [
+                    "Tournament Users"
+                ],
+                "summary": "Turnuva cevabı gönder",
+                "description": "Turnuva sırasında soruya cevap verir",
+                "operationId": "d965bf79f8bee475069adbc420666631",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "session_id": {
+                                        "description": "Oyun oturum ID",
+                                        "type": "string"
+                                    },
+                                    "question_id": {
+                                        "description": "Soru ID",
+                                        "type": "integer"
+                                    },
+                                    "user_answer": {
+                                        "description": "Kullanıcı cevabı",
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ]
+                                    },
+                                    "time_taken": {
+                                        "description": "Cevap süresi (saniye)",
+                                        "type": "integer",
+                                        "maximum": 300,
+                                        "minimum": 0
+                                    },
+                                    "is_joker_used": {
+                                        "description": "Joker kullanıldı mı",
+                                        "type": "boolean"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevap kaydedildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cevap kaydedildi"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "is_correct": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "points_earned": {
+                                                    "type": "integer",
+                                                    "example": 120
+                                                },
+                                                "total_score": {
+                                                    "type": "integer",
+                                                    "example": 500
+                                                },
+                                                "correct_answers": {
+                                                    "type": "integer",
+                                                    "example": 8
+                                                },
+                                                "wrong_answers": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "joker_remaining": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "streak_count": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "progress_percentage": {
+                                                    "type": "number",
+                                                    "example": 50
+                                                },
+                                                "is_game_completed": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/password-reset/send-code": {
+            "post": {
+                "tags": [
+                    "Password Reset"
+                ],
+                "summary": "Send password reset code",
+                "description": "Send password reset verification code via email or phone",
+                "operationId": "c6f86dfbeebb1665f41955c3644a2f9c",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code sent successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Şifre sıfırlama kodu e-posta adresinize gönderildi."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 404
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yeni kod talep etmek için 45 saniye bekleyin."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 429
+                                        },
+                                        "remaining_seconds": {
+                                            "type": "integer",
+                                            "example": 45
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/password-reset/verify-code": {
+            "post": {
+                "tags": [
+                    "Password Reset"
+                ],
+                "summary": "Verify password reset code",
+                "description": "Verify the password reset code and get reset token",
+                "operationId": "04d570cd4278ef577b7080fa28e869bc",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "code",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "code": {
+                                        "description": "6-digit verification code",
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code verified successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Doğrulama başarılı. Şifre sıfırlama işlemini tamamlayabilirsiniz."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "reset_token": {
+                                            "type": "string",
+                                            "example": "abc123..."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid code",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yanlış doğrulama kodu."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 400
+                                        },
+                                        "attempts_remaining": {
+                                            "type": "integer",
+                                            "example": 4
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/password-reset/reset": {
+            "post": {
+                "tags": [
+                    "Password Reset"
+                ],
+                "summary": "Reset password",
+                "description": "Reset password using the reset token",
+                "operationId": "3fcf5b4d99962b95436d27a3277e1768",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "reset_token",
+                                    "new_password",
+                                    "new_password_confirmation",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "reset_token": {
+                                        "description": "Reset token from verify code",
+                                        "type": "string",
+                                        "example": "abc123..."
+                                    },
+                                    "new_password": {
+                                        "description": "New password",
+                                        "type": "string",
+                                        "example": "newPassword123"
+                                    },
+                                    "new_password_confirmation": {
+                                        "description": "New password confirmation",
+                                        "type": "string",
+                                        "example": "newPassword123"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Password reset successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Şifreniz başarıyla güncellendi."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid reset token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Geçersiz veya süresi dolmuş sıfırlama token'ı."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 400
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/password-reset/check-identifier": {
+            "post": {
+                "tags": [
+                    "Password Reset"
+                ],
+                "summary": "Check if identifier exists",
+                "description": "Check if email or phone number exists in the system",
+                "operationId": "4498f87cfb2721c1382051c0a68759ae",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Check completed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "exists": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Kullanıcı bulundu."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/verification/send-code": {
+            "post": {
+                "tags": [
+                    "Verification"
+                ],
+                "summary": "Send verification code",
+                "description": "Send verification code via email or phone for various purposes",
+                "operationId": "adeb3ef68e01b7b91399d89d99892de2",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "type",
+                                    "purpose"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    },
+                                    "purpose": {
+                                        "description": "Purpose of verification",
+                                        "type": "string",
+                                        "enum": [
+                                            "registration",
+                                            "login",
+                                            "update",
+                                            "password_reset"
+                                        ],
+                                        "example": "registration"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code sent successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Doğrulama kodu e-posta adresinize gönderildi."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yeni kod talep etmek için 45 saniye bekleyin."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 429
+                                        },
+                                        "remaining_seconds": {
+                                            "type": "integer",
+                                            "example": 45
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/verification/verify": {
+            "post": {
+                "tags": [
+                    "Verification"
+                ],
+                "summary": "Verify code",
+                "description": "Verify the sent verification code",
+                "operationId": "bb52bd8b7144ccd5e4ef191003482980",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "code",
+                                    "type",
+                                    "purpose"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "code": {
+                                        "description": "6-digit verification code",
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    },
+                                    "purpose": {
+                                        "description": "Purpose of verification",
+                                        "type": "string",
+                                        "enum": [
+                                            "registration",
+                                            "login",
+                                            "update",
+                                            "password_reset"
+                                        ],
+                                        "example": "registration"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code verified successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Doğrulama başarılı."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "verification_token": {
+                                            "type": "string",
+                                            "example": "abc123..."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid code",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yanlış doğrulama kodu."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 400
+                                        },
+                                        "attempts_remaining": {
+                                            "type": "integer",
+                                            "example": 4
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/verification/resend": {
+            "post": {
+                "tags": [
+                    "Verification"
+                ],
+                "summary": "Resend verification code",
+                "description": "Resend verification code if not received or expired",
+                "operationId": "fbf382ed5e34db05f444feb5d5477228",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "identifier",
+                                    "type",
+                                    "purpose"
+                                ],
+                                "properties": {
+                                    "identifier": {
+                                        "description": "Email or phone number",
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "type": {
+                                        "description": "Type of identifier",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    },
+                                    "purpose": {
+                                        "description": "Purpose of verification",
+                                        "type": "string",
+                                        "enum": [
+                                            "registration",
+                                            "login",
+                                            "update",
+                                            "password_reset"
+                                        ],
+                                        "example": "registration"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code resent successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Doğrulama kodu tekrar gönderildi."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yeni kod talep etmek için 45 saniye bekleyin."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 429
+                                        },
+                                        "remaining_seconds": {
+                                            "type": "integer",
+                                            "example": 45
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/verification/status/{identifier}": {
+            "get": {
+                "tags": [
+                    "Verification"
+                ],
+                "summary": "Check verification status",
+                "description": "Check if identifier is verified for specific purpose",
+                "operationId": "0572d5ce34b13c2a62721c97b31df945",
+                "parameters": [
+                    {
+                        "name": "identifier",
+                        "in": "path",
+                        "description": "Email or phone number",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "user@example.com"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Type of identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "email",
+                                "phone"
+                            ],
+                            "example": "email"
+                        }
+                    },
+                    {
+                        "name": "purpose",
+                        "in": "query",
+                        "description": "Purpose of verification",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "registration",
+                                "login",
+                                "update",
+                                "password_reset"
+                            ],
+                            "example": "registration"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Status checked",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "verified": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Doğrulama tamamlanmış."
+                                        },
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 200
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -539,8 +3222,56 @@
             "description": "Category management endpoints"
         },
         {
+            "name": "Coin Packages",
+            "description": "Jeton paket işlemleri"
+        },
+        {
+            "name": "Coin Purchases",
+            "description": "Jeton satın alma işlemleri"
+        },
+        {
+            "name": "Friend Invites",
+            "description": "Arkadaş davet işlemleri"
+        },
+        {
+            "name": "Game Answers",
+            "description": "Oyun cevap işlemleri"
+        },
+        {
+            "name": "Game Sessions",
+            "description": "Oyun oturum işlemleri"
+        },
+        {
+            "name": "Individual Games",
+            "description": "Bireysel oyun işlemleri"
+        },
+        {
+            "name": "Payments",
+            "description": "Ödeme işlemleri"
+        },
+        {
             "name": "Questions",
             "description": "Question management endpoints"
+        },
+        {
+            "name": "Tournaments",
+            "description": "Turnuva işlemleri"
+        },
+        {
+            "name": "Tournament Users",
+            "description": "Turnuva kullanıcı işlemleri"
+        },
+        {
+            "name": "Notifications",
+            "description": "Notifications"
+        },
+        {
+            "name": "Password Reset",
+            "description": "Password Reset"
+        },
+        {
+            "name": "Verification",
+            "description": "Verification"
         }
     ]
 }

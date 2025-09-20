@@ -207,7 +207,7 @@ $(document).ready(function() {
         var formData = $(this).serialize();
         
         $.ajax({
-            url: '/admin/permissions/roles',
+            url: '/private/lesley/admin/permissions/roles',
             type: 'POST',
             data: formData,
             success: function(response) {
@@ -258,7 +258,7 @@ $(document).ready(function() {
         var roleId = $('#edit-role-id').val();
         
         $.ajax({
-            url: '/admin/permissions/roles/' + roleId,
+            url: '/private/lesley/admin/permissions/roles/' + roleId,
             type: 'PUT',
             data: formData,
             success: function(response) {
@@ -325,7 +325,7 @@ $(document).ready(function() {
         
         // FormData yerine JSON gönder
         $.ajax({
-            url: '/admin/permissions/roles/' + roleId + '/permissions',
+            url: '/private/lesley/admin/permissions/roles/' + roleId + '/permissions',
             type: 'POST',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
@@ -364,7 +364,7 @@ $(document).ready(function() {
 function deleteRole(roleId, roleName) {
     if (confirm('"' + roleName + '" rolünü silmek istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/admin/permissions/roles/' + roleId,
+            url: '/private/lesley/admin/permissions/roles/' + roleId,
             type: 'DELETE',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content')

@@ -637,7 +637,7 @@ $(document).ready(function() {
         $('#edit-difficulty_level').val(difficulty);
         $('#edit-status').val(status);
         $('#edit-is_featured').prop('checked', featured);
-        $('#tournamentEditForm').attr('action', '/admin/tournaments/' + id);
+        $('#tournamentEditForm').attr('action', '/private/lesley/admin/tournaments/' + id);
     });
 
     // Update Tournament
@@ -678,7 +678,7 @@ $(document).ready(function() {
     // Load Tournaments Function
     function loadTournaments(page = 1) {
         $.ajax({
-            url: '/admin/tournaments',
+            url: '/private/lesley/admin/tournaments',
             type: 'GET',
             data: { page: page },
             success: function(response) {
@@ -705,7 +705,7 @@ $(document).ready(function() {
     window.deleteTournament = function(id) {
         if (confirm('Bu turnuvayı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/admin/tournaments/' + id,
+                url: '/private/lesley/admin/tournaments/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

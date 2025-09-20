@@ -119,7 +119,7 @@
           @endif
           
           <!-- Tab Navigation -->
-          <ul class="nav nav-tabs" id="createCategoryTabs" role="tablist">
+          <!-- <ul class="nav nav-tabs" id="createCategoryTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="tr-tab" data-bs-toggle="tab" data-bs-target="#tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -130,7 +130,7 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul>
+          </ul> -->
           
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="createCategoryTabContent">
@@ -138,11 +138,11 @@
             <div class="tab-pane fade show active" id="tr-pane" role="tabpanel">
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">İsim (Türkçe) *</label>
+                  <label class="form-label">İsim  *</label>
                   <input type="text" name="name[tr]" class="form-control" required>
                 </div>
                 <div class="col-12">
-                  <label class="form-label">Açıklama (Türkçe)</label>
+                  <label class="form-label">Açıklama </label>
                   <textarea name="description[tr]" class="form-control" rows="3"></textarea>
                 </div>
               </div>
@@ -287,7 +287,7 @@
           @endif
           
           <!-- Tab Navigation -->
-          <ul class="nav nav-tabs" id="editCategoryTabs" role="tablist">
+          <!-- <ul class="nav nav-tabs" id="editCategoryTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="edit-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -298,7 +298,7 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul>
+          </ul> -->
           
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="editCategoryTabContent">
@@ -306,11 +306,11 @@
             <div class="tab-pane fade show active" id="edit-tr-pane" role="tabpanel">
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">İsim (Türkçe) *</label>
+                  <label class="form-label">İsim  *</label>
                   <input type="text" name="name[tr]" id="edit-name-tr" class="form-control" required>
                 </div>
                 <div class="col-12">
-                  <label class="form-label">Açıklama (Türkçe)</label>
+                  <label class="form-label">Açıklama </label>
                   <textarea name="description[tr]" id="edit-desc-tr" class="form-control" rows="3"></textarea>
                 </div>
               </div>
@@ -480,7 +480,7 @@ $(document).ready(function() {
     // Load Categories Function
     function loadCategories(page = 1) {
         $.ajax({
-            url: '/admin/categories',
+            url: '/private/lesley/admin/categories',
             type: 'GET',
             data: { page: page },
             success: function(response) {
@@ -527,7 +527,7 @@ $(document).ready(function() {
             $('#edit-color').val(color);
             $('#edit-sort').val(sort);
             $('#edit-active').prop('checked', active == 1);
-            $('#categoryEditForm').attr('action', '/admin/categories/' + id);
+            $('#categoryEditForm').attr('action', '/private/lesley/admin/categories/' + id);
         });
     }
 
@@ -567,7 +567,7 @@ $(document).ready(function() {
     window.deleteCategory = function(id) {
         if (confirm('Bu kategoriyi silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/admin/categories/' + id,
+                url: '/private/lesley/admin/categories/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

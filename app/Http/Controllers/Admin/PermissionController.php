@@ -21,7 +21,7 @@ class PermissionController extends Controller
 
     public function index()
     {
-        $roles = Role::with('permissions')->get();
+        $roles = Role::with('permissions')->whereNotIn('id', [3])->get();
         $permissions = Permission::orderBy('name')->get();
         
         // Permission'ları kategorilere ayır

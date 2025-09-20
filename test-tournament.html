@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnuva Socket Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .connected { background: #4CAF50; }
+        .disconnected { background: #f44336; }
+        .pending { background: #ff9800; }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #1976D2; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .question {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        .answer-btn {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            text-align: left;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 5px;
+        }
+        .answer-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        .correct { background: #4CAF50 !important; }
+        .wrong { background: #f44336 !important; }
+        .leaderboard {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 Turnuva Socket Test Sistemi</h1>
+    
+    <div class="container">
+        <!-- Tek Oyunculu Turnuva -->
+        <div class="panel">
+            <h2>🏆 Tek Oyunculu Turnuva</h2>
+            <div id="individual-status" class="status disconnected">Bağlantı Yok</div>
+            
+            <div>
+                <button onclick="connectIndividual()">Bağlan</button>
+                <button onclick="joinIndividualTournament()" id="join-individual-btn" disabled>Turnuvaya Katıl</button>
+                <button onclick="startIndividualGame()" id="start-individual-btn" disabled>Oyunu Başlat</button>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                <button onclick="testCategories()" style="background: #4CAF50;">Kategorileri Test Et</button>
+                <button onclick="testQuestions()" style="background: #FF9800;">Soruları Test Et</button>
+                <button onclick="testWebhooks()" style="background: #9C27B0;">Webhook'ları Test Et</button>
+            </div>
+            
+            <div id="individual-question" class="question" style="display: none;">
+                <h3>Soru:</h3>
+                <p id="question-text"></p>
+                <div id="answers"></div>
+                <div id="timer">Süre: <span id="time-left">30</span>s</div>
+            </div>
+            
+            <div id="individual-stats">
+                <p>Skor: <span id="individual-score">0</span></p>
+                <p>Doğru: <span id="individual-correct">0</span></p>
+                <p>Yanlış: <span id="individual-wrong">0</span></p>
+            </div>
+            
+            <div class="log" id="individual-log"></div>
+        </div>
+        
+        <!-- Çoklu Oyunculu Turnuva -->
+        <div class="panel">
+            <h2>👥 Çoklu Oyunculu Turnuva</h2>
+            <div id="multiplayer-status" class="status disconnected">Bağlantı Yok</div>
+            
+            <div>
+                <button onclick="connectMultiplayer()">Bağlan</button>
+                <button onclick="joinMultiplayerTournament()" id="join-multiplayer-btn" disabled>Turnuvaya Katıl</button>
+                <button onclick="startMultiplayerGame()" id="start-multiplayer-btn" disabled>Oyunu Başlat</button>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                <button onclick="testTournamentStatus()" style="background: #9C27B0;">Turnuva Durumunu Test Et</button>
+            </div>
+            
+            <div id="multiplayer-question" class="question" style="display: none;">
+                <h3>Soru:</h3>
+                <p id="multiplayer-question-text"></p>
+                <div id="multiplayer-answers"></div>
+                <div id="multiplayer-timer">Süre: <span id="multiplayer-time-left">30</span>s</div>
+            </div>
+            
+            <div id="multiplayer-leaderboard" class="leaderboard" style="display: none;">
+                <h4>🏆 Liderlik Tablosu</h4>
+                <div id="leaderboard-list"></div>
+            </div>
+            
+            <div class="log" id="multiplayer-log"></div>
+        </div>
+    </div>
+
+    <script>
+        let individualSocket = null;
+        let multiplayerSocket = null;
+        let currentQuestion = null;
+        let currentMultiplayerQuestion = null;
+        let individualTimer = null;
+        let multiplayerTimer = null;
+        let individualScore = 0;
+        let individualCorrect = 0;
+        let individualWrong = 0;
+        let multiplayerScore = 0;
+        let multiplayerCorrect = 0;
+        let multiplayerWrong = 0;
+        let currentTournamentId = null;
+        let currentMultiplayerTournamentId = null;
+
+        // Tek oyunculu socket bağlantısı
+        function connectIndividual() {
+            individualSocket = io('http://localhost:3001');
+            
+            individualSocket.on('connect', () => {
+                updateStatus('individual-status', 'connected', 'Bağlandı');
+                document.getElementById('join-individual-btn').disabled = false;
+                log('individual-log', '✅ Tek oyunculu socket bağlandı');
+            });
+            
+            individualSocket.on('disconnect', () => {
+                updateStatus('individual-status', 'disconnected', 'Bağlantı Kesildi');
+                document.getElementById('join-individual-btn').disabled = true;
+                log('individual-log', '❌ Tek oyunculu socket bağlantısı kesildi');
+            });
+            
+            individualSocket.on('user_joined_tournament', (data) => {
+                log('individual-log', `👤 Kullanıcı turnuvaya katıldı: ${JSON.stringify(data)}`);
+            });
+            
+            individualSocket.on('tournament_answer_result', (data) => {
+                log('individual-log', `📝 Cevap sonucu: ${JSON.stringify(data)}`);
+            });
+            
+            individualSocket.on('tournament_progress_updated', (data) => {
+                log('individual-log', `📊 İlerleme güncellendi: ${JSON.stringify(data)}`);
+            });
+            
+            individualSocket.on('tournament_finished', (data) => {
+                log('individual-log', `🏁 Turnuva bitti: ${JSON.stringify(data)}`);
+                document.getElementById('individual-question').style.display = 'none';
+            });
+        }
+        
+        // Çoklu oyunculu socket bağlantısı
+        function connectMultiplayer() {
+            multiplayerSocket = io('http://localhost:3001');
+            
+            multiplayerSocket.on('connect', () => {
+                updateStatus('multiplayer-status', 'connected', 'Bağlandı');
+                document.getElementById('join-multiplayer-btn').disabled = false;
+                log('multiplayer-log', '✅ Çoklu oyunculu socket bağlandı');
+            });
+            
+            multiplayerSocket.on('disconnect', () => {
+                updateStatus('multiplayer-status', 'disconnected', 'Bağlantı Kesildi');
+                document.getElementById('join-multiplayer-btn').disabled = true;
+                log('multiplayer-log', '❌ Çoklu oyunculu socket bağlantısı kesildi');
+            });
+            
+            multiplayerSocket.on('user_joined_tournament', (data) => {
+                log('multiplayer-log', `👤 Kullanıcı turnuvaya katıldı: ${JSON.stringify(data)}`);
+            });
+            
+            multiplayerSocket.on('multiplayer_tournament_started', (data) => {
+                log('multiplayer-log', `🚀 Çoklu turnuva başladı: ${JSON.stringify(data)}`);
+                document.getElementById('multiplayer-leaderboard').style.display = 'block';
+            });
+            
+            multiplayerSocket.on('multiplayer_answer_result', (data) => {
+                log('multiplayer-log', `📝 Cevap sonucu: ${JSON.stringify(data)}`);
+            });
+            
+            multiplayerSocket.on('multiplayer_ranking_updated', (data) => {
+                log('multiplayer-log', `🏆 Sıralama güncellendi: ${JSON.stringify(data)}`);
+                updateLeaderboard(data.rankings);
+            });
+            
+            multiplayerSocket.on('multiplayer_tournament_ended', (data) => {
+                log('multiplayer-log', `🏁 Çoklu turnuva bitti: ${JSON.stringify(data)}`);
+                document.getElementById('multiplayer-question').style.display = 'none';
+                updateLeaderboard(data.finalRankings);
+            });
+        }
+        
+        // Tek oyunculu turnuvaya katıl
+        function joinIndividualTournament() {
+            currentTournamentId = 1; // Test turnuva ID'si
+            individualSocket.emit('join_tournament', {
+                tournamentId: currentTournamentId,
+                userId: 'test-user-1',
+                tournamentType: 'individual'
+            });
+            document.getElementById('start-individual-btn').disabled = false;
+        }
+        
+        // Çoklu oyunculu turnuvaya katıl
+        function joinMultiplayerTournament() {
+            currentMultiplayerTournamentId = 2; // Test turnuva ID'si
+            multiplayerSocket.emit('join_tournament', {
+                tournamentId: currentMultiplayerTournamentId,
+                userId: 'test-user-2',
+                tournamentType: 'multiplayer'
+            });
+            document.getElementById('start-multiplayer-btn').disabled = false;
+        }
+        
+        // Tek oyunculu oyunu başlat
+        function startIndividualGame() {
+            // Test sorusu oluştur
+            currentQuestion = {
+                id: 1,
+                question: "Türkiye'nin başkenti neresidir?",
+                choices: {
+                    '1': 'İstanbul',
+                    '2': 'Ankara',
+                    '3': 'İzmir',
+                    '4': 'Bursa'
+                },
+                correct_answer: '2',
+                time_limit: 30
+            };
+            
+            showQuestion('individual', currentQuestion);
+            startTimer('individual', currentQuestion.time_limit);
+        }
+        
+        // Çoklu oyunculu oyunu başlat
+        function startMultiplayerGame() {
+            // Test sorusu oluştur
+            currentMultiplayerQuestion = {
+                id: 2,
+                question: "Dünyanın en büyük okyanusu hangisidir?",
+                choices: {
+                    '1': 'Atlas Okyanusu',
+                    '2': 'Pasifik Okyanusu',
+                    '3': 'Hint Okyanusu',
+                    '4': 'Arktik Okyanusu'
+                },
+                correct_answer: '2',
+                time_limit: 30
+            };
+            
+            showQuestion('multiplayer', currentMultiplayerQuestion);
+            startTimer('multiplayer', currentMultiplayerQuestion.time_limit);
+            
+            // Çoklu oyunculu turnuva başlatma event'i gönder
+            multiplayerSocket.emit('multiplayer_tournament_start', {
+                tournamentId: currentMultiplayerTournamentId,
+                participants: [
+                    { id: 'test-user-2', name: 'Test Kullanıcı 2' },
+                    { id: 'test-user-3', name: 'Test Kullanıcı 3' },
+                    { id: 'test-user-4', name: 'Test Kullanıcı 4' }
+                ],
+                questions: [currentMultiplayerQuestion]
+            });
+        }
+        
+        // Soru göster
+        function showQuestion(type, question) {
+            const container = type === 'individual' ? 'individual-question' : 'multiplayer-question';
+            const questionText = type === 'individual' ? 'question-text' : 'multiplayer-question-text';
+            const answersContainer = type === 'individual' ? 'answers' : 'multiplayer-answers';
+            
+            document.getElementById(container).style.display = 'block';
+            document.getElementById(questionText).textContent = question.question;
+            
+            const answersDiv = document.getElementById(answersContainer);
+            answersDiv.innerHTML = '';
+            
+            Object.keys(question.choices).forEach(key => {
+                const button = document.createElement('button');
+                button.className = 'answer-btn';
+                button.textContent = `${key}. ${question.choices[key]}`;
+                button.onclick = () => submitAnswer(type, key, question.id);
+                answersDiv.appendChild(button);
+            });
+        }
+        
+        // Cevap gönder
+        function submitAnswer(type, answer, questionId) {
+            const isCorrect = answer === (type === 'individual' ? currentQuestion : currentMultiplayerQuestion).correct_answer;
+            const timeTaken = type === 'individual' ? (30 - parseInt(document.getElementById('time-left').textContent)) : (30 - parseInt(document.getElementById('multiplayer-time-left').textContent));
+            
+            if (type === 'individual') {
+                individualSocket.emit('tournament_answer_submitted', {
+                    tournamentId: currentTournamentId,
+                    userId: 'test-user-1',
+                    questionId: questionId,
+                    isCorrect: isCorrect,
+                    pointsEarned: isCorrect ? 100 : 0,
+                    timeTaken: timeTaken
+                });
+                
+                if (isCorrect) {
+                    individualScore += 100;
+                    individualCorrect++;
+                    document.getElementById('individual-score').textContent = individualScore;
+                    document.getElementById('individual-correct').textContent = individualCorrect;
+                } else {
+                    individualWrong++;
+                    document.getElementById('individual-wrong').textContent = individualWrong;
+                }
+            } else {
+                multiplayerSocket.emit('multiplayer_answer_submitted', {
+                    tournamentId: currentMultiplayerTournamentId,
+                    userId: 'test-user-2',
+                    questionId: questionId,
+                    isCorrect: isCorrect,
+                    pointsEarned: isCorrect ? 100 : 0,
+                    timeTaken: timeTaken
+                });
+                
+                if (isCorrect) {
+                    multiplayerScore += 100;
+                    multiplayerCorrect++;
+                } else {
+                    multiplayerWrong++;
+                }
+            }
+            
+            // Cevap butonlarını renklendir
+            const buttons = document.querySelectorAll(`#${type === 'individual' ? 'answers' : 'multiplayer-answers'} .answer-btn`);
+            buttons.forEach(btn => {
+                const btnAnswer = btn.textContent.split('.')[0];
+                if (btnAnswer === answer) {
+                    btn.className = isCorrect ? 'answer-btn correct' : 'answer-btn wrong';
+                } else if (btnAnswer === (type === 'individual' ? currentQuestion : currentMultiplayerQuestion).correct_answer) {
+                    btn.className = 'answer-btn correct';
+                }
+            });
+            
+            // 2 saniye sonra sonraki soruya geç
+            setTimeout(() => {
+                if (type === 'individual') {
+                    nextIndividualQuestion();
+                } else {
+                    nextMultiplayerQuestion();
+                }
+            }, 2000);
+        }
+        
+        // Sonraki tek oyunculu sorusu
+        function nextIndividualQuestion() {
+            // Test için rastgele soru oluştur
+            const questions = [
+                {
+                    id: 2,
+                    question: "Hangi gezegen Güneş'e en yakındır?",
+                    choices: { '1': 'Venüs', '2': 'Merkür', '3': 'Mars', '4': 'Dünya' },
+                    correct_answer: '2',
+                    time_limit: 30
+                },
+                {
+                    id: 3,
+                    question: "Türkiye'nin en büyük gölü hangisidir?",
+                    choices: { '1': 'Van Gölü', '2': 'Tuz Gölü', '3': 'Beyşehir Gölü', '4': 'Eğirdir Gölü' },
+                    correct_answer: '1',
+                    time_limit: 30
+                }
+            ];
+            
+            const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+            currentQuestion = randomQuestion;
+            showQuestion('individual', randomQuestion);
+            startTimer('individual', randomQuestion.time_limit);
+        }
+        
+        // Sonraki çoklu oyunculu sorusu
+        function nextMultiplayerQuestion() {
+            const questions = [
+                {
+                    id: 3,
+                    question: "Hangi element periyodik tabloda 'O' ile gösterilir?",
+                    choices: { '1': 'Oksijen', '2': 'Altın', '3': 'Gümüş', '4': 'Bakır' },
+                    correct_answer: '1',
+                    time_limit: 30
+                },
+                {
+                    id: 4,
+                    question: "İstanbul'un fethi hangi yılda gerçekleşmiştir?",
+                    choices: { '1': '1452', '2': '1453', '3': '1454', '4': '1455' },
+                    correct_answer: '2',
+                    time_limit: 30
+                }
+            ];
+            
+            const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+            currentMultiplayerQuestion = randomQuestion;
+            showQuestion('multiplayer', randomQuestion);
+            startTimer('multiplayer', randomQuestion.time_limit);
+            
+            // Sıralama güncellemesi gönder
+            multiplayerSocket.emit('multiplayer_ranking_update', {
+                tournamentId: currentMultiplayerTournamentId,
+                rankings: [
+                    { userId: 'test-user-2', name: 'Test Kullanıcı 2', score: multiplayerScore, rank: 1 },
+                    { userId: 'test-user-3', name: 'Test Kullanıcı 3', score: 150, rank: 2 },
+                    { userId: 'test-user-4', name: 'Test Kullanıcı 4', score: 100, rank: 3 }
+                ],
+                currentQuestion: randomQuestion.id
+            });
+        }
+        
+        // Timer başlat
+        function startTimer(type, seconds) {
+            const timeElement = type === 'individual' ? 'time-left' : 'multiplayer-time-left';
+            let timeLeft = seconds;
+            
+            const timer = setInterval(() => {
+                timeLeft--;
+                document.getElementById(timeElement).textContent = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    // Süre doldu, otomatik cevap gönder
+                    if (type === 'individual') {
+                        submitAnswer('individual', '1', currentQuestion.id);
+                    } else {
+                        submitAnswer('multiplayer', '1', currentMultiplayerQuestion.id);
+                    }
+                }
+            }, 1000);
+            
+            if (type === 'individual') {
+                clearInterval(individualTimer);
+                individualTimer = timer;
+            } else {
+                clearInterval(multiplayerTimer);
+                multiplayerTimer = timer;
+            }
+        }
+        
+        // Liderlik tablosu güncelle
+        function updateLeaderboard(rankings) {
+            const leaderboardList = document.getElementById('leaderboard-list');
+            leaderboardList.innerHTML = '';
+            
+            rankings.forEach((player, index) => {
+                const item = document.createElement('div');
+                item.className = 'leaderboard-item';
+                item.innerHTML = `
+                    <span>${index + 1}. ${player.name}</span>
+                    <span>${player.score} puan</span>
+                `;
+                leaderboardList.appendChild(item);
+            });
+        }
+        
+        // Yardımcı fonksiyonlar
+        function updateStatus(elementId, className, text) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${className}`;
+            element.textContent = text;
+        }
+        
+        function log(elementId, message) {
+            const logElement = document.getElementById(elementId);
+            const time = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${time}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // API Test Fonksiyonları
+        async function testCategories() {
+            try {
+                log('individual-log', '📁 Kategoriler getiriliyor...');
+                const response = await fetch('http://localhost/api/categories');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const categories = Array.isArray(data.data) ? data.data : [];
+                    log('individual-log', `✅ Kategoriler başarıyla getirildi: ${categories.length} adet`);
+                    console.log('Categories:', categories);
+                } else {
+                    log('individual-log', `❌ Kategori getirme hatası: ${data.message || 'Veri formatı hatalı'}`);
+                }
+            } catch (error) {
+                log('individual-log', `❌ Kategori getirme hatası: ${error.message}`);
+            }
+        }
+
+        async function testQuestions() {
+            try {
+                log('individual-log', '📋 Sorular getiriliyor...');
+                const response = await fetch('http://localhost/api/game/questions/for-game?game_type=individual&difficulty_level=medium&question_count=5');
+                const data = await response.json();
+                
+                if (data.success && data.data && data.data.questions) {
+                    const questions = Array.isArray(data.data.questions) ? data.data.questions : [];
+                    log('individual-log', `✅ Sorular başarıyla getirildi: ${questions.length} adet`);
+                    console.log('Questions:', questions);
+                    
+                    // Test sorusu göster
+                    if (questions.length > 0) {
+                        const question = questions[0];
+                        showQuestion('individual', {
+                            id: question.id,
+                            question: question.question.tr || question.question,
+                            choices: {
+                                '1': question.one_choice.tr || question.one_choice,
+                                '2': question.two_choice.tr || question.two_choice,
+                                '3': question.three_choice.tr || question.three_choice,
+                                '4': question.four_choice.tr || question.four_choice
+                            },
+                            correct_answer: question.correct_answer,
+                            time_limit: 30
+                        });
+                    }
+                } else {
+                    log('individual-log', `❌ Soru getirme hatası: ${data.message || 'Veri formatı hatalı'}`);
+                }
+            } catch (error) {
+                log('individual-log', `❌ Soru getirme hatası: ${error.message}`);
+            }
+        }
+
+        async function testTournamentStatus() {
+            try {
+                log('multiplayer-log', '🏆 Turnuva durumu kontrol ediliyor...');
+                const response = await fetch('http://localhost/api/tournaments/test/status');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const individualCount = data.data.individual_tournaments ? data.data.individual_tournaments.length : 0;
+                    const multiplayerCount = data.data.multiplayer_tournaments ? data.data.multiplayer_tournaments.length : 0;
+                    log('multiplayer-log', `✅ Turnuva durumu: ${individualCount} tek oyunculu, ${multiplayerCount} çoklu oyunculu`);
+                    console.log('Tournament Status:', data.data);
+                } else {
+                    log('multiplayer-log', `❌ Turnuva durumu hatası: ${data.message || 'Veri formatı hatalı'}`);
+                }
+            } catch (error) {
+                log('multiplayer-log', `❌ Turnuva durumu hatası: ${error.message}`);
+            }
+        }
+
+        async function testWebhooks() {
+            try {
+                log('individual-log', '🔗 Webhook testleri başlatılıyor...');
+                
+                // Test turnuva başlatma webhook'u
+                const response = await fetch('http://localhost/api/tournaments/1/test-start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('individual-log', `✅ Webhook testi başarılı: ${data.message}`);
+                    console.log('Webhook Test Result:', data);
+                } else {
+                    log('individual-log', `❌ Webhook testi hatası: ${data.message}`);
+                }
+            } catch (error) {
+                log('individual-log', `❌ Webhook testi hatası: ${error.message}`);
+            }
+        }
+
+        // Sayfa yüklendiğinde otomatik bağlan
+        window.onload = function() {
+            log('individual-log', '🚀 Tek oyunculu test sistemi hazır');
+            log('multiplayer-log', '🚀 Çoklu oyunculu test sistemi hazır');
+            
+            // API testlerini çalıştır
+            setTimeout(() => {
+                testCategories();
+                testQuestions();
+                testTournamentStatus();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>

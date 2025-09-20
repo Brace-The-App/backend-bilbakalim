@@ -120,7 +120,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLog('✅ Sorular başarıyla getirildi: ' + data.data.length + ' adet');
+                    addLog('✅ Sorular başarıyla getirildi: ' + data.data.data.length + ' adet');
                     displayQuestions(data.data);
                 } else {
                     addLog('❌ Soru getirme hatası: ' + data.message);
@@ -184,7 +184,7 @@
             const container = document.getElementById('questions-list');
             container.innerHTML = '';
             
-            questions.forEach(question => {
+            questions.data.forEach(question => {
                 const div = document.createElement('div');
                 div.className = 'question-item';
                 div.innerHTML = `
@@ -211,5 +211,6 @@
     </script>
 </body>
 </html>
+
 
 

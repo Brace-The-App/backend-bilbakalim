@@ -172,7 +172,7 @@ class SocketClient {
         }
 
         // Sayfa yenileme (eğer sorular sayfasındaysa)
-        if (window.location.pathname.includes('/admin/questions')) {
+        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -183,7 +183,7 @@ class SocketClient {
             toastr.info('Soru güncellendi!', 'BilBakalim');
         }
 
-        if (window.location.pathname.includes('/admin/questions')) {
+        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -194,7 +194,7 @@ class SocketClient {
             toastr.warning('Soru silindi!', 'BilBakalim');
         }
 
-        if (window.location.pathname.includes('/admin/questions')) {
+        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -226,7 +226,7 @@ class SocketClient {
         if (typeof $ !== 'undefined' && $('#questions-table').length) {
             // AJAX ile sorular listesini yenile
             $.ajax({
-                url: '/admin/questions',
+                url: '/private/lesley/admin/questions',
                 method: 'GET',
                 success: function(response) {
                     // Tabloyu güncelle
@@ -240,7 +240,7 @@ class SocketClient {
     refreshCategoriesList() {
         if (typeof $ !== 'undefined' && $('#categories-table').length) {
             $.ajax({
-                url: '/admin/categories',
+                url: '/private/lesley/admin/categories',
                 method: 'GET',
                 success: function(response) {
                     $('#categories-table tbody').html(response);
@@ -253,7 +253,7 @@ class SocketClient {
     refreshTournamentsList() {
         if (typeof $ !== 'undefined' && $('#tournaments-table').length) {
             $.ajax({
-                url: '/admin/tournaments',
+                url: '/private/lesley/admin/tournaments',
                 method: 'GET',
                 success: function(response) {
                     $('#tournaments-table tbody').html(response);

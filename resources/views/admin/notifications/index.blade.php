@@ -31,8 +31,8 @@
                     <h4 class="card-title">Bildirim Yönetimi</h4>
                     @can('create notifications')
                     <div class="card-header-right">
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#notificationCreateModal">
-                            <i data-feather="plus"></i> Yeni Bildirim
+                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#notificationSendModal">
+                            <i data-feather="send"></i> Bildirim Gönder
                         </button>
                     </div>
                     @endcan
@@ -46,10 +46,9 @@
                         <div class="col-md-3">
                             <select class="form-control" id="typeFilter">
                                 <option value="">Tüm Tipler</option>
-                                <option value="info">Bilgi</option>
-                                <option value="success">Başarı</option>
-                                <option value="warning">Uyarı</option>
-                                <option value="error">Hata</option>
+                                <option value="email">Email</option>
+                                <option value="sms">SMS</option>
+                                <option value="fcm">FCM</option>
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -82,7 +81,7 @@
                                 @foreach($notifications as $notification)
                                 <tr>
                                     <td>{{ $notification->title }}</td>
-                                    <td>{{ $notification->short_content }}</td>
+                                    <td>{{ Str::limit($notification->content, 50) }}</td>
                                     <td>
                                         <span class="badge bg-{{ $notification->type_color }}" >
                                             {{ ucfirst($notification->type) }}
@@ -139,6 +138,56 @@
         </div>
     </div>
 
+<!-- Bildirim Gönderme Modal -->
+<div class="modal fade" id="notificationSendModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Bildirim Gönder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="notificationSendForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="send-title" class="form-label">Başlık <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="send-title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="send-content" class="form-label">İçerik <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="send-content" name="content" rows="4" required></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="send-type" class="form-label">Gönderim Tipi <span class="text-danger">*</span></label>
+                                <select class="form-control" id="send-type" name="type" required>
+                                    <option value="email">Email</option>
+                                    <option value="sms">SMS</option>
+                                    <option value="fcm">FCM (Push Notification)</option>
+                                </select>
+                                <div class="form-text" id="send-type-help">
+                                    Email: Tüm kullanıcılara email gönderir
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="send-target-users" class="form-label">Hedef Kullanıcılar</label>
+                                <input type="text" class="form-control" id="send-target-users" name="target_users" placeholder="1,2,3 (virgülle ayırın, boş bırakırsanız tüm kullanıcılara gider)">
+                                <div class="form-text">Boş bırakırsanız tüm kullanıcılara gönderilir</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">Gönder</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Bildirim Oluşturma Modal -->
 <div class="modal fade" id="notificationCreateModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -162,10 +211,9 @@
                             <div class="mb-3">
                                 <label for="create-type" class="form-label">Tip <span class="text-danger">*</span></label>
                                 <select class="form-control" id="create-type" name="type" required>
-                                    <option value="info">Bilgi</option>
-                                    <option value="success">Başarı</option>
-                                    <option value="warning">Uyarı</option>
-                                    <option value="error">Hata</option>
+                                    <option value="email">Email</option>
+                                    <option value="sms">SMS</option>
+                                    <option value="fcm">FCM</option>
                                 </select>
                             </div>
                         </div>
@@ -219,10 +267,9 @@
                             <div class="mb-3">
                                 <label for="edit-type" class="form-label">Tip <span class="text-danger">*</span></label>
                                 <select class="form-control" id="edit-type" name="type" required>
-                                    <option value="info">Bilgi</option>
-                                    <option value="success">Başarı</option>
-                                    <option value="warning">Uyarı</option>
-                                    <option value="error">Hata</option>
+                                    <option value="email">Email</option>
+                                    <option value="sms">SMS</option>
+                                    <option value="fcm">FCM</option>
                                 </select>
                             </div>
                         </div>
@@ -305,24 +352,22 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
-    // Bildirim Oluşturma
-    $('#notificationCreateForm').on('submit', function(e) {
+    // Bildirim Gönderme
+    $('#notificationSendForm').on('submit', function(e) {
         e.preventDefault();
         
         var formData = new FormData(this);
-        formData.set('is_active', $('#create-active').is(':checked') ? '1' : '0');
-        
         
         $.ajax({
-            url: '/admin/notifications',
+            url: '/private/lesley/admin/notifications/send',
             type: 'POST',
             data: formData,
             processData: false,
             contentType: false,
             success: function(response) {
                 if (response.success) {
-                    $('#notificationCreateModal').modal('hide');
-                    toastr.success(response.message);
+                    $('#notificationSendModal').modal('hide');
+                    toastr.success(response.message + ' (' + response.sent_count + ' kişiye gönderildi)');
                     loadNotifications();
                 } else {
                     toastr.error(response.message);
@@ -339,11 +384,30 @@ $(document).ready(function() {
                         toastr.error(errorMessages.join('<br>'));
                     }
                 } else {
-                    toastr.error('Bildirim oluşturulurken bir hata oluştu!');
+                    toastr.error('Bildirim gönderilirken bir hata oluştu!');
                 }
             }
         });
     });
+
+    // Gönderim tipi değiştiğinde yardım metnini güncelle
+    $('#send-type').on('change', function() {
+        var type = $(this).val();
+        var helpText = $('#send-type-help');
+        
+        switch(type) {
+            case 'email':
+                helpText.text('Email: Tüm kullanıcılara email gönderir');
+                break;
+            case 'sms':
+                helpText.text('SMS: Tüm kullanıcılara SMS gönderir (telefon numarası olan)');
+                break;
+            case 'fcm':
+                helpText.text('FCM: Sadece role 3 ve device_id olan kullanıcılara push notification gönderir');
+                break;
+        }
+    });
+
 
     // Bildirim Düzenleme Modal
     $('#notificationEditModal').on('show.bs.modal', function (event) {
@@ -378,7 +442,7 @@ $(document).ready(function() {
         }
         
         $.ajax({
-            url: '/admin/notifications/' + notificationId,
+            url: '/private/lesley/admin/notifications/' + notificationId,
             type: 'PUT',
             data: formData,
             processData: false,
@@ -445,7 +509,7 @@ function loadNotifications(page = 1) {
     var status = $('#statusFilter').val();
     
     $.ajax({
-        url: '/admin/notifications',
+        url: '/private/lesley/admin/notifications',
         type: 'GET',
         data: { 
             page: page,
@@ -482,10 +546,9 @@ function clearFilters() {
 // Tip Rengi
 function getTypeColor(type) {
     switch(type) {
-        case 'info': return 'primary';
-        case 'success': return 'success';
-        case 'warning': return 'warning';
-        case 'error': return 'danger';
+        case 'email': return 'info';
+        case 'sms': return 'warning';
+        case 'fcm': return 'dark';
         default: return 'secondary';
     }
 }
@@ -494,7 +557,7 @@ function getTypeColor(type) {
 function deleteNotification(id, title) {
     if (confirm('"' + title + '" bildirimini silmek istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/admin/notifications/' + id,
+            url: '/private/lesley/admin/notifications/' + id,
             type: 'DELETE',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content')

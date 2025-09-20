@@ -423,13 +423,13 @@ $(document).ready(function() {
         $('#edit-role').val(role);
         $('#edit-package').val(package);
         $('#edit-password').val(''); // Clear password field
-        $('#userEditForm').attr('action', '/admin/users/' + id);
+        $('#userEditForm').attr('action', '/private/lesley/admin/users/' + id);
     });
     
     // Load Users Function
     function loadUsers(page = 1) {
         $.ajax({
-            url: '/admin/users',
+            url: '/private/lesley/admin/users',
             type: 'GET',
             data: { page: page },
             success: function(response) {

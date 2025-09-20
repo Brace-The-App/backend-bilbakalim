@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\NotificationService;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -11,10 +12,13 @@ use Log;
 
 class NotificationController extends Controller
 {
-    public function __construct()
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
     {
+        $this->notificationService = $notificationService;
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view notifications')->only(['index', 'show']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store', 'send']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit notifications')->only(['edit', 'update']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete notifications')->only(['destroy']);
     }
@@ -28,7 +32,7 @@ class NotificationController extends Controller
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('message', 'like', "%{$search}%");
+                  ->orWhere('content', 'like', "%{$search}%");
             });
         }
         
@@ -53,7 +57,7 @@ class NotificationController extends Controller
             $validated = $request->validate([
                 'title' => 'required|string|max:255',
                 'content' => 'required|string',
-                'type' => 'required|in:info,success,warning,error',
+                'type' => 'required|in:email,sms,fcm',
                 'send_at' => 'nullable|date|after:now',
                 'is_active' => 'boolean',
             ]);
@@ -63,7 +67,8 @@ class NotificationController extends Controller
                 'content' => $validated['content'],
                 'type' => $validated['type'],
                 'send_at' => $validated['send_at'] ?? null,
-                'is_active' => $validated['is_active'] ?? true,         
+                'is_active' => $validated['is_active'] ?? true,
+                'sent_count' => 0, // Henüz gönderilmedi
             ]);
 
 
@@ -103,7 +108,7 @@ class NotificationController extends Controller
             $validated = $request->validate([
                 'title' => 'required|string|max:255',
                 'content' => 'required|string',
-                'type' => 'required|in:info,success,warning,error',
+                'type' => 'required|in:email,sms,fcm',
                 'send_at' => 'nullable|date|after:now',
                 'is_active' => 'boolean',
             ]);
@@ -156,4 +161,48 @@ class NotificationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Send notification to users
+     */
+    public function send(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'title' => 'required|string|max:255',
+                'content' => 'required|string',
+                'type' => 'required|in:email,sms,fcm',
+                'target_users' => 'nullable|string', // comma-separated user IDs
+            ]);
+
+            $targetUsers = null;
+            if (!empty($validated['target_users'])) {
+                $targetUsers = array_map('intval', explode(',', $validated['target_users']));
+            }
+
+     
+            $result = $this->notificationService->sendNotification(
+                $validated['title'],
+                $validated['content'],
+                $validated['type'],
+                $targetUsers
+            );
+            return response()->json($result, $result['success'] ? 200 : 500);
+
+        } catch (ValidationException $e) {
+            Log::error('Notification send validation error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Notification send error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Bildirim gönderilirken bir hata oluştu: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

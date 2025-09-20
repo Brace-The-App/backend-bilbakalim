@@ -14,11 +14,16 @@
   if ($("#pageWrapper").hasClass("compact-wrapper")) {
     jQuery(".sidebar-title").append('<div class="according-menu"><i class="fa-solid fa-angle-right"></i></div>');
     jQuery(".sidebar-title").click(function () {
-      jQuery(".sidebar-title").removeClass("active").find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-right"></i></div>');
+      // Don't remove active classes - preserve server-side route-based active classes
+      // Only remove active classes from non-route-based items (items without href)
+      jQuery(".sidebar-title").not('[href]').removeClass("active").find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-right"></i></div>');
       jQuery(".sidebar-submenu, .menu-content").slideUp("normal");
       jQuery(".menu-content").slideUp("normal");
       if (jQuery(this).next().is(":hidden") == true) {
-        jQuery(this).addClass("active");
+        // Only add active class if this is not a route-based link
+        if (!jQuery(this).attr('href')) {
+          jQuery(this).addClass("active");
+        }
         jQuery(this).find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-down"></i></div>');
         jQuery(this).next().slideDown("normal");
       } else {
@@ -65,11 +70,15 @@
 
         jQuery(".sidebar-title").append('<div class="according-menu"><i class="fa-solid fa-angle-right"></i></div>');
         jQuery(".sidebar-title").click(function () {
-          jQuery(".sidebar-title").removeClass("active");
+          // Don't remove active classes - preserve server-side route-based active classes
+          jQuery(".sidebar-title").not('[href]').removeClass("active");
           jQuery(".sidebar-title").find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-right"></i></div>');
           jQuery(".sidebar-submenu, .menu-content").slideUp("normal");
           if (jQuery(this).next().is(":hidden") == true) {
-            jQuery(this).addClass("active");
+            // Only add active class if this is not a route-based link
+            if (!jQuery(this).attr('href')) {
+              jQuery(this).addClass("active");
+            }
             jQuery(this).find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-down"></i></div>');
             jQuery(this).next().slideDown("normal");
           } else {
@@ -95,14 +104,18 @@
     }
 
     jQuery(".sidebar-title").click(function () {
-      jQuery(".sidebar-title").removeClass("active");
+      // Don't remove active classes - preserve server-side route-based active classes
+      jQuery(".sidebar-title").not('[href]').removeClass("active");
       $(".bg-overlay1").removeClass("active");
       jQuery(".sidebar-submenu").removeClass("close-submenu").slideUp("normal");
       jQuery(".sidebar-submenu, .menu-content").slideUp("normal");
       jQuery(".menu-content").slideUp("normal");
 
       if (jQuery(this).next().is(":hidden") == true) {
-        jQuery(this).addClass("active");
+        // Only add active class if this is not a route-based link
+        if (!jQuery(this).attr('href')) {
+          jQuery(this).addClass("active");
+        }
         jQuery(this).next().slideDown("normal");
         $(".bg-overlay1").addClass("active");
 
@@ -258,19 +271,17 @@
     }
   });
 
-  // page active
+  // page active - let server-side route checking handle active classes
   if ($("#pageWrapper").hasClass("compact-wrapper")) {
-    $(".sidebar-wrapper nav").find("a").removeClass("active");
-    $(".sidebar-wrapper nav").find("li").removeClass("active");
-
+    // Don't remove active classes - let server-side route checking handle them
+    // Just handle submenu expansion for active items
     var current = window.location.pathname;
     $(".sidebar-wrapper nav ul li a").filter(function () {
       var link = $(this).attr("href");
       if (link) {
         if (current.indexOf(link) != -1) {
-          $(this).parents().children("a").addClass("active");
+          // Only expand submenus, don't modify active classes
           $(this).parents().parents().children("ul").css("display", "block");
-          $(this).addClass("active");
           $(this).parent().parent().parent().children("a").find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-down"></i></div>');
           $(this).parent().parent().parent().parent().parent().children("a").find("div").replaceWith('<div class="according-menu"><i class="fa-solid fa-angle-down"></i></div>');
           return false;
@@ -340,12 +351,17 @@
   }
 
   // active link
-  if ($(".simplebar-wrapper .simplebar-content-wrapper") && $("#pageWrapper").hasClass("compact-wrapper")) {
-    $(".simplebar-wrapper .simplebar-content-wrapper").animate(
-      {
-        scrollTop: $(".simplebar-wrapper .simplebar-content-wrapper a.active").offset().top - 400,
-      },
-      1000
-    );
-  }
+if ($(".simplebar-wrapper .simplebar-content-wrapper").length && $("#pageWrapper").hasClass("compact-wrapper")) {
+    const activeLink = $(".simplebar-wrapper .simplebar-content-wrapper a.active");
+
+    if (activeLink.length) {
+        $(".simplebar-wrapper .simplebar-content-wrapper").animate(
+            {
+                scrollTop: activeLink.offset().top - 400,
+            },
+            1000
+        );
+    }
+}
+
 })(jQuery);
