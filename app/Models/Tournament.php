@@ -17,6 +17,7 @@ class Tournament extends Model
         'start_date',
         'end_date',
         'start_time',
+        'end_time',
         'duration_minutes',
         'entry_fee',
         'question_count',
@@ -26,6 +27,7 @@ class Tournament extends Model
         'is_featured',
         'tournament_type',
         'max_participants',
+        'min_participants',
         'current_participants',
         'is_ranked',
         'ranking_type'
@@ -38,6 +40,7 @@ class Tournament extends Model
         'start_date' => 'datetime',
         'end_date' => 'datetime',
         'start_time' => 'datetime:H:i',
+        'end_time' => 'datetime',
         'duration_minutes' => 'integer',
         'entry_fee' => 'decimal:2',
         'question_count' => 'integer',
@@ -46,6 +49,7 @@ class Tournament extends Model
         'is_featured' => 'boolean',
         'tournament_type' => 'string',
         'max_participants' => 'integer',
+        'min_participants' => 'integer',
         'current_participants' => 'integer',
         'is_ranked' => 'boolean',
         'ranking_type' => 'string'
@@ -53,6 +57,11 @@ class Tournament extends Model
 
     // Relationships
     public function tournamentUsers(): HasMany
+    {
+        return $this->hasMany(TournamentUser::class);
+    }
+
+    public function participants(): HasMany
     {
         return $this->hasMany(TournamentUser::class);
     }

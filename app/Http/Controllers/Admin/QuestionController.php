@@ -25,8 +25,8 @@ class QuestionController extends Controller
         $query = Question::with('category');
 
         // Filtering
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
+        if ($request->filled('status')) {
+            $query->where('is_active', $request->status);
         }
 
         if ($request->filled('level')) {
@@ -52,13 +52,14 @@ class QuestionController extends Controller
     public function store(Request $request)
     {
         $supportedLocales = config('app.supported_locales', ['tr', 'en']);
-        
+
         $rules = [
+            'question' => 'required|unique:questions,question',
             'category_id' => 'required|exists:categories,id',
             'correct_answer' => 'required|in:1,2,3,4',
             'question_level' => 'required|in:easy,medium,hard',
-            'coin_value' => 'required|integer|min:1|max:100',
-            'image' => 'nullable|string',
+            'coin_value' => 'required|integer|min:1|max:100000',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
             'is_active' => 'nullable|in:on,1,true',
         ];
 
@@ -82,12 +83,26 @@ class QuestionController extends Controller
         try {
             $request->validate($rules);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Question validation failed:', $e->errors());
-            return redirect()->back()->withErrors($e->validator)->withInput();
+            \Log::error('Question validation failed:', [
+                'errors' => $e->errors(),
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'message' => 'Soru kaydedilemedi, lütfen tekrar deneyiniz.'
+            ], 500);
+        }
+
+        $exists = \App\Models\Question::where("question->tr", $request->input("question.tr"))->exists();
+
+
+        if ($exists) {
+            return response()->json([
+                'message' => 'Aynı soru zaten mevcut.'
+            ], 500);
         }
 
         $question = new Question();
-        
+
         // Set translations
         foreach ($supportedLocales as $locale) {
             if ($request->filled("question.{$locale}")) {
@@ -111,11 +126,29 @@ class QuestionController extends Controller
         $question->correct_answer = $request->correct_answer;
         $question->question_level = $request->question_level;
         $question->coin_value = $request->coin_value;
-        $question->image = $request->image;
+
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            $image = $request->file('image')->store('questions', 'public');
+            $question->image = $image;
+        }
+
         $question->is_active = $request->has('is_active') && $request->is_active !== null;
         $question->save();
 
-        return redirect()->route('admin.questions.index')->with('success', 'Soru başarıyla oluşturuldu.');
+        if (!$question->save()) {
+            \Log::error('Question save failed:', [
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'message' => 'Soru kaydedilemedi, lütfen tekrar deneyiniz.'
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Soru başarıyla oluşturuldu.'
+        ], 200);
+
     }
 
     public function show(Question $question)
@@ -131,13 +164,14 @@ class QuestionController extends Controller
     public function update(Request $request, Question $question)
     {
         $supportedLocales = config('app.supported_locales', ['tr', 'en']);
-        
+
         $rules = [
+            'question' => 'required|unique:questions,question',
             'category_id' => 'required|exists:categories,id',
             'correct_answer' => 'required|in:1,2,3,4',
             'question_level' => 'required|in:easy,medium,hard',
-            'coin_value' => 'required|integer|min:1|max:100',
-            'image' => 'nullable|string',
+            'coin_value' => 'required|integer|min:1|max:100000',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
             'is_active' => 'nullable|in:on,1,true',
         ];
 
@@ -161,8 +195,16 @@ class QuestionController extends Controller
         try {
             $request->validate($rules);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return redirect()->back()->withErrors($e->validator)->withInput();
+            \Log::error('Question update validation failed:', [
+                'errors' => $e->errors(),
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'message' => 'Soru güncellenemedi, lütfen tekrar deneyiniz.'
+            ], 500);
         }
+
+
 
         // Set translations
         foreach ($supportedLocales as $locale) {
@@ -187,14 +229,47 @@ class QuestionController extends Controller
         $question->correct_answer = $request->correct_answer;
         $question->question_level = $request->question_level;
         $question->coin_value = $request->coin_value;
-        $question->image = $request->image;
+
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            // Delete old image if exists
+            if ($question->image && \Storage::exists('public/' . $question->image)) {
+                \Storage::delete('public/' . $question->image);
+            }
+
+            $image = $request->file('image')->store('questions', 'public');
+            $question->image = $image;
+        }
+
+        // Handle image removal
+        if ($request->has('remove_image') && $request->remove_image == '1') {
+            // Delete old image if exists
+            if ($question->image && \Storage::exists('public/' . $question->image)) {
+                \Storage::delete('public/' . $question->image);
+            }
+            $question->image = null;
+        }
+
         $question->is_active = $request->has('is_active') && $request->is_active !== null;
         $question->save();
+
+        if (!$question->save()) {
+            \Log::error('Question save failed:', [
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'message' => 'Soru güncellenemedi, lütfen tekrar deneyiniz.'
+            ], 500);
+        }
+
+
 
         $webhook = new WebhookController();
         $webhook->questionUpdated($question, $question->id);
 
-        return redirect()->route('admin.questions.index')->with('success', 'Soru başarıyla güncellendi.');
+        return response()->json([
+            'message' => 'Soru başarıyla güncellendi.'
+        ], 200);
     }
 
     public function destroy(Question $question)

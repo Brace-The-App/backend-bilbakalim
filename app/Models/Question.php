@@ -62,6 +62,15 @@ class Question extends Model
         return $query->where('category_id', $categoryId);
     }
 
+    public function scopeInRandomOrder($query, $seed = null)
+    {
+        if ($seed !== null) {
+            // Seed ile deterministik rastgele sıralama
+            return $query->orderByRaw("RAND({$seed})");
+        }
+        return $query->orderByRaw('RAND()');
+    }
+
     // Accessors
     public function getChoicesAttribute()
     {

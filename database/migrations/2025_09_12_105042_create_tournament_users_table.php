@@ -13,7 +13,19 @@ return new class extends Migration
     {
         Schema::create('tournament_users', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tournament_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->integer('joker_hakki')->default(3);
+            $table->integer('score')->default(0);
+            $table->integer('correct_answers')->default(0);
+            $table->integer('wrong_answers')->default(0);
+            $table->integer('total_time_seconds')->default(0);
+            $table->enum('status', ['waiting', 'active', 'eliminated', 'completed'])->default('waiting');
+            $table->timestamp('joined_at')->nullable();
+            $table->json('answers_detail')->nullable();
             $table->timestamps();
+            
+            $table->unique(['tournament_id', 'user_id']);
         });
     }
 

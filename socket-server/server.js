@@ -2,598 +2,479 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const axios = require('axios');
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS yapılandırması
+// CORS ayarları
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
+app.use(express.json());
+
+// Socket.IO ayarları
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost", "http://localhost:3000", "http://localhost:8000","https://bilbakalim.online"],
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Laravel API base URL
-const LARAVEL_API_URL = 'http://laravel.test/api';
-
 // Bağlı kullanıcıları takip et
 const connectedUsers = new Map();
 const userRooms = new Map();
+const userSocketMap = new Map(); // userId -> socketId mapping
 
 // Socket bağlantıları
 io.on('connection', (socket) => {
-  console.log(`🔌 Yeni kullanıcı bağlandı: ${socket.id} - ${new Date().toISOString()}`);
+  console.log(`🔌 Yeni bağlantı: ${socket.id}`);
 
   // Kullanıcı girişi
-  socket.on('user_login', (data) => {
-    const { userId, token } = data;
-    connectedUsers.set(socket.id, { userId, token, socketId: socket.id });
-    userRooms.set(userId, socket.id);
+  socket.on('user_join', (data) => {
+    const { userId, userName } = data;
 
-    // Kullanıcıyı kendi odasına ekle
+    connectedUsers.set(socket.id, { userId, userName });
+    userSocketMap.set(userId, socket.id); // userId -> socketId mapping
     socket.join(`user_${userId}`);
 
-    console.log(`👤 Kullanıcı giriş yaptı: ${userId} - Socket: ${socket.id} - ${new Date().toISOString()}`);
-    socket.emit('login_success', { message: 'Başarıyla giriş yaptınız' });
-  });
+    console.log(`👤 Kullanıcı girişi: ${userName} (${userId})`);
 
-  // Kullanıcı çıkışı
-  socket.on('user_logout', () => {
-    const user = connectedUsers.get(socket.id);
-    if (user) {
-      userRooms.delete(user.userId);
-      connectedUsers.delete(socket.id);
-      console.log(`Kullanıcı çıkış yaptı: ${user.userId}`);
-    }
-  });
-
-  // Soru güncellemelerini dinle
-  socket.on('subscribe_questions', (data) => {
-    const { categoryId, tournamentId } = data;
-
-    if (categoryId) {
-      socket.join(`category_${categoryId}`);
-      console.log(`Kullanıcı kategori ${categoryId} sorularını dinliyor`);
-    }
-
-    if (tournamentId) {
-      socket.join(`tournament_${tournamentId}`);
-      console.log(`Kullanıcı turnuva ${tournamentId} sorularını dinliyor`);
-    }
-  });
-
-  // Soru güncellemelerini dinlemeyi bırak
-  socket.on('unsubscribe_questions', (data) => {
-    const { categoryId, tournamentId } = data;
-
-    if (categoryId) {
-      socket.leave(`category_${categoryId}`);
-    }
-
-    if (tournamentId) {
-      socket.leave(`tournament_${tournamentId}`);
-    }
-  });
-
-  // Bireysel oyun event'leri
-  socket.on('join_individual_game', (data) => {
-    const { gameId, sessionId } = data;
-    socket.join(`individual_game_${gameId}`);
-    socket.join(`session_${sessionId}`);
-    console.log(`Kullanıcı bireysel oyuna katıldı: Game ${gameId}, Session ${sessionId}`);
-  });
-
-  socket.on('leave_individual_game', (data) => {
-    const { gameId, sessionId } = data;
-    socket.leave(`individual_game_${gameId}`);
-    socket.leave(`session_${sessionId}`);
-    console.log(`Kullanıcı bireysel oyundan ayrıldı: Game ${gameId}, Session ${sessionId}`);
-  });
-
-  socket.on('answer_submitted', (data) => {
-    const { gameId, sessionId, questionId, isCorrect, pointsEarned } = data;
-    
-    // Oyun odasına cevap bildirimi gönder
-    io.to(`individual_game_${gameId}`).emit('answer_result', {
-      sessionId,
-      questionId,
-      isCorrect,
-      pointsEarned,
-      timestamp: new Date()
-    });
-    
-    console.log(`Cevap gönderildi: Game ${gameId}, Session ${sessionId}, Question ${questionId}, Correct: ${isCorrect}`);
-  });
-
-  socket.on('game_progress_update', (data) => {
-    const { gameId, sessionId, progress } = data;
-    
-    // Oyun odasına ilerleme güncellemesi gönder
-    io.to(`individual_game_${gameId}`).emit('progress_updated', {
-      sessionId,
-      progress,
-      timestamp: new Date()
+    // Kullanıcıya hoş geldin mesajı gönder
+    socket.emit('welcome', {
+      message: `Hoş geldin ${userName}!`,
+      userId: userId,
+      timestamp: new Date().toISOString()
     });
   });
 
-  socket.on('game_completed', (data) => {
-    const { gameId, sessionId, finalScore, coinsEarned } = data;
-    
-    // Oyun odasına tamamlama bildirimi gönder
-    io.to(`individual_game_${gameId}`).emit('game_finished', {
-      sessionId,
-      finalScore,
-      coinsEarned,
-      timestamp: new Date()
+  // Normal quiz odasına katılma
+  socket.on('join_normal_quiz', (data) => {
+    const { gameId, userId } = data;
+    const roomName = `normal_quiz_${gameId}`;
+
+    socket.join(roomName);
+    userRooms.set(socket.id, roomName);
+
+    console.log(`🎮 Normal quiz odasına katıldı: User ${userId} -> Room ${roomName}`);
+
+    socket.emit('joined_room', {
+      room: roomName,
+      gameId: gameId,
+      message: 'Normal quiz odasına katıldınız'
     });
-    
-    console.log(`Oyun tamamlandı: Game ${gameId}, Session ${sessionId}, Score: ${finalScore}`);
   });
 
-  // Turnuva event'leri
+  // Premium quiz odasına katılma
+  socket.on('join_premium_quiz', (data) => {
+    const { gameId, userId } = data;
+    const roomName = `premium_quiz_${gameId}`;
+
+    socket.join(roomName);
+    userRooms.set(socket.id, roomName);
+
+    console.log(`💎 Premium quiz odasına katıldı: User ${userId} -> Room ${roomName}`);
+
+    socket.emit('joined_room', {
+      room: roomName,
+      gameId: gameId,
+      message: 'Premium quiz odasına katıldınız'
+    });
+  });
+
+  // Turnuva odasına katılma
   socket.on('join_tournament', (data) => {
-    const { tournamentId, userId, tournamentType } = data;
-    socket.join(`tournament_${tournamentId}`);
-    socket.join(`tournament_user_${userId}`);
-    console.log(`Kullanıcı turnuvaya katıldı: Tournament ${tournamentId}, User ${userId}, Type: ${tournamentType}`);
-    
-    // Turnuva odasına katılım bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('user_joined_tournament', {
-      userId,
-      tournamentId,
-      tournamentType,
-      timestamp: new Date()
-    });
-  });
-
-  socket.on('leave_tournament', (data) => {
     const { tournamentId, userId } = data;
-    socket.leave(`tournament_${tournamentId}`);
-    socket.leave(`tournament_user_${userId}`);
-    console.log(`Kullanıcı turnuvadan ayrıldı: Tournament ${tournamentId}, User ${userId}`);
+    const roomName = `tournament_${tournamentId}`;
+
+    socket.join(roomName);
+    userRooms.set(socket.id, roomName);
+
+    console.log(`🏆 Turnuva odasına katıldı: User ${userId} -> Tournament ${tournamentId}`);
+
+    socket.emit('joined_tournament', {
+      tournamentId: tournamentId,
+      message: 'Turnuva odasına katıldınız'
+    });
   });
 
-  socket.on('tournament_answer_submitted', (data) => {
-    const { tournamentId, userId, questionId, isCorrect, pointsEarned, timeTaken } = data;
-    
+  // Quiz cevabı gönderme
+  socket.on('quiz_answer', (data) => {
+    const { gameId, userId, questionId, selectedOption, timeSpent } = data;
+
+    console.log(`📝 Quiz cevabı: Game ${gameId}, User ${userId}, Question ${questionId}, Option ${selectedOption}, Time ${timeSpent}s`);
+
+    // Cevap işlendikten sonra sonucu gönder
+    socket.emit('quiz_answer_result', {
+      gameId,
+      userId,
+      questionId,
+      selectedOption,
+      timeSpent,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Joker kullanma
+  socket.on('quiz_joker_used', (data) => {
+    const { gameId, userId, jokerType, result } = data;
+
+    console.log(`🎯 Joker kullanıldı: Game ${gameId}, User ${userId}, Type: ${jokerType}`);
+
+    // Joker sonucunu gönder
+    socket.emit('joker_result', {
+      gameId,
+      userId,
+      jokerType,
+      result,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Turnuva cevabı gönderme
+  socket.on('tournament_answer', (data) => {
+    const { tournamentId, userId, questionId, selectedOption, timeSpent } = data;
+
+    console.log(`🏆 Turnuva cevabı: Tournament ${tournamentId}, User ${userId}, Question ${questionId}, Option ${selectedOption}`);
+
     // Turnuva odasına cevap bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('tournament_answer_result', {
-      userId,
-      questionId,
-      isCorrect,
-      pointsEarned,
-      timeTaken,
-      timestamp: new Date()
-    });
-    
-    console.log(`Turnuva cevabı: Tournament ${tournamentId}, User ${userId}, Question ${questionId}, Correct: ${isCorrect}`);
-  });
-
-  socket.on('tournament_progress_update', (data) => {
-    const { tournamentId, userId, progress, currentQuestion, timeRemaining } = data;
-    
-    // Turnuva odasına ilerleme güncellemesi gönder
-    io.to(`tournament_${tournamentId}`).emit('tournament_progress_updated', {
-      userId,
-      progress,
-      currentQuestion,
-      timeRemaining,
-      timestamp: new Date()
-    });
-  });
-
-  socket.on('tournament_completed', (data) => {
-    const { tournamentId, userId, finalScore, rank, totalParticipants } = data;
-    
-    // Turnuva odasına tamamlama bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('tournament_finished', {
-      userId,
-      finalScore,
-      rank,
-      totalParticipants,
-      timestamp: new Date()
-    });
-    
-    console.log(`Turnuva tamamlandı: Tournament ${tournamentId}, User ${userId}, Score: ${finalScore}, Rank: ${rank}`);
-  });
-
-  socket.on('tournament_leaderboard_update', (data) => {
-    const { tournamentId, leaderboard, tournamentType } = data;
-    
-    // Turnuva odasına liderlik tablosu güncellemesi gönder
-    io.to(`tournament_${tournamentId}`).emit('leaderboard_updated', {
-      leaderboard,
-      tournamentType,
-      timestamp: new Date()
-    });
-  });
-
-  // Çoklu kullanıcı turnuva event'leri
-  socket.on('multiplayer_tournament_start', (data) => {
-    const { tournamentId, participants, questions } = data;
-    
-    // Tüm katılımcılara turnuva başlama bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('multiplayer_tournament_started', {
+    io.to(`tournament_${tournamentId}`).emit('tournament_answer_received', {
       tournamentId,
-      participants: participants.length,
-      questions: questions.length,
-      timestamp: new Date()
-    });
-    
-    console.log(`Çoklu kullanıcı turnuvası başladı: Tournament ${tournamentId}, Participants: ${participants.length}`);
-  });
-
-  socket.on('multiplayer_answer_submitted', (data) => {
-    const { tournamentId, userId, questionId, isCorrect, timeTaken, pointsEarned } = data;
-    
-    // Tüm katılımcılara cevap bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('multiplayer_answer_result', {
       userId,
       questionId,
-      isCorrect,
-      timeTaken,
-      pointsEarned,
-      timestamp: new Date()
-    });
-    
-    console.log(`Çoklu turnuva cevabı: Tournament ${tournamentId}, User ${userId}, Correct: ${isCorrect}, Time: ${timeTaken}ms`);
-  });
-
-  socket.on('multiplayer_ranking_update', (data) => {
-    const { tournamentId, rankings, currentQuestion } = data;
-    
-    // Tüm katılımcılara sıralama güncellemesi gönder
-    io.to(`tournament_${tournamentId}`).emit('multiplayer_ranking_updated', {
-      rankings,
-      currentQuestion,
-      timestamp: new Date()
+      selectedOption,
+      timeSpent,
+      timestamp: new Date().toISOString()
     });
   });
 
-  socket.on('multiplayer_tournament_finished', (data) => {
-    const { tournamentId, finalRankings, winners } = data;
-    
-    // Tüm katılımcılara turnuva bitiş bildirimi gönder
-    io.to(`tournament_${tournamentId}`).emit('multiplayer_tournament_ended', {
-      finalRankings,
-      winners,
-      timestamp: new Date()
-    });
-    
-    console.log(`Çoklu kullanıcı turnuvası bitti: Tournament ${tournamentId}, Winners: ${winners.length}`);
-  });
-
-  // Bağlantı kesildiğinde
+  // Bağlantı kesilme
   socket.on('disconnect', () => {
     const user = connectedUsers.get(socket.id);
+    const room = userRooms.get(socket.id);
+
+    if (room) {
+      socket.leave(room);
+      userRooms.delete(socket.id);
+      console.log(`🚪 Odadan ayrıldı: ${room}`);
+    }
+
     if (user) {
       userRooms.delete(user.userId);
       connectedUsers.delete(socket.id);
+      userSocketMap.delete(user.userId); // userId mapping'i de temizle
       console.log(`Kullanıcı bağlantısı kesildi: ${user.userId}`);
     }
   });
 });
 
-// Laravel'den gelen webhook'ları dinle
-app.post('/webhook/question-created', (req, res) => {
-  const { question, categoryId, tournamentId } = req.body;
+// ===== QUIZ WEBHOOK'LARI =====
 
-  console.log('🆕 YENİ SORU OLUŞTURULDU:', {
-    questionId: question?.id,
-    questionText: question?.question?.tr || 'N/A',
-    categoryId: categoryId,
-    tournamentId: tournamentId,
-    timestamp: new Date().toISOString()
-  });
+app.post('/webhook/quiz-started', (req, res) => {
+    console.log('Quiz started webhook received:', req.body);
+    const { game_id, user_id, game_type, question, timestamp } = req.body;
 
-  // Kategori odasına bildir
-  if (categoryId) {
-    io.to(`category_${categoryId}`).emit('question_created', {
+    // Quiz başlatma bildirimi
+    const roomName = game_type === 'premium' ? `premium_quiz_${game_id}` : `normal_quiz_${game_id}`;
+    io.to(roomName).emit('quiz_started', {
+        gameId: game_id,
+        userId: user_id,
+        gameType: game_type,
       question,
-      categoryId,
       timestamp: new Date()
     });
-    console.log(`📡 Kategori ${categoryId} odasına bildirim gönderildi`);
-  }
 
-  // Turnuva odasına bildir
-  if (tournamentId) {
-    io.to(`tournament_${tournamentId}`).emit('question_created', {
+    // Kullanıcıya özel bildirim
+    io.to(`user_${user_id}`).emit('quiz_started', {
+        gameId: game_id,
+        gameType: game_type,
       question,
-      tournamentId,
       timestamp: new Date()
     });
-    console.log(`📡 Turnuva ${tournamentId} odasına bildirim gönderildi`);
-  }
 
-  res.json({ success: true, message: 'Soru güncellemesi gönderildi' });
+    console.log(`Quiz başlatıldı: Game ${game_id}, User ${user_id}, Type: ${game_type}`);
+    res.json({ success: true, message: 'Quiz started webhook processed' });
 });
 
-app.post('/webhook/question-updated', (req, res) => {
-  const { question, categoryId, tournamentId } = req.body;
+app.post('/webhook/quiz-answer-submitted', (req, res) => {
+    console.log('Quiz answer webhook received:', req.body);
+    const { game_id, user_id, question_id, is_correct, coins_earned, game_type, user_coins, game_stats, timestamp } = req.body;
 
-  console.log('✏️ SORU GÜNCELLENDİ:', {
-    questionId: question?.id,
-    questionText: question?.question?.tr || 'N/A',
-    categoryId: categoryId,
-    tournamentId: tournamentId,
-    timestamp: new Date().toISOString()
-  });
-
-  if (categoryId) {
-    io.to(`category_${categoryId}`).emit('question_updated', {
-      question,
-      categoryId,
+    // Quiz cevap bildirimi
+    const roomName = game_type === 'premium' ? `premium_quiz_${game_id}` : `normal_quiz_${game_id}`;
+    io.to(roomName).emit('quiz_answer_result', {
+        gameId: game_id,
+        userId: user_id,
+        questionId: question_id,
+        isCorrect: is_correct,
+        coinsEarned: coins_earned,
+        gameType: game_type,
+        userCoins: user_coins,
+        gameStats: game_stats,
       timestamp: new Date()
     });
-    console.log(`📡 Kategori ${categoryId} odasına güncelleme bildirimi gönderildi`);
-  }
 
-  if (tournamentId) {
-    io.to(`tournament_${tournamentId}`).emit('question_updated', {
-      question,
-      tournamentId,
+    // Kullanıcıya özel bildirim
+    io.to(`user_${user_id}`).emit('quiz_answer_result', {
+        gameId: game_id,
+        questionId: question_id,
+        isCorrect: is_correct,
+        coinsEarned: coins_earned,
+        gameType: game_type,
+        userCoins: user_coins,
+        gameStats: game_stats,
       timestamp: new Date()
     });
-    console.log(`📡 Turnuva ${tournamentId} odasına güncelleme bildirimi gönderildi`);
-  }
 
-  res.json({ success: true, message: 'Soru güncellemesi gönderildi' });
+    console.log(`Quiz cevabı: Game ${game_id}, User ${user_id}, Type: ${game_type}, Correct: ${is_correct}, Coins: ${coins_earned}`);
+    res.json({ success: true, message: 'Quiz answer submitted webhook processed' });
 });
 
-app.post('/webhook/question-deleted', (req, res) => {
-  const { questionId, categoryId, tournamentId } = req.body;
+app.post('/webhook/quiz-joker-used', (req, res) => {
+    const { game_id, user_id, joker_type, result, timestamp } = req.body;
 
-  console.log('🗑️ SORU SİLİNDİ:', {
-    questionId: questionId,
-    categoryId: categoryId,
-    tournamentId: tournamentId,
-    timestamp: new Date().toISOString()
-  });
-
-  if (categoryId) {
-    io.to(`category_${categoryId}`).emit('question_deleted', {
-      questionId,
-      categoryId,
+    // Premium quiz joker bildirimi
+    const roomName = `premium_quiz_${game_id}`;
+    io.to(roomName).emit('joker_used', {
+        gameId: game_id,
+        userId: user_id,
+        jokerType: joker_type,
+        result: result,
       timestamp: new Date()
     });
-    console.log(`📡 Kategori ${categoryId} odasına silme bildirimi gönderildi`);
-  }
 
-  if (tournamentId) {
-    io.to(`tournament_${tournamentId}`).emit('question_deleted', {
-      questionId,
-      tournamentId,
+    // Kullanıcıya özel bildirim
+    io.to(`user_${user_id}`).emit('joker_used', {
+        gameId: game_id,
+        jokerType: joker_type,
+        result: result,
       timestamp: new Date()
     });
-    console.log(`📡 Turnuva ${tournamentId} odasına silme bildirimi gönderildi`);
-  }
 
-  res.json({ success: true, message: 'Soru silme bildirimi gönderildi' });
+    console.log(`Quiz joker kullanıldı: Game ${game_id}, User ${user_id}, Type: ${joker_type}`);
+    res.json({ success: true, message: 'Quiz joker used webhook processed' });
 });
 
-// Kategori güncellemeleri
-app.post('/webhook/category-updated', (req, res) => {
-  const { category } = req.body;
+app.post('/webhook/quiz-completed', (req, res) => {
+    const { game_id, user_id, game_type, final_stats, answer_details, reward, timestamp } = req.body;
 
-  io.emit('category_updated', {
-    category,
+    // Quiz tamamlanma bildirimi
+    const roomName = game_type === 'premium' ? `premium_quiz_${game_id}` : `normal_quiz_${game_id}`;
+    io.to(roomName).emit('quiz_completed', {
+        gameId: game_id,
+        userId: user_id,
+        gameType: game_type,
+        finalStats: final_stats,
+        answerDetails: answer_details,
+        reward: reward,
     timestamp: new Date()
   });
 
-  res.json({ success: true, message: 'Kategori güncellemesi gönderildi' });
-});
-
-// Turnuva güncellemeleri
-app.post('/webhook/tournament-updated', (req, res) => {
-  const { tournament } = req.body;
-
-  io.emit('tournament_updated', {
-    tournament,
+    // Kullanıcıya özel bildirim
+    io.to(`user_${user_id}`).emit('quiz_completed', {
+        gameId: game_id,
+        gameType: game_type,
+        finalStats: final_stats,
+        answerDetails: answer_details,
+        reward: reward,
     timestamp: new Date()
   });
 
-  res.json({ success: true, message: 'Turnuva güncellemesi gönderildi' });
-});
-
-// Soru listesi endpoint'i
-app.get('/api/questions', async (req, res) => {
-  try {
-    const { categoryId, search, page = 1, perPage = 15 } = req.query;
-
-    // Laravel API'den soruları çek (public endpoint)
-    let url = `${LARAVEL_API_URL}/questions?page=${page}&per_page=${perPage}`;
-
-    if (categoryId) {
-      url += `&category_id=${categoryId}`;
-    }
-
-    if (search) {
-      url += `&search=${encodeURIComponent(search)}`;
-    }
-
-    const response = await axios.get(url, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('📋 Sorular getirildi:', {
-      count: response.data.data.data.length,
-      page: page,
-      categoryId: categoryId,
-      search: search,
-      timestamp: new Date().toISOString()
-    });
-
-    res.json({
-      success: true,
-      data: response.data.data,
-      meta: response.data.meta
-    });
-  } catch (error) {
-    console.error('Soru listesi hatası:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Sorular yüklenirken hata oluştu',
-      error: error.message
-    });
-  }
-});
-
-// Kategori listesi endpoint'i
-app.get('/api/categories', async (req, res) => {
-  try {
-    const response = await axios.get(`${LARAVEL_API_URL}/categories`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
-
-    res.json({
-      success: true,
-      data: response.data.data,
-      meta: response.data.meta
-    });
-  } catch (error) {
-    console.error('Kategori listesi hatası:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Kategoriler yüklenirken hata oluştu',
-      error: error.message
-    });
-  }
-});
-
-// Sunucu durumu
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    connectedUsers: connectedUsers.size,
-    uptime: process.uptime()
-  });
+    console.log(`Quiz tamamlandı: Game ${game_id}, User ${user_id}, Type: ${game_type}`);
+    res.json({ success: true, message: 'Quiz completed webhook processed' });
 });
 
 // ===== TURNUVA WEBHOOK'LARI =====
 
+app.post('/webhook/user-joined-tournament', (req, res) => {
+    const { tournament_id, user_id, user_name, current_participants, min_participants, waiting_message } = req.body;
+
+    // Turnuva odasına katılım bildirimi
+    io.to(`tournament_${tournament_id}`).emit('user_joined_tournament', {
+        tournament_id,
+        user_id,
+        user_name,
+        current_participants,
+        min_participants,
+        waiting_message,
+        timestamp: new Date().toISOString()
+    });
+
+    // Kullanıcıya özel bildirim
+    io.to(`user_${user_id}`).emit('tournament_joined', {
+        tournament_id,
+        current_participants,
+        min_participants,
+        waiting_message,
+      timestamp: new Date().toISOString()
+    });
+
+    console.log(`Kullanıcı turnuvaya katıldı: ${user_name} (${user_id}) - Tournament ${tournament_id}, Participants: ${current_participants}/${min_participants}`);
+    res.json({ success: true, message: 'User joined tournament webhook processed' });
+});
+
 app.post('/webhook/tournament-started', (req, res) => {
-    const { tournament, participants, timestamp } = req.body;
-    io.emit('tournament_started', { tournament, participants, timestamp });
-    console.log(`Turnuva başlatıldı: ${tournament.title}, Katılımcılar: ${participants.length}`);
+    const { tournament_id, participants, question_count } = req.body;
+    io.to(`tournament_${tournament_id}`).emit('tournament_started', {
+        tournament_id, participants, question_count, timestamp: new Date().toISOString()
+    });
+    console.log(`Turnuva başladı: Tournament ${tournament_id}, Participants: ${participants.length}`);
     res.json({ success: true, message: 'Tournament started webhook processed' });
 });
 
 app.post('/webhook/tournament-finished', (req, res) => {
-    const { tournament, finalRankings, timestamp } = req.body;
-    io.emit('tournament_finished', { tournament, finalRankings, timestamp });
-    console.log(`Turnuva bitti: ${tournament.title}, Final sıralama: ${finalRankings.length} oyuncu`);
+    const { tournament_id, final_rankings, winners } = req.body;
+    io.to(`tournament_${tournament_id}`).emit('tournament_finished', {
+        tournament_id, final_rankings, winners, timestamp: new Date().toISOString()
+    });
+    console.log(`Turnuva bitti: Tournament ${tournament_id}`);
     res.json({ success: true, message: 'Tournament finished webhook processed' });
 });
 
-app.post('/webhook/user-joined-tournament', (req, res) => {
-    const { tournamentId, userId, userData, timestamp } = req.body;
-    io.to(`tournament_${tournamentId}`).emit('user_joined_tournament', { 
-        tournamentId, userId, userData, timestamp 
+app.post('/webhook/tournament-next-question', (req, res) => {
+    const { tournament_id, question, question_number, total_questions } = req.body;
+    io.to(`tournament_${tournament_id}`).emit('tournament_next_question', {
+        tournament_id, question, question_number, total_questions, timestamp: new Date().toISOString()
     });
-    console.log(`Kullanıcı turnuvaya katıldı: Tournament ${tournamentId}, User ${userId}`);
-    res.json({ success: true, message: 'User joined tournament webhook processed' });
+    console.log(`Turnuva sonraki soru: Tournament ${tournament_id}, Question ${question_number}/${total_questions}`);
+    res.json({ success: true, message: 'Tournament next question webhook processed' });
 });
 
-app.post('/webhook/user-left-tournament', (req, res) => {
-    const { tournamentId, userId, timestamp } = req.body;
-    io.to(`tournament_${tournamentId}`).emit('user_left_tournament', { 
-        tournamentId, userId, timestamp 
+app.post('/webhook/tournament-player-eliminated', (req, res) => {
+    const { tournament_id, user_id, reason, remaining_players } = req.body;
+    io.to(`tournament_${tournament_id}`).emit('tournament_player_eliminated', {
+        tournament_id, user_id, reason, remaining_players, timestamp: new Date().toISOString()
     });
-    console.log(`Kullanıcı turnuvadan ayrıldı: Tournament ${tournamentId}, User ${userId}`);
-    res.json({ success: true, message: 'User left tournament webhook processed' });
+    console.log(`Turnuva oyuncusu elendi: User ${user_id} - Tournament ${tournament_id}, Reason: ${reason}`);
+    res.json({ success: true, message: 'Tournament player eliminated webhook processed' });
 });
 
-// ===== BİREYSEL OYUN WEBHOOK'LARI =====
-
-app.post('/webhook/individual-game-started', (req, res) => {
-    const { gameId, userId, gameData, timestamp } = req.body;
-    io.to(`individual_game_${gameId}`).emit('individual_game_started', { 
-        gameId, userId, gameData, timestamp 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        connectedUsers: connectedUsers.size,
+        activeRooms: userRooms.size
     });
-    console.log(`Bireysel oyun başlatıldı: Game ${gameId}, User ${userId}`);
-    res.json({ success: true, message: 'Individual game started webhook processed' });
 });
 
-app.post('/webhook/individual-game-finished', (req, res) => {
-    const { gameId, userId, finalScore, timestamp } = req.body;
-    io.to(`individual_game_${gameId}`).emit('individual_game_finished', { 
-        gameId, userId, finalScore, timestamp 
+// Kullanıcı bağlantı durumu kontrolü
+app.post('/check-user-connection', (req, res) => {
+    const { userId } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'userId gerekli'
+        });
+    }
+
+    const socketId = userSocketMap.get(userId);
+    const isConnected = socketId && connectedUsers.has(socketId);
+
+    res.json({
+        success: true,
+        userId: userId,
+        isConnected: isConnected,
+        socketId: socketId || null
     });
-    console.log(`Bireysel oyun bitti: Game ${gameId}, User ${userId}, Score: ${finalScore}`);
-    res.json({ success: true, message: 'Individual game finished webhook processed' });
 });
 
-// ===== CEVAP WEBHOOK'LARI =====
+// Çoklu kullanıcı bağlantı durumu kontrolü
+app.post('/check-users-connection', (req, res) => {
+    const { userIds } = req.body;
 
-app.post('/webhook/answer-submitted', (req, res) => {
-    const { gameId, userId, questionId, isCorrect, pointsEarned, timeTaken, timestamp } = req.body;
-    io.to(`individual_game_${gameId}`).emit('answer_result', { 
-        gameId, userId, questionId, isCorrect, pointsEarned, timeTaken, timestamp 
+    if (!userIds || !Array.isArray(userIds)) {
+        return res.status(400).json({
+            success: false,
+            message: 'userIds array gerekli'
+        });
+    }
+
+    const connectionStatus = {};
+
+    userIds.forEach(userId => {
+        const socketId = userSocketMap.get(userId);
+        const isConnected = socketId && connectedUsers.has(socketId);
+        connectionStatus[userId] = {
+            isConnected: isConnected,
+            socketId: socketId || null
+        };
     });
-    console.log(`Cevap gönderildi: Game ${gameId}, User ${userId}, Correct: ${isCorrect}, Points: ${pointsEarned}`);
-    res.json({ success: true, message: 'Answer submitted webhook processed' });
+
+    res.json({
+        success: true,
+        connectionStatus: connectionStatus
+    });
 });
 
-app.post('/webhook/ranking-updated', (req, res) => {
-    const { tournamentId, rankings, timestamp } = req.body;
-    io.to(`tournament_${tournamentId}`).emit('ranking_updated', { 
-        tournamentId, rankings, timestamp 
+// Test için kullanıcı bağlantısı simülasyonu
+app.post('/simulate-user-connection', (req, res) => {
+    const { userId, userName } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'userId gerekli'
+        });
+    }
+
+    const socketId = `test_socket_${userId}`;
+    const userData = { userId, userName: userName || `Test User ${userId}` };
+
+    // Kullanıcıyı bağlı olarak işaretle
+    connectedUsers.set(socketId, userData);
+    userSocketMap.set(userId, socketId);
+
+    console.log(`🧪 Test: Kullanıcı ${userId} bağlantısı simüle edildi`);
+
+    res.json({
+        success: true,
+        message: `Kullanıcı ${userId} bağlantısı simüle edildi`,
+        userId: userId,
+        socketId: socketId
     });
-    console.log(`Sıralama güncellendi: Tournament ${tournamentId}, Rankings: ${rankings.length} oyuncu`);
-    res.json({ success: true, message: 'Ranking updated webhook processed' });
 });
 
-// ===== ÖDEME WEBHOOK'LARI =====
+// Test için kullanıcı bağlantısını kes
+app.post('/simulate-user-disconnection', (req, res) => {
+    const { userId } = req.body;
 
-app.post('/webhook/payment-completed', (req, res) => {
-    const { userId, paymentData, timestamp } = req.body;
-    io.to(`user_${userId}`).emit('payment_completed', { 
-        userId, paymentData, timestamp 
-    });
-    console.log(`Ödeme tamamlandı: User ${userId}, Amount: ${paymentData.amount}`);
-    res.json({ success: true, message: 'Payment completed webhook processed' });
-});
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'userId gerekli'
+        });
+    }
 
-app.post('/webhook/coin-purchased', (req, res) => {
-    const { userId, coinAmount, totalCoins, timestamp } = req.body;
-    io.to(`user_${userId}`).emit('coin_purchased', { 
-        userId, coinAmount, totalCoins, timestamp 
-    });
-    console.log(`Jeton satın alındı: User ${userId}, Amount: ${coinAmount}, Total: ${totalCoins}`);
-    res.json({ success: true, message: 'Coin purchased webhook processed' });
-});
+    const socketId = userSocketMap.get(userId);
 
-// ===== ARKADAŞ DAVET WEBHOOK'LARI =====
+    if (socketId) {
+        connectedUsers.delete(socketId);
+        userSocketMap.delete(userId);
+        console.log(`🧪 Test: Kullanıcı ${userId} bağlantısı kesildi`);
 
-app.post('/webhook/friend-invite-accepted', (req, res) => {
-    const { inviterId, invitedId, rewardCoins, timestamp } = req.body;
-    io.to(`user_${inviterId}`).emit('friend_invite_accepted', { 
-        inviterId, invitedId, rewardCoins, timestamp 
-    });
-    io.to(`user_${invitedId}`).emit('friend_invite_accepted', { 
-        inviterId, invitedId, rewardCoins, timestamp 
-    });
-    console.log(`Arkadaş davet kabul edildi: Inviter ${inviterId}, Invited ${invitedId}, Reward: ${rewardCoins}`);
-    res.json({ success: true, message: 'Friend invite accepted webhook processed' });
+        res.json({
+            success: true,
+            message: `Kullanıcı ${userId} bağlantısı kesildi`,
+            userId: userId
+        });
+    } else {
+        res.json({
+            success: false,
+            message: `Kullanıcı ${userId} bulunamadı`,
+            userId: userId
+        });
+    }
 });
 
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
-  console.log(`🚀 Socket.IO sunucusu ${PORT} portunda çalışıyor`);
-  console.log(`📡 WebSocket URL: ws://localhost:${PORT}`);
+    console.log('🚀 Socket.IO sunucusu 3001 portunda çalışıyor');
+    console.log('📡 WebSocket URL: ws://localhost:3001');
 });

@@ -9,12 +9,16 @@ class GameAnswer extends Model
 {
     protected $fillable = [
         'game_session_id',
+        'individual_game_id',
         'question_id',
         'user_id',
         'user_answer',
+        'selected_option',
         'is_correct',
         'is_joker_used',
+        'joker_used',
         'time_taken',
+        'time_spent',
         'coins_earned',
         'points_earned',
         'answered_at'
@@ -22,11 +26,13 @@ class GameAnswer extends Model
 
     protected $casts = [
         'game_session_id' => 'integer',
+        'individual_game_id' => 'integer',
         'question_id' => 'integer',
         'user_id' => 'integer',
         'is_correct' => 'boolean',
         'is_joker_used' => 'boolean',
         'time_taken' => 'integer',
+        'time_spent' => 'integer',
         'coins_earned' => 'integer',
         'points_earned' => 'integer',
         'answered_at' => 'datetime'
@@ -36,6 +42,11 @@ class GameAnswer extends Model
     public function gameSession(): BelongsTo
     {
         return $this->belongsTo(GameSession::class);
+    }
+
+    public function individualGame(): BelongsTo
+    {
+        return $this->belongsTo(IndividualGame::class);
     }
 
     public function question(): BelongsTo

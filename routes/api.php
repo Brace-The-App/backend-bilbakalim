@@ -2,20 +2,16 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\Auth\AuthController;
-use App\Http\Controllers\API\CategoryController;
-use App\Http\Controllers\API\QuestionController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\VerificationController;
 use App\Http\Controllers\API\NotificationController;
-use App\Http\Controllers\API\IndividualGameController;
-use App\Http\Controllers\API\GameSessionController;
-use App\Http\Controllers\API\GameAnswerController;
 use App\Http\Controllers\API\PaymentController;
 use App\Http\Controllers\API\CoinPackageController;
 use App\Http\Controllers\API\CoinPurchaseController;
-use App\Http\Controllers\API\TournamentController;
-use App\Http\Controllers\API\TournamentUserController;
 use App\Http\Controllers\API\FriendInviteController;
+use App\Http\Controllers\API\QuizController;
+use App\Http\Controllers\API\PremiumQuizController;
+use App\Http\Controllers\API\TournamentQuizController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
@@ -46,19 +42,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('auth/me', [AuthController::class, 'detail']);
     Route::post('logout', [AuthController::class, 'logout']);
     
-    // Categories
-    Route::get('categories', [CategoryController::class, 'index']);
-    Route::get('categories/{id}', [CategoryController::class, 'show']);
-    Route::post('categories', [CategoryController::class, 'store']);
-    Route::put('categories/{id}', [CategoryController::class, 'update']);
-    Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
-    
-    // Questions
-    Route::get('questions/{id}', [QuestionController::class, 'show']);
-    Route::post('questions', [QuestionController::class, 'store']);
-    Route::put('questions/{id}', [QuestionController::class, 'update']);
-    Route::delete('questions/{id}', [QuestionController::class, 'destroy']);
-    Route::get('categories/{categoryId}/questions', [QuestionController::class, 'byCategory']);
     
     // Notification routes
     Route::prefix('notifications')->group(function () {
@@ -67,32 +50,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('recent', [NotificationController::class, 'recent']);
     });
     
-    // Individual Game routes
-    Route::prefix('individual-games')->group(function () {
-        Route::post('create', [IndividualGameController::class, 'create']);
-        Route::get('active', [IndividualGameController::class, 'getActiveGame']);
-        Route::post('start', [IndividualGameController::class, 'startGame']);
-        Route::post('complete', [IndividualGameController::class, 'completeGame']);
-        Route::post('abandon', [IndividualGameController::class, 'abandonGame']);
-        Route::get('history', [IndividualGameController::class, 'gameHistory']);
-        Route::get('stats', [IndividualGameController::class, 'gameStats']);
-    });
-    
-    // Game Session routes
-    Route::prefix('game-sessions')->group(function () {
-        Route::post('create', [GameSessionController::class, 'create']);
-        Route::get('active', [GameSessionController::class, 'getActiveSession']);
-        Route::get('next-question', [GameSessionController::class, 'getNextQuestion']);
-        Route::post('complete', [GameSessionController::class, 'completeSession']);
-        Route::post('abandon', [GameSessionController::class, 'abandonSession']);
-        Route::get('stats', [GameSessionController::class, 'getSessionStats']);
-    });
-    
-    // Game Answer routes
-    Route::prefix('game-answers')->group(function () {
-        Route::post('submit', [GameAnswerController::class, 'submitAnswer']);
-        Route::get('history', [GameAnswerController::class, 'getAnswerHistory']);
-    });
     
     // Payment routes
     Route::prefix('payments')->group(function () {
@@ -124,26 +81,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{coinPurchase}/cancel', [CoinPurchaseController::class, 'cancel']);
     });
     
-    // Tournament routes
-    Route::prefix('tournaments')->group(function () {
-        Route::get('/', [TournamentController::class, 'index']);
-        Route::get('{tournament}', [TournamentController::class, 'show']);
-        Route::post('{tournament}/join', [TournamentController::class, 'join']);
-        Route::post('{tournament}/leave', [TournamentController::class, 'leave']);
-        Route::get('{tournament}/leaderboard', [TournamentController::class, 'leaderboard']);
-        Route::get('user/history', [TournamentController::class, 'userHistory']);
-        Route::post('{tournament}/start', [TournamentController::class, 'start']); // Admin only
-        Route::post('{tournament}/finish', [TournamentController::class, 'finish']); // Admin only
-    });
     
-    // Tournament User routes
-    Route::prefix('tournament-users')->group(function () {
-        Route::get('/', [TournamentUserController::class, 'index']);
-        Route::get('{tournamentUser}', [TournamentUserController::class, 'show']);
-        Route::post('{tournament}/start-game', [TournamentUserController::class, 'startGame']);
-        Route::post('submit-answer', [TournamentUserController::class, 'submitAnswer']);
-        Route::post('complete-game', [TournamentUserController::class, 'completeGame']);
-    });
     
     // Friend Invite routes
     Route::prefix('friend-invites')->group(function () {
@@ -152,31 +90,51 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('stats', [FriendInviteController::class, 'stats']);
         Route::post('accept/{inviteCode}', [FriendInviteController::class, 'accept']);
     });
+    
+    // Quiz routes
+    Route::prefix('quiz')->group(function () {
+        // Normal Quiz (Sonsuz Mod)
+        Route::post('normal/start', [QuizController::class, 'startNormalQuiz']);
+        Route::post('normal/answer', [QuizController::class, 'submitAnswer']);
+        Route::post('normal/end', [QuizController::class, 'endNormalQuiz']);
+        Route::get('normal/history', [QuizController::class, 'getGameHistory']);
+        Route::get('normal/details/{game_id}', [QuizController::class, 'getGameDetails']);
+        Route::get('normal/jokers', [QuizController::class, 'getJokers']);
+        Route::post('normal/use-joker', [QuizController::class, 'useJoker']);
+        Route::post('normal/buy-joker', [QuizController::class, 'buyJoker']);
+        
+        // Normal Quiz Mobile APIs
+        Route::post('normal/mobile/start', [QuizController::class, 'startMobileNormalQuiz']);
+        Route::post('normal/mobile/submit-answers', [QuizController::class, 'submitMobileNormalAnswers']);
+        
+        // Premium Quiz
+        Route::post('premium/start', [PremiumQuizController::class, 'startPremiumQuiz']);
+        Route::post('premium/answer', [PremiumQuizController::class, 'submitAnswer']);
+        Route::post('premium/joker', [PremiumQuizController::class, 'useJoker']);
+        Route::post('premium/end', [PremiumQuizController::class, 'endPremiumQuiz']);
+        Route::get('premium/details/{game_id}', [PremiumQuizController::class, 'getGameDetails']);
+        Route::get('premium/jokers', [PremiumQuizController::class, 'getUserJokers']);
+        Route::post('premium/buy-joker', [PremiumQuizController::class, 'buyJoker']);
+        
+        // Premium Quiz Mobile APIs
+        Route::post('premium/mobile/start', [PremiumQuizController::class, 'startMobilePremiumQuiz']);
+        Route::post('premium/mobile/submit-answers', [PremiumQuizController::class, 'submitMobilePremiumAnswers']);
+    });
+    
+    // Tournament Quiz routes
+    Route::prefix('tournament-quiz')->group(function () {
+        Route::post('create-or-join', [TournamentQuizController::class, 'createOrJoinTournament']);
+        Route::post('join', [TournamentQuizController::class, 'joinTournament']);
+        Route::post('leave', [TournamentQuizController::class, 'leaveTournament']);
+        Route::post('start', [TournamentQuizController::class, 'startTournament']); // Admin only
+        Route::post('answer', [TournamentQuizController::class, 'submitTournamentAnswer']);
+        Route::get('status/{tournament_id}', [TournamentQuizController::class, 'getTournamentStatus']);
+        Route::get('results/{tournament_id}', [TournamentQuizController::class, 'getTournamentResults']);
+        Route::get('questions/{tournament_id}', [TournamentQuizController::class, 'getTournamentQuestions']);
+        Route::post('check-time', [TournamentQuizController::class, 'checkTournamentTime']);
+        Route::get('waiting-status/{tournament_id}', [TournamentQuizController::class, 'getWaitingStatus']);
+    });
 });
 
-// Question routes (public)
-Route::prefix('questions')->group(function () {
-    Route::get('/', [QuestionController::class, 'index']);
-    Route::get('categories', [QuestionController::class, 'categories']);
-    Route::get('for-game', [QuestionController::class, 'forGame']);
-    Route::get('random', [QuestionController::class, 'random']);
-    Route::get('{id}', [QuestionController::class, 'show']);
-    Route::get('category/{categoryId}', [QuestionController::class, 'byCategory']);
-});
 
-// Categories routes (public)
-Route::prefix('categories')->group(function () {
-    Route::get('/', [QuestionController::class, 'categories']);
-});
 
-// Public game routes
-Route::prefix('game')->group(function () {
-    Route::get('questions/for-game', [QuestionController::class, 'forGame']);
-    Route::get('questions/random', [QuestionController::class, 'random']);
-});
-
-// Public tournament test routes
-Route::prefix('tournaments')->group(function () {
-    Route::get('test/status', [TournamentController::class, 'testStatus']);
-    Route::post('{tournament}/test-start', [TournamentController::class, 'testStart']);
-});

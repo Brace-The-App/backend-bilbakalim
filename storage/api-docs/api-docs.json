@@ -263,121 +263,6 @@
                 ]
             }
         },
-        "/api/categories": {
-            "get": {
-                "tags": [
-                    "Categories"
-                ],
-                "summary": "Get Categories",
-                "description": "Get all categories with pagination and filters",
-                "operationId": "getCategories",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "Page number for pagination",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Items per page",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 10
-                        }
-                    },
-                    {
-                        "name": "search",
-                        "in": "query",
-                        "description": "Search in category names",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "example": "Sports"
-                        }
-                    },
-                    {
-                        "name": "is_active",
-                        "in": "query",
-                        "description": "Filter by active status",
-                        "required": false,
-                        "schema": {
-                            "type": "boolean",
-                            "example": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Categories retrieved successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Kategoriler başarılı bir şekilde listelendi."
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "data": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "current_page": {
-                                                    "type": "integer"
-                                                },
-                                                "per_page": {
-                                                    "type": "integer"
-                                                },
-                                                "total": {
-                                                    "type": "integer"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthenticated",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Unauthenticated."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
         "/api/coin-packages": {
             "get": {
                 "tags": [
@@ -648,458 +533,6 @@
                                                 }
                                             },
                                             "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/game-answers/submit": {
-            "post": {
-                "tags": [
-                    "Game Answers"
-                ],
-                "summary": "Cevap ver",
-                "description": "Oyun sırasında soruya cevap verir",
-                "operationId": "95a99f1d83a6d5a02b5a23ba101a1f58",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "properties": {
-                                    "session_id": {
-                                        "description": "Oyun oturum ID",
-                                        "type": "string"
-                                    },
-                                    "question_id": {
-                                        "description": "Soru ID",
-                                        "type": "integer"
-                                    },
-                                    "user_answer": {
-                                        "description": "Kullanıcı cevabı",
-                                        "type": "string",
-                                        "enum": [
-                                            "1",
-                                            "2",
-                                            "3",
-                                            "4"
-                                        ]
-                                    },
-                                    "time_taken": {
-                                        "description": "Cevap süresi (saniye)",
-                                        "type": "integer",
-                                        "maximum": 300,
-                                        "minimum": 0
-                                    },
-                                    "is_joker_used": {
-                                        "description": "Joker kullanıldı mı",
-                                        "type": "boolean"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Cevap kaydedildi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Cevap kaydedildi"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "is_correct": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "points_earned": {
-                                                    "type": "integer",
-                                                    "example": 120
-                                                },
-                                                "coins_earned": {
-                                                    "type": "integer",
-                                                    "example": 10
-                                                },
-                                                "total_score": {
-                                                    "type": "integer",
-                                                    "example": 500
-                                                },
-                                                "correct_answers": {
-                                                    "type": "integer",
-                                                    "example": 8
-                                                },
-                                                "wrong_answers": {
-                                                    "type": "integer",
-                                                    "example": 2
-                                                },
-                                                "joker_remaining": {
-                                                    "type": "integer",
-                                                    "example": 2
-                                                },
-                                                "streak_count": {
-                                                    "type": "integer",
-                                                    "example": 3
-                                                },
-                                                "progress_percentage": {
-                                                    "type": "number",
-                                                    "example": 50
-                                                },
-                                                "is_game_completed": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/game-sessions/create": {
-            "post": {
-                "tags": [
-                    "Game Sessions"
-                ],
-                "summary": "Oyun oturumu oluştur",
-                "description": "Yeni bir oyun oturumu oluşturur",
-                "operationId": "9b61140e806cea9279dcac71f427d6e1",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "properties": {
-                                    "individual_game_id": {
-                                        "description": "Bireysel oyun ID",
-                                        "type": "integer"
-                                    },
-                                    "tournament_id": {
-                                        "description": "Turnuva ID",
-                                        "type": "integer"
-                                    },
-                                    "game_type": {
-                                        "description": "Oyun türü",
-                                        "type": "string",
-                                        "enum": [
-                                            "individual",
-                                            "tournament",
-                                            "practice"
-                                        ]
-                                    },
-                                    "total_questions": {
-                                        "description": "Toplam soru sayısı",
-                                        "type": "integer",
-                                        "maximum": 50,
-                                        "minimum": 5
-                                    },
-                                    "time_remaining": {
-                                        "description": "Kalan süre (saniye)",
-                                        "type": "integer",
-                                        "maximum": 3600,
-                                        "minimum": 60
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Oyun oturumu oluşturuldu",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Oyun oturumu oluşturuldu"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "session": {
-                                                    "type": "object"
-                                                },
-                                                "questions": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/game-sessions/active": {
-            "get": {
-                "tags": [
-                    "Game Sessions"
-                ],
-                "summary": "Aktif oturumu getir",
-                "description": "Kullanıcının aktif oyun oturumunu getirir",
-                "operationId": "f8e42556f0bc9b730b200ad1649b1eb3",
-                "responses": {
-                    "200": {
-                        "description": "Aktif oturum bulundu",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Aktif oturum bulunamadı",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Aktif oturum bulunamadı"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/individual-games/create": {
-            "post": {
-                "tags": [
-                    "Individual Games"
-                ],
-                "summary": "Bireysel oyun oluştur",
-                "description": "Yeni bir bireysel oyun oluşturur",
-                "operationId": "98dcee2bdcfb2793b33e33bbfc91a7c3",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "properties": {
-                                    "category_id": {
-                                        "description": "Kategori ID",
-                                        "type": "integer"
-                                    },
-                                    "game_type": {
-                                        "description": "Oyun türü",
-                                        "type": "string",
-                                        "enum": [
-                                            "individual",
-                                            "practice",
-                                            "daily_challenge"
-                                        ]
-                                    },
-                                    "difficulty_level": {
-                                        "description": "Zorluk seviyesi",
-                                        "type": "string",
-                                        "enum": [
-                                            "easy",
-                                            "medium",
-                                            "hard"
-                                        ]
-                                    },
-                                    "question_count": {
-                                        "description": "Soru sayısı",
-                                        "type": "integer",
-                                        "maximum": 50,
-                                        "minimum": 5
-                                    },
-                                    "time_limit_seconds": {
-                                        "description": "Zaman sınırı (saniye)",
-                                        "type": "integer",
-                                        "maximum": 3600,
-                                        "minimum": 60
-                                    },
-                                    "joker_count": {
-                                        "description": "Joker sayısı",
-                                        "type": "integer",
-                                        "maximum": 10,
-                                        "minimum": 0
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Oyun başarıyla oluşturuldu",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Oyun başarıyla oluşturuldu"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "game": {
-                                                    "type": "object"
-                                                },
-                                                "session": {
-                                                    "type": "object"
-                                                },
-                                                "questions": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Hatalı istek",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Zaten aktif bir oyununuz bulunmaktadır"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/individual-games/active": {
-            "get": {
-                "tags": [
-                    "Individual Games"
-                ],
-                "summary": "Aktif oyunu getir",
-                "description": "Kullanıcının aktif oyununu getirir",
-                "operationId": "8c9890379993be536f2039806840f39b",
-                "responses": {
-                    "200": {
-                        "description": "Aktif oyun bulundu",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Aktif oyun bulunamadı",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Aktif oyun bulunamadı"
                                         }
                                     },
                                     "type": "object"
@@ -1475,506 +908,152 @@
                 ]
             }
         },
-        "/api/questions": {
-            "get": {
-                "tags": [
-                    "Questions"
-                ],
-                "summary": "Get Questions",
-                "description": "Get all questions with pagination and filters",
-                "operationId": "getQuestions",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "Page number for pagination",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Items per page",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 10
-                        }
-                    },
-                    {
-                        "name": "search",
-                        "in": "query",
-                        "description": "Search in question text",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "example": "What is"
-                        }
-                    },
-                    {
-                        "name": "category_id",
-                        "in": "query",
-                        "description": "Filter by category",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    },
-                    {
-                        "name": "question_level",
-                        "in": "query",
-                        "description": "Filter by difficulty level",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "easy",
-                                "medium",
-                                "hard"
-                            ],
-                            "example": "easy"
-                        }
-                    },
-                    {
-                        "name": "is_active",
-                        "in": "query",
-                        "description": "Filter by active status",
-                        "required": false,
-                        "schema": {
-                            "type": "boolean",
-                            "example": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Questions retrieved successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Sorular başarılı bir şekilde listelendi."
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "data": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "current_page": {
-                                                    "type": "integer"
-                                                },
-                                                "per_page": {
-                                                    "type": "integer"
-                                                },
-                                                "total": {
-                                                    "type": "integer"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthenticated",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Unauthenticated."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/questions/for-game": {
-            "get": {
-                "tags": [
-                    "Questions"
-                ],
-                "summary": "Oyun için sorular getir",
-                "description": "Bireysel oyun veya turnuva için sorular getirir",
-                "operationId": "4c2e10290ada9d5d0365309c9c1aa363",
-                "parameters": [
-                    {
-                        "name": "game_type",
-                        "in": "query",
-                        "description": "Oyun türü",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "individual",
-                                "tournament",
-                                "practice"
-                            ],
-                            "example": "individual"
-                        }
-                    },
-                    {
-                        "name": "category_id",
-                        "in": "query",
-                        "description": "Kategori ID",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    },
-                    {
-                        "name": "difficulty_level",
-                        "in": "query",
-                        "description": "Zorluk seviyesi",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "easy",
-                                "medium",
-                                "hard"
-                            ],
-                            "example": "medium"
-                        }
-                    },
-                    {
-                        "name": "question_count",
-                        "in": "query",
-                        "description": "Soru sayısı",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "maximum": 50,
-                            "minimum": 5,
-                            "example": 20
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Oyun soruları getirildi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Oyun soruları başarıyla getirildi"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "questions": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "total_questions": {
-                                                    "type": "integer",
-                                                    "example": 20
-                                                },
-                                                "difficulty_level": {
-                                                    "type": "string",
-                                                    "example": "medium"
-                                                },
-                                                "category": {
-                                                    "type": "object"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/questions/random": {
-            "get": {
-                "tags": [
-                    "Questions"
-                ],
-                "summary": "Rastgele soru getir",
-                "description": "Belirtilen kriterlere göre rastgele soru getirir",
-                "operationId": "7af7d1842e333f0dc4261113fb22c1c6",
-                "parameters": [
-                    {
-                        "name": "category_id",
-                        "in": "query",
-                        "description": "Kategori ID",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    },
-                    {
-                        "name": "difficulty_level",
-                        "in": "query",
-                        "description": "Zorluk seviyesi",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "easy",
-                                "medium",
-                                "hard"
-                            ]
-                        }
-                    },
-                    {
-                        "name": "exclude_ids",
-                        "in": "query",
-                        "description": "Hariç tutulacak soru ID'leri (virgülle ayrılmış)",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "example": "1,2,3"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Rastgele soru getirildi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Rastgele soru başarıyla getirildi"
-                                        },
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/questions/categories": {
-            "get": {
-                "tags": [
-                    "Questions"
-                ],
-                "summary": "Kategorileri listele",
-                "description": "Aktif kategorileri listeler",
-                "operationId": "b25f705d9f57af9c693632a09006bfcf",
-                "responses": {
-                    "200": {
-                        "description": "Kategoriler listelendi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Kategoriler başarıyla listelendi"
-                                        },
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object"
-                                            }
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/tournaments": {
-            "get": {
-                "tags": [
-                    "Tournaments"
-                ],
-                "summary": "Aktif turnuvaları listele",
-                "description": "Mevcut turnuvaları listeler",
-                "operationId": "727785a814ca9997ca891494c35712c5",
-                "parameters": [
-                    {
-                        "name": "status",
-                        "in": "query",
-                        "description": "Turnuva durumu",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "upcoming",
-                                "active",
-                                "completed"
-                            ],
-                            "example": "upcoming"
-                        }
-                    },
-                    {
-                        "name": "difficulty",
-                        "in": "query",
-                        "description": "Zorluk seviyesi",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "easy",
-                                "medium",
-                                "hard"
-                            ]
-                        }
-                    },
-                    {
-                        "name": "featured",
-                        "in": "query",
-                        "description": "Öne çıkan turnuvalar",
-                        "required": false,
-                        "schema": {
-                            "type": "boolean",
-                            "example": true
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Sayfa başına kayıt sayısı",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 15
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Turnuvalar listelendi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "data": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "current_page": {
-                                                    "type": "integer",
-                                                    "example": 1
-                                                },
-                                                "per_page": {
-                                                    "type": "integer",
-                                                    "example": 15
-                                                },
-                                                "total": {
-                                                    "type": "integer",
-                                                    "example": 50
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/tournaments/{tournament}/join": {
+        "/api/quiz/premium/start": {
             "post": {
                 "tags": [
-                    "Tournaments"
+                    "Premium Quiz"
                 ],
-                "summary": "Turnuvaya katıl",
-                "description": "Belirtilen turnuvaya katılım sağlar",
-                "operationId": "608cfc6bcb9dab5248f938c336961be2",
-                "parameters": [
-                    {
-                        "name": "tournament",
-                        "in": "path",
-                        "description": "Turnuva ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
+                "summary": "Premium Quiz Başlat",
+                "description": "Premium kullanıcılar için 15 soruluk quiz oyununu başlatır. 7 orta + 8 zor soru.",
+                "operationId": "939219777e5ba5420d44471fbb0efa0f",
+                "responses": {
+                    "200": {
+                        "description": "Premium quiz başarıyla başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Premium quiz başlatıldı."
+                                        },
+                                        "game": {
+                                            "type": "object"
+                                        },
+                                        "question": {
+                                            "type": "object"
+                                        },
+                                        "jokers": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Premium kullanıcı değil",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu özellik sadece premium kullanıcılar için."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
                         }
                     }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/answer": {
+            "post": {
+                "tags": [
+                    "Premium Quiz"
                 ],
+                "summary": "Premium Quiz Cevap Gönder",
+                "description": "Premium quiz oyununda soruya cevap gönderir. Joker kullanımı destekler.",
+                "operationId": "daae5622b255f3cc4496271e28c85761",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/x-www-form-urlencoded": {
                             "schema": {
                                 "properties": {
-                                    "joker_count": {
-                                        "description": "Joker sayısı",
+                                    "game_id": {
                                         "type": "integer",
-                                        "maximum": 10,
-                                        "minimum": 0
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 30
+                                    },
+                                    "joker_used": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "second_option": {
+                                        "description": "Çift cevap joker için ikinci seçenek",
+                                        "type": "string",
+                                        "example": "3"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 30
+                                    },
+                                    "joker_used": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "second_option": {
+                                        "description": "Çift cevap joker için ikinci seçenek",
+                                        "type": "string",
+                                        "example": "3"
                                     }
                                 },
                                 "type": "object"
@@ -1984,7 +1063,268 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Turnuvaya başarıyla katıldınız",
+                        "description": "Cevap başarıyla gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "correct_option": {
+                                            "type": "string",
+                                            "example": "2"
+                                        },
+                                        "earned_coins": {
+                                            "type": "integer",
+                                            "example": 50
+                                        },
+                                        "joker_used": {
+                                            "type": "string",
+                                            "example": "fifty_fifty"
+                                        },
+                                        "game_stats": {
+                                            "type": "object"
+                                        },
+                                        "jokers": {
+                                            "type": "object"
+                                        },
+                                        "next_question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/joker": {
+            "post": {
+                "tags": [
+                    "Premium Quiz"
+                ],
+                "summary": "Premium Quiz Joker Kullan",
+                "description": "Premium quiz oyununda joker kullanır.",
+                "operationId": "720819c4774a6d655f1c9338b2dbdbb0",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Joker başarıyla kullanıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "joker_type": {
+                                            "type": "string",
+                                            "example": "fifty_fifty"
+                                        },
+                                        "result": {
+                                            "type": "object"
+                                        },
+                                        "remaining_jokers": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/jokers": {
+            "get": {
+                "tags": [
+                    "Premium Quiz"
+                ],
+                "summary": "Kullanıcı Joker Durumu",
+                "description": "Kullanıcının mevcut joker sayılarını getirir.",
+                "operationId": "88357cd34cd647eb2d0b9ffd5ce079ff",
+                "responses": {
+                    "200": {
+                        "description": "Joker durumu başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "jokers": {
+                                            "properties": {
+                                                "fifty_fifty": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "double_answer": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "hint": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "total_jokers": {
+                                            "type": "integer",
+                                            "example": 10
+                                        },
+                                        "user_coins": {
+                                            "type": "integer",
+                                            "example": 1500
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/buy-joker": {
+            "post": {
+                "tags": [
+                    "Premium Quiz"
+                ],
+                "summary": "Joker Satın Al",
+                "description": "Kullanıcı jeton karşılığında joker satın alabilir.",
+                "operationId": "9173267f16e4697d635690092b6ad0d7",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "quantity": {
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 1,
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "quantity": {
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 1,
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Joker başarıyla satın alındı",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1995,21 +1335,233 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Turnuvaya başarıyla katıldınız"
+                                            "example": "2 adet %50-%50 Joker satın alındı."
                                         },
-                                        "data": {
-                                            "properties": {
-                                                "tournament": {
-                                                    "type": "object"
-                                                },
-                                                "participation": {
-                                                    "type": "object"
-                                                },
-                                                "entry_fee_paid": {
-                                                    "type": "number",
-                                                    "example": 50
-                                                }
-                                            },
+                                        "joker_type": {
+                                            "type": "string",
+                                            "example": "fifty_fifty"
+                                        },
+                                        "quantity": {
+                                            "type": "integer",
+                                            "example": 2
+                                        },
+                                        "total_cost": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "remaining_coins": {
+                                            "type": "integer",
+                                            "example": 1300
+                                        },
+                                        "new_joker_count": {
+                                            "type": "integer",
+                                            "example": 7
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Yeterli jeton yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yeterli jetonunuz yok."
+                                        },
+                                        "required_coins": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "user_coins": {
+                                            "type": "integer",
+                                            "example": 100
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/mobile/start": {
+            "post": {
+                "tags": [
+                    "Quiz Mobile"
+                ],
+                "summary": "Mobil Premium Quiz Başlat",
+                "description": "Mobil için premium quiz başlatır ve tüm soruları döndürür",
+                "operationId": "08d63cefa877d7b85522f38f677b1b5f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "question_count": {
+                                        "description": "Soru sayısı (varsayılan: 15)",
+                                        "type": "integer",
+                                        "example": 15
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Mobil premium quiz başarıyla başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Mobil premium quiz başlatıldı."
+                                        },
+                                        "game": {
+                                            "type": "object"
+                                        },
+                                        "questions": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "jokers": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/premium/mobile/submit-answers": {
+            "post": {
+                "tags": [
+                    "Quiz Mobile"
+                ],
+                "summary": "Mobil Premium Quiz Toplu Cevap Gönder",
+                "description": "Mobil premium quiz için tüm cevapları toplu olarak gönderir",
+                "operationId": "56898dfbc6813c67c436d6799aa9a6e1",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "description": "Oyun ID'si",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "answers": {
+                                        "description": "JSON formatında cevaplar",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevaplar başarıyla gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cevaplar başarıyla gönderildi."
+                                        },
+                                        "final_stats": {
+                                            "type": "object"
+                                        },
+                                        "answer_details": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "reward": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/start": {
+            "post": {
+                "tags": [
+                    "Quiz"
+                ],
+                "summary": "Normal Quiz Başlat",
+                "description": "Sonsuz mod normal quiz oyununu başlatır. İlk 10 soru kolay, sonrakiler rastgele zorlukta.",
+                "operationId": "7329dd5251c374f5a0ce8a85adc3828d",
+                "responses": {
+                    "200": {
+                        "description": "Quiz başarıyla başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Normal quiz başlatıldı."
+                                        },
+                                        "game": {
+                                            "type": "object"
+                                        },
+                                        "question": {
                                             "type": "object"
                                         }
                                     },
@@ -2019,7 +1571,7 @@
                         }
                     },
                     "400": {
-                        "description": "Hatalı istek",
+                        "description": "Zaten aktif bir oyun var",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2030,7 +1582,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Bu turnuvaya katılım için uygun değil"
+                                            "example": "Zaten aktif bir oyununuz var."
                                         }
                                     },
                                     "type": "object"
@@ -2046,29 +1598,146 @@
                 ]
             }
         },
-        "/api/tournaments/{tournament}/test-start": {
+        "/api/quiz/normal/answer": {
             "post": {
                 "tags": [
-                    "Tournaments"
+                    "Quiz"
                 ],
-                "summary": "Test turnuva başlat",
-                "description": "Test amaçlı turnuva başlatır",
-                "operationId": "be1d3308dd98c8e0d30b212ff8df1653",
-                "parameters": [
-                    {
-                        "name": "tournament",
-                        "in": "path",
-                        "description": "Turnuva ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
+                "summary": "Normal Quiz Cevap Gönder",
+                "description": "Normal quiz oyununda soruya cevap gönderir.",
+                "operationId": "9d0b0c7883477fafb9afe742cdd194e3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 30
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 30
+                                    }
+                                },
+                                "type": "object"
+                            }
                         }
                     }
-                ],
+                },
                 "responses": {
                     "200": {
-                        "description": "Test turnuva başlatıldı",
+                        "description": "Cevap başarıyla gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "correct_option": {
+                                            "type": "string",
+                                            "example": "2"
+                                        },
+                                        "earned_coins": {
+                                            "type": "integer",
+                                            "example": 50
+                                        },
+                                        "game_stats": {
+                                            "type": "object"
+                                        },
+                                        "next_question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/end": {
+            "post": {
+                "tags": [
+                    "Quiz"
+                ],
+                "summary": "Normal Quiz Oyunu Bitir",
+                "description": "Normal quiz oyununu bitirir ve sonuçları döner.",
+                "operationId": "e06a68e8ddd45a3c9aa59d9cf8eb16bc",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Oyun başarıyla bitti",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2079,95 +1748,12 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Test turnuva başlatıldı"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/tournaments/test/status": {
-            "get": {
-                "tags": [
-                    "Tournaments"
-                ],
-                "summary": "Test durumu",
-                "description": "Test turnuvalarının durumunu getirir",
-                "operationId": "00d04dca9ed507272487b2cb95aaadf0",
-                "responses": {
-                    "200": {
-                        "description": "Test durumu getirildi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
+                                            "example": "Oyun tamamlandı."
                                         },
-                                        "data": {
+                                        "final_stats": {
                                             "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/tournament-users": {
-            "get": {
-                "tags": [
-                    "Tournament Users"
-                ],
-                "summary": "Kullanıcının turnuva katılımları",
-                "description": "Kullanıcının turnuva katılım geçmişini listeler",
-                "operationId": "7749f6295e9e5d81dcb2b83300476f7b",
-                "parameters": [
-                    {
-                        "name": "status",
-                        "in": "query",
-                        "description": "Katılım durumu",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "joined",
-                                "active",
-                                "completed",
-                                "abandoned"
-                            ]
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Sayfa başına kayıt sayısı",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 15
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Katılım geçmişi listelendi",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
                                         },
-                                        "data": {
+                                        "answer_details": {
                                             "type": "array",
                                             "items": {
                                                 "type": "object"
@@ -2187,29 +1773,17 @@
                 ]
             }
         },
-        "/api/tournament-users/{tournament}/start-game": {
-            "post": {
+        "/api/quiz/normal/history": {
+            "get": {
                 "tags": [
-                    "Tournament Users"
+                    "Quiz"
                 ],
-                "summary": "Turnuva oyun oturumu başlat",
-                "description": "Turnuva için oyun oturumunu başlatır",
-                "operationId": "1f186ef7db1f8ea93dbcb4efd1ebfd69",
-                "parameters": [
-                    {
-                        "name": "tournament",
-                        "in": "path",
-                        "description": "Turnuva ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    }
-                ],
+                "summary": "Normal Quiz Oyun Geçmişi",
+                "description": "Kullanıcının normal quiz oyun geçmişini getirir.",
+                "operationId": "1b8a0922cb497de41e8c4bf1f013bf43",
                 "responses": {
                     "200": {
-                        "description": "Turnuva oyunu başlatıldı",
+                        "description": "Oyun geçmişi başarıyla getirildi",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2218,46 +1792,8 @@
                                             "type": "boolean",
                                             "example": true
                                         },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Turnuva oyunu başlatıldı"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "session": {
-                                                    "type": "object"
-                                                },
-                                                "questions": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "tournament": {
-                                                    "type": "object"
-                                                }
-                                            },
+                                        "games": {
                                             "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Bu turnuvaya katılmamışsınız veya turnuva aktif değil",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Bu turnuvaya katılmamışsınız veya turnuva aktif değil"
                                         }
                                     },
                                     "type": "object"
@@ -2273,47 +1809,77 @@
                 ]
             }
         },
-        "/api/tournament-users/submit-answer": {
+        "/api/quiz/normal/details/{game_id}": {
+            "get": {
+                "tags": [
+                    "Quiz"
+                ],
+                "summary": "Normal Quiz Oyun Detayları",
+                "description": "Normal quiz oyununun detaylarını ve cevapları getirir.",
+                "operationId": "014242a71dd278eb47ef9d8dd34a48a8",
+                "parameters": [
+                    {
+                        "name": "game_id",
+                        "in": "path",
+                        "description": "Oyun ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Oyun detayları başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "game": {
+                                            "type": "object"
+                                        },
+                                        "answer_details": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/mobile/start": {
             "post": {
                 "tags": [
-                    "Tournament Users"
+                    "Quiz Mobile"
                 ],
-                "summary": "Turnuva cevabı gönder",
-                "description": "Turnuva sırasında soruya cevap verir",
-                "operationId": "d965bf79f8bee475069adbc420666631",
+                "summary": "Mobil Normal Quiz Başlat",
+                "description": "Mobil için normal quiz başlatır ve tüm soruları döndürür",
+                "operationId": "9cc8cbb65fdd399cd7d2570f5fc69c5b",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/x-www-form-urlencoded": {
                             "schema": {
                                 "properties": {
-                                    "session_id": {
-                                        "description": "Oyun oturum ID",
-                                        "type": "string"
-                                    },
-                                    "question_id": {
-                                        "description": "Soru ID",
-                                        "type": "integer"
-                                    },
-                                    "user_answer": {
-                                        "description": "Kullanıcı cevabı",
-                                        "type": "string",
-                                        "enum": [
-                                            "1",
-                                            "2",
-                                            "3",
-                                            "4"
-                                        ]
-                                    },
-                                    "time_taken": {
-                                        "description": "Cevap süresi (saniye)",
+                                    "question_count": {
+                                        "description": "Soru sayısı (varsayılan: 10)",
                                         "type": "integer",
-                                        "maximum": 300,
-                                        "minimum": 0
-                                    },
-                                    "is_joker_used": {
-                                        "description": "Joker kullanıldı mı",
-                                        "type": "boolean"
+                                        "example": 10
                                     }
                                 },
                                 "type": "object"
@@ -2323,7 +1889,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Cevap kaydedildi",
+                        "description": "Mobil quiz başarıyla başlatıldı",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2334,48 +1900,830 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Cevap kaydedildi"
+                                            "example": "Mobil normal quiz başlatıldı."
                                         },
-                                        "data": {
-                                            "properties": {
-                                                "is_correct": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "points_earned": {
-                                                    "type": "integer",
-                                                    "example": 120
-                                                },
-                                                "total_score": {
-                                                    "type": "integer",
-                                                    "example": 500
-                                                },
-                                                "correct_answers": {
-                                                    "type": "integer",
-                                                    "example": 8
-                                                },
-                                                "wrong_answers": {
-                                                    "type": "integer",
-                                                    "example": 2
-                                                },
-                                                "joker_remaining": {
-                                                    "type": "integer",
-                                                    "example": 2
-                                                },
-                                                "streak_count": {
-                                                    "type": "integer",
-                                                    "example": 3
-                                                },
-                                                "progress_percentage": {
-                                                    "type": "number",
-                                                    "example": 50
-                                                },
-                                                "is_game_completed": {
-                                                    "type": "boolean",
-                                                    "example": false
-                                                }
-                                            },
+                                        "game": {
                                             "type": "object"
+                                        },
+                                        "questions": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/mobile/submit-answers": {
+            "post": {
+                "tags": [
+                    "Quiz Mobile"
+                ],
+                "summary": "Mobil Normal Quiz Toplu Cevap Gönder",
+                "description": "Mobil normal quiz için tüm cevapları toplu olarak gönderir",
+                "operationId": "70d30df9146a66997f719523fcf81066",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "description": "Oyun ID'si",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "answers": {
+                                        "description": "JSON formatında cevaplar",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevaplar başarıyla gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cevaplar başarıyla gönderildi."
+                                        },
+                                        "final_stats": {
+                                            "type": "object"
+                                        },
+                                        "answer_details": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/join": {
+            "post": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuvaya Katıl",
+                "description": "Kullanıcıyı turnuvaya katılır. Minimum katılımcı sayısına ulaşınca turnuva başlar.",
+                "operationId": "35d77f14fee94fe98ead0e9ec4af0fa7",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Turnuvaya başarıyla katıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuvaya başarıyla katıldınız."
+                                        },
+                                        "tournament": {
+                                            "type": "object"
+                                        },
+                                        "waiting_message": {
+                                            "type": "string",
+                                            "example": "Diğer oyuncular bekleniyor... (1/2)"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Turnuva bulunamadı veya katılım hatası",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuva bulunamadı."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/leave": {
+            "post": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuvadan Ayrıl",
+                "description": "Kullanıcıyı turnuvadan çıkarır.",
+                "operationId": "00d2fecfea1003250d8ed4ebe6943c87",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Turnuvadan başarıyla ayrıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuvadan ayrıldınız."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/create-or-join": {
+            "post": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Oluştur veya Katıl",
+                "description": "Kullanıcı yeni turnuva oluşturabilir veya mevcut boş turnuvalara katılabilir. Boş turnuva varsa oraya katılır, yoksa yeni turnuva oluşturur.",
+                "operationId": "d29a6da8ad5e57f458c0484935e8ca0c",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "time_based",
+                                            "question_based"
+                                        ],
+                                        "example": "question_based"
+                                    },
+                                    "question_count": {
+                                        "description": "Soru sayısına göre turnuva için",
+                                        "type": "integer",
+                                        "example": 5
+                                    },
+                                    "duration_minutes": {
+                                        "description": "Süreye göre turnuva için",
+                                        "type": "integer",
+                                        "example": 30
+                                    },
+                                    "min_participants": {
+                                        "description": "Minimum katılımcı sayısı",
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "time_based",
+                                            "question_based"
+                                        ],
+                                        "example": "question_based"
+                                    },
+                                    "question_count": {
+                                        "type": "integer",
+                                        "example": 5
+                                    },
+                                    "duration_minutes": {
+                                        "type": "integer",
+                                        "example": 30
+                                    },
+                                    "min_participants": {
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Turnuva oluşturuldu veya mevcut turnuvaya katıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yeni turnuva oluşturuldu."
+                                        },
+                                        "action": {
+                                            "type": "string",
+                                            "enum": [
+                                                "created",
+                                                "joined"
+                                            ],
+                                            "example": "created"
+                                        },
+                                        "tournament": {
+                                            "type": "object"
+                                        },
+                                        "waiting_message": {
+                                            "type": "string",
+                                            "example": "Diğer oyuncular bekleniyor... (1/2)"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/start": {
+            "post": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Başlat",
+                "description": "Admin tarafından turnuvayı başlatır. Minimum katılımcı sayısı kontrolü yapar.",
+                "operationId": "5b5782d73c1d84fb3a0bcb6a4d199144",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Turnuva başarıyla başlatıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Turnuva başlatıldı."
+                                        },
+                                        "tournament": {
+                                            "type": "object"
+                                        },
+                                        "first_question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Minimum katılımcı sayısı yetersiz",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Minimum 2 katılımcı gerekli. Şu anda 1 katılımcı var."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/answer": {
+            "post": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Cevabı Gönder",
+                "description": "Turnuva oyununda soruya cevap gönderir. Hız bonusu hesaplanır.",
+                "operationId": "2ddbdb8a44996298d19e9a9ab99bbbbd",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 15
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "tournament_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "selected_option": {
+                                        "type": "string",
+                                        "example": "2"
+                                    },
+                                    "time_spent": {
+                                        "type": "integer",
+                                        "example": 15
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevap başarıyla gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "correct_option": {
+                                            "type": "string",
+                                            "example": "2"
+                                        },
+                                        "earned_coins": {
+                                            "type": "integer",
+                                            "example": 50
+                                        },
+                                        "speed_bonus": {
+                                            "type": "integer",
+                                            "example": 25
+                                        },
+                                        "total_score": {
+                                            "type": "integer",
+                                            "example": 75
+                                        },
+                                        "leaderboard": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "next_question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/results/{tournament_id}": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Sonuçları",
+                "description": "Turnuva sonuçlarını ve liderlik tablosunu getirir.",
+                "operationId": "c8a3979aa84c8af3bd7123e0f6283ad3",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "path",
+                        "description": "Turnuva ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuva sonuçları başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "tournament": {
+                                            "type": "object"
+                                        },
+                                        "leaderboard": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/status/{tournament_id}": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Durumu",
+                "description": "Turnuva durumunu ve kullanıcının turnuvadaki konumunu getirir.",
+                "operationId": "cebfaa5045fcad8d75849a27ae6af973",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "path",
+                        "description": "Turnuva ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuva durumu başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "tournament": {
+                                            "type": "object"
+                                        },
+                                        "user_status": {
+                                            "type": "object"
+                                        },
+                                        "leaderboard": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/questions/{tournament_id}": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Soruları",
+                "description": "Turnuva sorularını getirir.",
+                "operationId": "6b764d139c7f3d1a04b2681f7cdc252f",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "path",
+                        "description": "Turnuva ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuva soruları başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "questions": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/check-time/{tournament_id}": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Süresi Kontrol",
+                "description": "Turnuva süresini kontrol eder ve kalan süreyi döner.",
+                "operationId": "1b14e02926262fa103028ddaf4536c30",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "path",
+                        "description": "Turnuva ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Turnuva süresi kontrol edildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "time_remaining": {
+                                            "type": "integer",
+                                            "example": 300
+                                        },
+                                        "is_finished": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "tournament_status": {
+                                            "type": "string",
+                                            "example": "active"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/waiting-status/{tournament_id}": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Turnuva Bekleme Durumu",
+                "description": "Turnuva bekleme durumunu ve katılımcı sayısını getirir.",
+                "operationId": "fb194ab60be0c5df6db38db75cf14982",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "path",
+                        "description": "Turnuva ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Bekleme durumu başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "is_waiting": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "current_participants": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "min_participants": {
+                                            "type": "integer",
+                                            "example": 2
+                                        },
+                                        "waiting_message": {
+                                            "type": "string",
+                                            "example": "Diğer oyuncular bekleniyor... (1/2)"
                                         }
                                     },
                                     "type": "object"
@@ -3218,10 +3566,6 @@
             "description": "Authentication endpoints"
         },
         {
-            "name": "Categories",
-            "description": "Category management endpoints"
-        },
-        {
             "name": "Coin Packages",
             "description": "Jeton paket işlemleri"
         },
@@ -3234,36 +3578,28 @@
             "description": "Arkadaş davet işlemleri"
         },
         {
-            "name": "Game Answers",
-            "description": "Oyun cevap işlemleri"
-        },
-        {
-            "name": "Game Sessions",
-            "description": "Oyun oturum işlemleri"
-        },
-        {
-            "name": "Individual Games",
-            "description": "Bireysel oyun işlemleri"
-        },
-        {
             "name": "Payments",
             "description": "Ödeme işlemleri"
         },
         {
-            "name": "Questions",
-            "description": "Question management endpoints"
-        },
-        {
-            "name": "Tournaments",
-            "description": "Turnuva işlemleri"
-        },
-        {
-            "name": "Tournament Users",
-            "description": "Turnuva kullanıcı işlemleri"
-        },
-        {
             "name": "Notifications",
             "description": "Notifications"
+        },
+        {
+            "name": "Premium Quiz",
+            "description": "Premium Quiz"
+        },
+        {
+            "name": "Quiz Mobile",
+            "description": "Quiz Mobile"
+        },
+        {
+            "name": "Quiz",
+            "description": "Quiz"
+        },
+        {
+            "name": "Tournament Quiz",
+            "description": "Tournament Quiz"
         },
         {
             "name": "Password Reset",

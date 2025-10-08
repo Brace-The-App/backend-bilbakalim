@@ -11,8 +11,8 @@
     <meta name="author" content="pixelstrap">
     <meta name="user-id" content="{{ auth()->id() }}">
     <meta name="api-token" content="{{ auth()->user()->createToken('admin')->plainTextToken ?? '' }}">
-    <link rel="icon" href="../assets/images/favicon.png" type="image/x-icon">
-    <link rel="shortcut icon" href="../assets/images/favicon.png" type="image/x-icon">
+    <link rel="icon" href="{{ asset('assets/images/favicon.png') }}" type="image/x-icon">
+    <link rel="shortcut icon" href="{{ asset('assets/images/favicon.png')}}" type="image/x-icon">
     <title>Bil Bakalım - Admin Panel</title>
     <!-- Google font-->
     <link href="https://fonts.googleapis.com/css?family=Rubik:400,400i,500,500i,700,700i&amp;display=swap"
@@ -42,13 +42,13 @@
     <!-- Responsive css-->
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/responsive.css')}}">
     @stack('css')
-   
+
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
 </head>
 <body >
     <!-- loader starts-->
-    <div class="loader-wrapper">
+    <div class="loader-wrapper" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 99999; display: flex; justify-content: center; align-items: center;">
         <div class="loader-index"><span></span></div>
         <svg>
             <defs></defs>
@@ -59,19 +59,19 @@
         </svg>
     </div>
     <!-- loader ends-->
-    
+
     <!-- page-wrapper Start-->
     <div class="page-wrapper compact-wrapper" id="pageWrapper">
         <!-- Page Header Start-->
         @include('admin.layouts.header')
         <!-- Page Header Ends-->
-        
+
         <!-- Page Body Start-->
         <div class="page-body-wrapper sidebar-icon">
             <!-- Page Sidebar Start-->
             @include('admin.layouts.sidebar')
             <!-- Page Sidebar Ends-->
-            
+
             <div class="page-body ">
                 <!-- Container-fluid starts-->
                 <div class="container-fluid">
@@ -81,25 +81,26 @@
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     @endif
-                    
+
                     @if(session('error'))
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             {{ session('error') }}
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     @endif
-                    
+
                     @yield('content')
+                    
                 </div>
                 <!-- Container-fluid Ends-->
             </div>
-            
-            <!-- footer start-->
             @include('admin.layouts.footer')
+            <!-- footer start-->
+     
         </div>
     </div>
     <!-- page-wrapper Ends-->
-    
+
     <!-- latest jquery-->
     <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
     <!-- Bootstrap js-->
@@ -116,7 +117,7 @@
     <!-- Toastr JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
-    
+
     <!-- Toastr Custom CSS -->
     <style>
     .toast-success, .toast-error, .toast-info, .toast-warning {
@@ -142,12 +143,12 @@
         color: white !important;
         opacity: 1;
     }
-    
+
     /* Pagination Styles */
     .pagination {
         margin: 0;
     }
-    
+
     .pagination .page-link {
         color: #6c757d;
         background-color: #fff;
@@ -156,19 +157,19 @@
         margin: 0 2px;
         border-radius: 0.375rem;
     }
-    
+
     .pagination .page-link:hover {
         color: #495057;
         background-color: #e9ecef;
         border-color: #dee2e6;
     }
-    
+
     .pagination .page-item.active .page-link {
         color: #fff;
         background-color: #0d6efd;
         border-color: #0d6efd;
     }
-    
+
     .pagination .page-item.disabled .page-link {
         color: #6c757d;
         background-color: #fff;
@@ -176,16 +177,16 @@
         cursor: not-allowed;
     }
     </style>
-    
+
     <!-- Plugins JS start-->
     @stack('scripts')
     <!-- Plugins JS Ends-->
     <!-- Theme js-->
     <script src="{{ asset('assets/js/script.js') }}"></script>
-    
+
     <!-- Socket.IO Client -->
-    <script src="{{ asset('js/socket-client.js') }}"></script>
-    
+    <script src="{{ asset('js/socket-client.js?v=' . time()) }}"></script>
+
     <script>
         // CSRF token setup for AJAX
         $.ajaxSetup({
@@ -193,8 +194,38 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             }
         });
-        
-       
+
+        // Page Loading Control
+        $(document).ready(function() {
+            // Show loader on page navigation
+            $('a[href]:not([href^="#"]):not([href^="javascript:"]):not([target="_blank"])').on('click', function(e) {
+                var href = $(this).attr('href');
+                // Only show loading for internal admin links
+                if (href && (href.includes('/private/lesley/admin') || href.startsWith('/admin'))) {
+                    $('.loader-wrapper').show();
+                    $('.footer').addClass('d-none');
+                }
+            });
+
+            // Show loader on form submissions (except AJAX forms)
+            $('form:not([data-ajax])').on('submit', function() {
+                $('.loader-wrapper').show();
+                $('.footer').css('display', 'none');
+            });
+
+            // Hide loader when page is fully loaded
+            $(window).on('load', function() {
+                $('.loader-wrapper').fadeOut(500);
+                $('.footer').css('display', 'block');
+            });
+
+            // Hide loader after a short delay to prevent flickering
+            setTimeout(function() {
+                $('.loader-wrapper').fadeOut(500);
+                $('.footer').css('display', 'block');
+            }, 100);
+        });
+
     </script>
 </body>
 </html>

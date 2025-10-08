@@ -43,10 +43,16 @@ class User extends Authenticatable
         'package_id',
         'role_id',
         'total_coins',
+        'coins',
         'last_login_at',
         'device_token',
         'device_id',
-        'account_status'
+        'account_status',
+        'is_premium',
+        'fifty_fifty_jokers',
+        'double_answer_jokers',
+        'hint_jokers',
+        'avatar'
     ];
 
     /**
@@ -74,8 +80,13 @@ class User extends Authenticatable
         'package_id' => 'integer',
         'role_id' => 'integer',
         'total_coins' => 'integer',
+        'coins' => 'integer',
         'last_login_at' => 'datetime',
-        'account_status' => 'string'
+        'account_status' => 'string',
+        'is_premium' => 'boolean',
+        'fifty_fifty_jokers' => 'integer',
+        'double_answer_jokers' => 'integer',
+        'hint_jokers' => 'integer'
     ];
 
     // Account relationship kaldırıldı

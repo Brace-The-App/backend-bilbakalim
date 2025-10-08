@@ -24,7 +24,9 @@ class IndividualGame extends Model
         'status',
         'started_at',
         'completed_at',
-        'settings'
+        'settings',
+        'current_question_number',
+        'jokers_used'
     ];
 
     protected $casts = [
@@ -40,7 +42,9 @@ class IndividualGame extends Model
         'total_time_seconds' => 'integer',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
-        'settings' => 'array'
+        'settings' => 'array',
+        'current_question_number' => 'integer',
+        'jokers_used' => 'array'
     ];
 
     // Relationships
