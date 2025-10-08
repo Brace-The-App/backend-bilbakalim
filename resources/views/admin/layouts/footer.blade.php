@@ -1,4 +1,4 @@
-<footer class="footer" style="display: none;">  
+<footer class="footer" style="display: none;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-6 p-0 footer-copyright">

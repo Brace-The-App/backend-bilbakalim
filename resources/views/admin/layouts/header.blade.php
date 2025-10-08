@@ -10,12 +10,12 @@
             <div class="toggle-sidebar ms-2"><i class="status_toggle middle sidebar-toggle" data-feather="align-center"></i></div>
         </div>
 
-    
+
 
         <div class="nav-right col-auto ms-auto">
             <ul class="nav-menus d-flex align-items-center gap-3">
                 <li class="d-md-none"><span class="header-search"><i data-feather="search"></i></span></li>
-               
+
                 <li class="profile-nav onhover-dropdown pe-0 py-0">
                     <div class="media profile-media d-flex align-items-center">
                         <img class="b-r-10" src="{{asset('assets/images/46.png')}}" alt="" style="width: 35px; height: 35px; object-fit: cover;">
