@@ -91,7 +91,7 @@ class AuthController extends Controller
         })) {
             $user = $request->user();
             $token = $user->createToken('bilbakalim');
-      
+
             $responseData = [];
             $responseData['user'] = UserResource::make($user);
             $responseData['accessToken'] = $token->plainTextToken;
@@ -166,8 +166,10 @@ class AuthController extends Controller
         $user->name = $request->name;
         $user->email = $request->email;
         $user->phone = $request->phone;
+        $user->role_id = 3;
+        $user->account_status = 'active';
         $user->password = bcrypt($request->password);
-        $user->coins = 1000; // Başlangıç jetonu
+        $user->coins = 1000;
         $user->save();
 
         // Assign default role
@@ -282,7 +284,7 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials, $remember)) {
             $user = Auth::user();
-            
+
             // Check if user has admin or staff role
             if (!$user->hasAnyRole(['admin', 'personel'])) {
                 Auth::logout();
