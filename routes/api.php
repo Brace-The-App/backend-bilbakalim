@@ -133,6 +133,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('questions/{tournament_id}', [TournamentQuizController::class, 'getTournamentQuestions']);
         Route::post('check-time', [TournamentQuizController::class, 'checkTournamentTime']);
         Route::get('waiting-status/{tournament_id}', [TournamentQuizController::class, 'getWaitingStatus']);
+        
+        // Yeni endpoint'ler
+        Route::get('active-multiplayer', [TournamentQuizController::class, 'getActiveMultiplayerTournaments']);
+        Route::get('question-based', [TournamentQuizController::class, 'getQuestionBasedTournaments']);
     });
 });
 

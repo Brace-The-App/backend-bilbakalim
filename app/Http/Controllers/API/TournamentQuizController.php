@@ -885,6 +885,7 @@ class TournamentQuizController extends Controller
      */
     private function checkTournamentEnd(Tournament $tournament): void
     {
+        // Sadece aktif turnuvaları kontrol et
         if ($tournament->status !== 'active') {
             return;
         }
@@ -893,15 +894,22 @@ class TournamentQuizController extends Controller
         $endReason = '';
 
         if ($tournament->tournament_type === 'time_based') {
-            // Süreli turnuva - süre doldu mu kontrol et (test için geçici olarak devre dışı)
-            // if (now()->isAfter($tournament->end_time)) {
-            //     $shouldEnd = true;
-            //     $endReason = 'time_up';
-            // }
+            // Süreli turnuva - süre doldu mu kontrol et
+            if ($tournament->end_time && now()->isAfter($tournament->end_time)) {
+                $shouldEnd = true;
+                $endReason = 'time_up';
+            }
         } else {
             // Soru sayısına göre turnuva - tüm sorular bitti mi kontrol et
             $settings = $tournament->settings ?? [];
             $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+            
+            Log::info('Tournament question check', [
+                'tournament_id' => $tournament->id,
+                'current_question' => $currentQuestionNumber,
+                'total_questions' => $tournament->question_count,
+                'should_end' => $currentQuestionNumber > $tournament->question_count
+            ]);
             
             if ($currentQuestionNumber > $tournament->question_count) {
                 $shouldEnd = true;
@@ -909,10 +917,16 @@ class TournamentQuizController extends Controller
             }
         }
 
-        // Aktif katılımcı kaldı mı kontrol et
+        // Aktif katılımcı kaldı mı kontrol et (registered ve participating statülerini kontrol et)
         $activeParticipants = TournamentUser::where('tournament_id', $tournament->id)
-            ->where('status', 'participating')
+            ->whereIn('status', ['registered', 'participating'])
             ->count();
+
+        Log::info('Tournament participant check', [
+            'tournament_id' => $tournament->id,
+            'active_participants' => $activeParticipants,
+            'should_end' => $activeParticipants <= 1
+        ]);
 
         if ($activeParticipants <= 1) {
             $shouldEnd = true;
@@ -920,6 +934,10 @@ class TournamentQuizController extends Controller
         }
 
         if ($shouldEnd) {
+            Log::info('Tournament ending', [
+                'tournament_id' => $tournament->id,
+                'reason' => $endReason
+            ]);
             $this->endTournament($tournament, $endReason);
         }
     }
@@ -929,10 +947,21 @@ class TournamentQuizController extends Controller
      */
     private function endTournament(Tournament $tournament, string $reason): void
     {
+        Log::info('Ending tournament', [
+            'tournament_id' => $tournament->id,
+            'reason' => $reason,
+            'current_status' => $tournament->status
+        ]);
+
         // Turnuva durumunu güncelle
         $tournament->update([
             'status' => 'completed',
             'end_time' => now()
+        ]);
+
+        Log::info('Tournament status updated', [
+            'tournament_id' => $tournament->id,
+            'new_status' => 'completed'
         ]);
 
         // Final sıralamayı al
@@ -942,6 +971,11 @@ class TournamentQuizController extends Controller
             ->orderBy('correct_answers', 'desc')
             ->orderBy('total_time_seconds', 'asc')
             ->get();
+
+        Log::info('Tournament final rankings', [
+            'tournament_id' => $tournament->id,
+            'participants_count' => $finalRankings->count()
+        ]);
 
         // Sıralamayı güncelle
         foreach ($finalRankings as $index => $participant) {
@@ -963,6 +997,11 @@ class TournamentQuizController extends Controller
 
         // Socket.IO webhook ile turnuva bitiş bildirimi
         $this->sendTournamentFinishedWebhook($tournament, $finalRankings, $winner, $reason);
+
+        Log::info('Tournament ended successfully', [
+            'tournament_id' => $tournament->id,
+            'winner_id' => $winner ? $winner->user_id : null
+        ]);
     }
 
     /**
@@ -1133,6 +1172,10 @@ class TournamentQuizController extends Controller
      */
     private function finishTournament(Tournament $tournament): void
     {
+        Log::info('Finishing tournament (time-based)', [
+            'tournament_id' => $tournament->id
+        ]);
+
         $tournament->update([
             'status' => 'completed',
             'end_time' => now()
@@ -1140,7 +1183,7 @@ class TournamentQuizController extends Controller
         
         // Tüm aktif katılımcıları tamamlandı olarak işaretle
         TournamentUser::where('tournament_id', $tournament->id)
-            ->where('status', 'active')
+            ->whereIn('status', ['registered', 'participating', 'active'])
             ->update(['status' => 'completed']);
         
         // Socket ile turnuva bitiş bildirimi gönder
@@ -1148,6 +1191,10 @@ class TournamentQuizController extends Controller
         
         // Socket.IO webhook ile turnuva bitiş bildirimi
         $this->sendTournamentEndWebhook($tournament);
+
+        Log::info('Tournament finished (time-based)', [
+            'tournament_id' => $tournament->id
+        ]);
     }
     
     /**
@@ -1482,6 +1529,161 @@ class TournamentQuizController extends Controller
         ]);
     }
     
+    /**
+     * @OA\Get(
+     *     path="/api/tournament-quiz/active-multiplayer",
+     *     summary="Aktif Multiplayer Turnuvaları Listele",
+     *     description="Aktif durumda olan multiplayer turnuvalarını listeler.",
+     *     tags={"Tournament Quiz"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Aktif turnuvalar başarıyla listelendi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="tournaments", type="array", @OA\Items(type="object")),
+     *             @OA\Property(property="total", type="integer", example=5)
+     *         )
+     *     )
+     * )
+     */
+    public function getActiveMultiplayerTournaments(): JsonResponse
+    {
+        // Aktif ve beklemede olan turnuvaları getir (upcoming ve active)
+        $tournaments = Tournament::whereIn('status', ['upcoming', 'active'])
+            ->where('tournament_type', 'question_based')
+            ->with(['participants' => function($query) {
+                $query->where('status', 'registered');
+            }])
+            ->withCount(['participants as current_participants_count' => function($query) {
+                $query->where('status', 'registered');
+            }])
+            ->orderBy('status', 'asc') // active önce, sonra upcoming
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function($tournament) {
+                $canJoin = $tournament->current_participants_count < $tournament->max_participants && 
+                          in_array($tournament->status, ['upcoming', 'active']);
+                
+                $waitingMessage = '';
+                if ($tournament->status === 'upcoming') {
+                    if ($tournament->current_participants_count < $tournament->min_participants) {
+                        $waitingMessage = "Diğer oyuncular bekleniyor... ({$tournament->current_participants_count}/{$tournament->min_participants})";
+                    } else {
+                        $waitingMessage = "Yeterli katılımcı var. Turnuva başlatılabilir.";
+                    }
+                } else if ($tournament->status === 'active') {
+                    $waitingMessage = "Turnuva devam ediyor... ({$tournament->current_participants_count} katılımcı)";
+                }
+
+                return [
+                    'id' => $tournament->id,
+                    'title' => $tournament->title,
+                    'description' => $tournament->description,
+                    'tournament_type' => $tournament->tournament_type,
+                    'question_count' => $tournament->question_count,
+                    'min_participants' => $tournament->min_participants,
+                    'max_participants' => $tournament->max_participants,
+                    'current_participants' => $tournament->current_participants_count,
+                    'status' => $tournament->status,
+                    'start_time' => $tournament->start_time,
+                    'created_at' => $tournament->created_at,
+                    'can_join' => $canJoin,
+                    'waiting_message' => $waitingMessage
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'tournaments' => $tournaments,
+            'total' => $tournaments->count()
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/tournament-quiz/question-based",
+     *     summary="Question Based Turnuvaları Listele",
+     *     description="Soru sayısına göre turnuvaları listeler.",
+     *     tags={"Tournament Quiz"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="status",
+     *         in="query",
+     *         required=false,
+     *         @OA\Schema(type="string", enum={"upcoming", "active", "completed"}),
+     *         description="Turnuva durumu filtresi"
+     *     ),
+     *     @OA\Parameter(
+     *         name="limit",
+     *         in="query",
+     *         required=false,
+     *         @OA\Schema(type="integer", default=20),
+     *         description="Sayfa başına kayıt sayısı"
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Question based turnuvalar başarıyla listelendi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="tournaments", type="array", @OA\Items(type="object")),
+     *             @OA\Property(property="total", type="integer", example=10)
+     *         )
+     *     )
+     * )
+     */
+    public function getQuestionBasedTournaments(Request $request): JsonResponse
+    {
+        $status = $request->get('status');
+        $limit = $request->get('limit', 20);
+
+        $query = Tournament::where('tournament_type', 'question_based')
+            ->with(['participants' => function($query) {
+                $query->where('status', 'registered');
+            }])
+            ->withCount(['participants as current_participants_count' => function($query) {
+                $query->where('status', 'registered');
+            }]);
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $tournaments = $query->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get()
+            ->map(function($tournament) {
+                return [
+                    'id' => $tournament->id,
+                    'title' => $tournament->title,
+                    'description' => $tournament->description,
+                    'tournament_type' => $tournament->tournament_type,
+                    'question_count' => $tournament->question_count,
+                    'min_participants' => $tournament->min_participants,
+                    'max_participants' => $tournament->max_participants,
+                    'current_participants' => $tournament->current_participants_count,
+                    'status' => $tournament->status,
+                    'start_time' => $tournament->start_time,
+                    'end_time' => $tournament->end_time,
+                    'created_at' => $tournament->created_at,
+                    'can_join' => $tournament->current_participants_count < $tournament->max_participants && $tournament->status === 'upcoming',
+                    'waiting_message' => $tournament->current_participants_count < $tournament->min_participants 
+                        ? "Diğer oyuncular bekleniyor... ({$tournament->current_participants_count}/{$tournament->min_participants})"
+                        : "Yeterli katılımcı var. Turnuva başlatılabilir."
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'tournaments' => $tournaments,
+            'total' => $tournaments->count(),
+            'filters' => [
+                'status' => $status,
+                'limit' => $limit
+            ]
+        ]);
+    }
+
     /**
      * Liderlik tablosunu güncelle
      */

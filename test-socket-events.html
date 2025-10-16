@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Events Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 Socket.IO Events Test</h1>
+        
+        <div class="test-section info">
+            <h3>Bağlantı Durumu</h3>
+            <p id="connection-status">Bağlantı kuruluyor...</p>
+            <button onclick="connectSocket()">Bağlan</button>
+            <button onclick="disconnectSocket()">Bağlantıyı Kes</button>
+        </div>
+
+        <div class="test-section">
+            <h3>👤 User Join Test</h3>
+            <input type="number" id="userId" placeholder="User ID" value="16">
+            <input type="text" id="userName" placeholder="User Name" value="John Doe">
+            <button onclick="testUserJoin()">User Join Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>🎮 Normal Quiz Join Test</h3>
+            <input type="number" id="normalGameId" placeholder="Game ID" value="1">
+            <input type="number" id="normalUserId" placeholder="User ID" value="16">
+            <button onclick="testJoinNormalQuiz()">Normal Quiz Join Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>💎 Premium Quiz Join Test</h3>
+            <input type="number" id="premiumGameId" placeholder="Game ID" value="2">
+            <input type="number" id="premiumUserId" placeholder="User ID" value="16">
+            <button onclick="testJoinPremiumQuiz()">Premium Quiz Join Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>🏆 Tournament Join Test</h3>
+            <input type="number" id="tournamentId" placeholder="Tournament ID" value="6">
+            <input type="number" id="tournamentUserId" placeholder="User ID" value="16">
+            <button onclick="testJoinTournament()">Tournament Join Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 Quiz Answer Test</h3>
+            <input type="number" id="answerGameId" placeholder="Game ID" value="1">
+            <input type="number" id="answerUserId" placeholder="User ID" value="16">
+            <input type="number" id="questionId" placeholder="Question ID" value="1155">
+            <select id="selectedOption">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <input type="number" id="timeSpent" placeholder="Time Spent" value="5">
+            <button onclick="testQuizAnswer()">Quiz Answer Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Joker Used Test</h3>
+            <input type="number" id="jokerGameId" placeholder="Game ID" value="1">
+            <input type="number" id="jokerUserId" placeholder="User ID" value="16">
+            <select id="jokerType">
+                <option value="fifty_fifty">Fifty Fifty</option>
+                <option value="double_answer">Double Answer</option>
+                <option value="hint">Hint</option>
+            </select>
+            <button onclick="testJokerUsed()">Joker Used Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>🏆 Tournament Answer Test</h3>
+            <input type="number" id="tournamentAnswerId" placeholder="Tournament ID" value="6">
+            <input type="number" id="tournamentAnswerUserId" placeholder="User ID" value="16">
+            <input type="number" id="tournamentQuestionId" placeholder="Question ID" value="1155">
+            <select id="tournamentSelectedOption">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <input type="number" id="tournamentTimeSpent" placeholder="Time Spent" value="3">
+            <button onclick="testTournamentAnswer()">Tournament Answer Test</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Event Log</h3>
+            <div id="eventLog" class="log"></div>
+            <button onclick="clearLog()">Log Temizle</button>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        const eventLog = document.getElementById('eventLog');
+        const connectionStatus = document.getElementById('connection-status');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            eventLog.appendChild(logEntry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        function connectSocket() {
+            if (socket) {
+                socket.disconnect();
+            }
+
+            log('Socket bağlantısı kuruluyor...', 'info');
+            socket = io('https://bilbakalim.online', {
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                log(`✅ Socket bağlandı: ${socket.id}`, 'success');
+                connectionStatus.textContent = `Bağlı: ${socket.id}`;
+                connectionStatus.style.color = 'green';
+            });
+
+            socket.on('disconnect', () => {
+                log('❌ Socket bağlantısı kesildi', 'error');
+                connectionStatus.textContent = 'Bağlantı kesildi';
+                connectionStatus.style.color = 'red';
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`❌ Bağlantı hatası: ${error.message}`, 'error');
+                connectionStatus.textContent = 'Bağlantı hatası';
+                connectionStatus.style.color = 'red';
+            });
+
+            // Event listeners
+            socket.on('welcome', (data) => {
+                log(`👋 Welcome: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('joined_room', (data) => {
+                log(`🏠 Joined Room: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('joined_tournament', (data) => {
+                log(`🏆 Joined Tournament: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('quiz_answer_result', (data) => {
+                log(`📝 Quiz Answer Result: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('joker_result', (data) => {
+                log(`🎯 Joker Result: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('tournament_answer_received', (data) => {
+                log(`🏆 Tournament Answer Received: ${JSON.stringify(data)}`, 'success');
+            });
+        }
+
+        function disconnectSocket() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('🔌 Socket bağlantısı kapatıldı', 'info');
+            }
+        }
+
+        function testUserJoin() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const userId = document.getElementById('userId').value;
+            const userName = document.getElementById('userName').value;
+            
+            log(`👤 User Join gönderiliyor: userId=${userId}, userName=${userName}`, 'info');
+            socket.emit('user_join', { userId: parseInt(userId), userName });
+        }
+
+        function testJoinNormalQuiz() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const gameId = document.getElementById('normalGameId').value;
+            const userId = document.getElementById('normalUserId').value;
+            
+            log(`🎮 Normal Quiz Join gönderiliyor: gameId=${gameId}, userId=${userId}`, 'info');
+            socket.emit('join_normal_quiz', { gameId: parseInt(gameId), userId: parseInt(userId) });
+        }
+
+        function testJoinPremiumQuiz() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const gameId = document.getElementById('premiumGameId').value;
+            const userId = document.getElementById('premiumUserId').value;
+            
+            log(`💎 Premium Quiz Join gönderiliyor: gameId=${gameId}, userId=${userId}`, 'info');
+            socket.emit('join_premium_quiz', { gameId: parseInt(gameId), userId: parseInt(userId) });
+        }
+
+        function testJoinTournament() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const tournamentId = document.getElementById('tournamentId').value;
+            const userId = document.getElementById('tournamentUserId').value;
+            
+            log(`🏆 Tournament Join gönderiliyor: tournamentId=${tournamentId}, userId=${userId}`, 'info');
+            socket.emit('join_tournament', { tournamentId: parseInt(tournamentId), userId: parseInt(userId) });
+        }
+
+        function testQuizAnswer() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const gameId = document.getElementById('answerGameId').value;
+            const userId = document.getElementById('answerUserId').value;
+            const questionId = document.getElementById('questionId').value;
+            const selectedOption = document.getElementById('selectedOption').value;
+            const timeSpent = document.getElementById('timeSpent').value;
+            
+            log(`📝 Quiz Answer gönderiliyor: gameId=${gameId}, userId=${userId}, questionId=${questionId}, option=${selectedOption}, time=${timeSpent}`, 'info');
+            socket.emit('quiz_answer', {
+                gameId: parseInt(gameId),
+                userId: parseInt(userId),
+                questionId: parseInt(questionId),
+                selectedOption,
+                timeSpent: parseInt(timeSpent)
+            });
+        }
+
+        function testJokerUsed() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const gameId = document.getElementById('jokerGameId').value;
+            const userId = document.getElementById('jokerUserId').value;
+            const jokerType = document.getElementById('jokerType').value;
+            
+            log(`🎯 Joker Used gönderiliyor: gameId=${gameId}, userId=${userId}, jokerType=${jokerType}`, 'info');
+            socket.emit('quiz_joker_used', {
+                gameId: parseInt(gameId),
+                userId: parseInt(userId),
+                jokerType,
+                result: { success: true, message: 'Joker başarıyla kullanıldı' }
+            });
+        }
+
+        function testTournamentAnswer() {
+            if (!socket) {
+                log('❌ Socket bağlantısı yok!', 'error');
+                return;
+            }
+
+            const tournamentId = document.getElementById('tournamentAnswerId').value;
+            const userId = document.getElementById('tournamentAnswerUserId').value;
+            const questionId = document.getElementById('tournamentQuestionId').value;
+            const selectedOption = document.getElementById('tournamentSelectedOption').value;
+            const timeSpent = document.getElementById('tournamentTimeSpent').value;
+            
+            log(`🏆 Tournament Answer gönderiliyor: tournamentId=${tournamentId}, userId=${userId}, questionId=${questionId}, option=${selectedOption}, time=${timeSpent}`, 'info');
+            socket.emit('tournament_answer', {
+                tournamentId: parseInt(tournamentId),
+                userId: parseInt(userId),
+                questionId: parseInt(questionId),
+                selectedOption,
+                timeSpent: parseInt(timeSpent)
+            });
+        }
+
+        function clearLog() {
+            eventLog.innerHTML = '';
+        }
+
+        // Sayfa yüklendiğinde otomatik bağlan
+        window.onload = function() {
+            connectSocket();
+        };
+    </script>
+</body>
+</html>
