@@ -104,6 +104,26 @@
                     @if(auth()->user()->hasRole('admin'))
                     <li class="sidebar-main-title">
                         <div>
+                            <h6>Landing</h6>
+                        </div>
+                    </li>
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.landing.*') ? 'active' : '' }}" href="#">
+                            <i data-feather="layout"></i>
+                            <span>Landing</span>
+                        </a>
+                        <ul class="sidebar-submenu">
+                            <li><a class="{{ request()->routeIs('admin.landing.about.*') ? 'active' : '' }}" href="{{ route('admin.landing.about.index') }}">Uygulama Hakkında</a></li>
+                            <li><a class="{{ request()->routeIs('admin.landing.features.*') ? 'active' : '' }}" href="{{ route('admin.landing.features.index') }}">Özellikler</a></li>
+                            <li><a class="{{ request()->routeIs('admin.landing.benefits.*') ? 'active' : '' }}" href="{{ route('admin.landing.benefits.index') }}">Avantajlar</a></li>
+                            <li><a class="{{ request()->routeIs('admin.landing.testimonials.*') ? 'active' : '' }}" href="{{ route('admin.landing.testimonials.index') }}">Kullanıcı Yorumları</a></li>
+                            <li><a class="{{ request()->routeIs('admin.landing.faqs.*') ? 'active' : '' }}" href="{{ route('admin.landing.faqs.index') }}">SSS</a></li>
+                            <li><a class="{{ request()->routeIs('admin.landing.news.*') ? 'active' : '' }}" href="{{ route('admin.landing.news.index') }}">Bizden Haberler</a></li>
+                        </ul>
+                    </li>
+                    <li class="sidebar-main-title">
+                        <div>
                             <h6>Sistem</h6>
                         </div>
                     </li>

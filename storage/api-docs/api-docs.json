@@ -548,6 +548,595 @@
                 ]
             }
         },
+        "/api/landing/about": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Uygulama hakkında bilgilerini getir",
+                "description": "Landing sayfası için uygulama hakkında bilgilerini döndürür",
+                "operationId": "006cbd7a468ff03d54cb7f6b8e0f0f48",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Uygulama hakkında bilgileri başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "Uygulama Hakkında"
+                                                    },
+                                                    "description": {
+                                                        "type": "string",
+                                                        "example": "Bu uygulama hakkında açıklama"
+                                                    },
+                                                    "img": {
+                                                        "type": "string",
+                                                        "example": "/uploads/landing/about/image.jpg"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/news": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Haberleri getir",
+                "description": "Landing sayfası için haberleri döndürür",
+                "operationId": "bdfed6fcdcc55bbf6c7e5f21fba937b5",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Haberler başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "Yeni Haber"
+                                                    },
+                                                    "description": {
+                                                        "type": "string",
+                                                        "example": "Haber açıklaması"
+                                                    },
+                                                    "img": {
+                                                        "type": "string",
+                                                        "example": "/uploads/landing/news/image.jpg"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/testimonials": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Kullanıcı yorumlarını getir",
+                "description": "Landing sayfası için kullanıcı yorumlarını döndürür",
+                "operationId": "efa6d3fd82beeb30c23117694c1823a5",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Kullanıcı yorumları başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "user_name": {
+                                                        "type": "string",
+                                                        "example": "Ahmet Yılmaz"
+                                                    },
+                                                    "comment": {
+                                                        "type": "string",
+                                                        "example": "Harika bir uygulama!"
+                                                    },
+                                                    "profile_img": {
+                                                        "type": "string",
+                                                        "example": "/uploads/landing/testimonials/profile.jpg"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/features": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Özellikleri getir",
+                "description": "Landing sayfası için uygulama özelliklerini döndürür",
+                "operationId": "870c0901e69d29d85c2f69805a9e2536",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Özellikler başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "Hızlı Quiz"
+                                                    },
+                                                    "description": {
+                                                        "type": "string",
+                                                        "example": "Hızlı ve eğlenceli quiz deneyimi"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/benefits": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Avantajları getir",
+                "description": "Landing sayfası için uygulama avantajlarını döndürür",
+                "operationId": "3d42c5461803ace6470a7fc4ada98ef8",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Avantajlar başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "Ücretsiz Kullanım"
+                                                    },
+                                                    "description": {
+                                                        "type": "string",
+                                                        "example": "Temel özellikler tamamen ücretsiz"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/faqs": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Sıkça sorulan soruları getir",
+                "description": "Landing sayfası için sıkça sorulan soruları döndürür",
+                "operationId": "f1983c48d5393d77225b3caee452a76c",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Sıkça sorulan sorular başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "question": {
+                                                        "type": "string",
+                                                        "example": "Uygulama nasıl kullanılır?"
+                                                    },
+                                                    "answer": {
+                                                        "type": "string",
+                                                        "example": "Uygulamayı kullanmak çok kolay..."
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    },
+                                                    "updated_at": {
+                                                        "type": "string",
+                                                        "format": "datetime"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/landing/all": {
+            "get": {
+                "tags": [
+                    "Landing Page"
+                ],
+                "summary": "Tüm landing sayfası verilerini getir",
+                "description": "Landing sayfası için tüm verileri (about, news, testimonials, features, benefits, faqs) tek seferde döndürür",
+                "operationId": "42a4cf4094388ed89373ed7ebf1327c5",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Tüm landing sayfası verileri başarıyla getirildi."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "about": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "title": {
+                                                                "type": "string",
+                                                                "example": "Uygulama Hakkında"
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Bu uygulama hakkında açıklama"
+                                                            },
+                                                            "img": {
+                                                                "type": "string",
+                                                                "example": "/uploads/landing/about/image.jpg"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "news": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "title": {
+                                                                "type": "string",
+                                                                "example": "Yeni Haber"
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Haber açıklaması"
+                                                            },
+                                                            "img": {
+                                                                "type": "string",
+                                                                "example": "/uploads/landing/news/image.jpg"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "testimonials": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "user_name": {
+                                                                "type": "string",
+                                                                "example": "Ahmet Yılmaz"
+                                                            },
+                                                            "comment": {
+                                                                "type": "string",
+                                                                "example": "Harika bir uygulama!"
+                                                            },
+                                                            "profile_img": {
+                                                                "type": "string",
+                                                                "example": "/uploads/landing/testimonials/profile.jpg"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "features": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "title": {
+                                                                "type": "string",
+                                                                "example": "Hızlı Quiz"
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Hızlı ve eğlenceli quiz deneyimi"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "benefits": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "title": {
+                                                                "type": "string",
+                                                                "example": "Ücretsiz Kullanım"
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Temel özellikler tamamen ücretsiz"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "faqs": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "question": {
+                                                                "type": "string",
+                                                                "example": "Uygulama nasıl kullanılır?"
+                                                            },
+                                                            "answer": {
+                                                                "type": "string",
+                                                                "example": "Uygulamayı kullanmak çok kolay..."
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "datetime"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/notifications/send": {
             "post": {
                 "tags": [
@@ -1862,6 +2451,263 @@
                 ]
             }
         },
+        "/api/quiz/normal/jokers": {
+            "get": {
+                "tags": [
+                    "Normal Quiz"
+                ],
+                "summary": "Normal Quiz Joker Listesi",
+                "description": "Kullanıcının mevcut joker sayılarını getirir",
+                "operationId": "ea3fd7f717d4560a8b6377cc60a0c51c",
+                "responses": {
+                    "200": {
+                        "description": "Joker listesi başarıyla getirildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "jokers": {
+                                            "properties": {
+                                                "fifty_fifty": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "double_answer": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "hint": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "total_jokers": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "user_coins": {
+                                            "type": "integer",
+                                            "example": 1000
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/use-joker": {
+            "post": {
+                "tags": [
+                    "Normal Quiz"
+                ],
+                "summary": "Normal Quiz Joker Kullan",
+                "description": "Normal quiz'de joker kullanır",
+                "operationId": "082e51f00c5781a1a0b3ca8059a4c8b3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "game_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Joker başarıyla kullanıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "joker_type": {
+                                            "type": "string",
+                                            "example": "fifty_fifty"
+                                        },
+                                        "result": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/quiz/normal/buy-joker": {
+            "post": {
+                "tags": [
+                    "Normal Quiz"
+                ],
+                "summary": "Normal Quiz Joker Satın Al",
+                "description": "Normal quiz için joker satın alır",
+                "operationId": "a643cfe36d68601c3874a935198c8b08",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "quantity": {
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 1,
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "joker_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "fifty_fifty"
+                                    },
+                                    "quantity": {
+                                        "type": "integer",
+                                        "maximum": 10,
+                                        "minimum": 1,
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Joker başarıyla satın alındı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "2 adet %50-%50 Joker satın alındı."
+                                        },
+                                        "joker_type": {
+                                            "type": "string",
+                                            "example": "fifty_fifty"
+                                        },
+                                        "quantity": {
+                                            "type": "string",
+                                            "example": "2"
+                                        },
+                                        "total_cost": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "remaining_coins": {
+                                            "type": "integer",
+                                            "example": 800
+                                        },
+                                        "new_joker_count": {
+                                            "type": "integer",
+                                            "example": 3
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/quiz/normal/mobile/start": {
             "post": {
                 "tags": [
@@ -2433,10 +3279,6 @@
                                             "type": "integer",
                                             "example": 50
                                         },
-                                        "speed_bonus": {
-                                            "type": "integer",
-                                            "example": 25
-                                        },
                                         "total_score": {
                                             "type": "integer",
                                             "example": 75
@@ -2724,6 +3566,118 @@
                                         "waiting_message": {
                                             "type": "string",
                                             "example": "Diğer oyuncular bekleniyor... (1/2)"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/active-multiplayer": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Aktif Multiplayer Turnuvaları Listele",
+                "description": "Aktif durumda olan multiplayer turnuvalarını listeler.",
+                "operationId": "d97d94c66d4f5463df30224515b9bc39",
+                "responses": {
+                    "200": {
+                        "description": "Aktif turnuvalar başarıyla listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "tournaments": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "example": 5
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/tournament-quiz/question-based": {
+            "get": {
+                "tags": [
+                    "Tournament Quiz"
+                ],
+                "summary": "Question Based Turnuvaları Listele",
+                "description": "Soru sayısına göre turnuvaları listeler.",
+                "operationId": "5e5ef5c74f14af82d9e7c8705b07020b",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Turnuva durumu filtresi",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "upcoming",
+                                "active",
+                                "completed"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Sayfa başına kayıt sayısı",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 20
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Question based turnuvalar başarıyla listelendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "tournaments": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "example": 10
                                         }
                                     },
                                     "type": "object"
@@ -3578,6 +4532,10 @@
             "description": "Arkadaş davet işlemleri"
         },
         {
+            "name": "Landing Page",
+            "description": "Landing sayfası için API endpoint'leri"
+        },
+        {
             "name": "Payments",
             "description": "Ödeme işlemleri"
         },
@@ -3596,6 +4554,10 @@
         {
             "name": "Quiz",
             "description": "Quiz"
+        },
+        {
+            "name": "Normal Quiz",
+            "description": "Normal Quiz"
         },
         {
             "name": "Tournament Quiz",

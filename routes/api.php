@@ -12,6 +12,7 @@ use App\Http\Controllers\API\FriendInviteController;
 use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\PremiumQuizController;
 use App\Http\Controllers\API\TournamentQuizController;
+use App\Http\Controllers\API\LandingController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
@@ -138,6 +139,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('active-multiplayer', [TournamentQuizController::class, 'getActiveMultiplayerTournaments']);
         Route::get('question-based', [TournamentQuizController::class, 'getQuestionBasedTournaments']);
     });
+});
+
+// Landing Page API routes (no auth required)
+Route::prefix('landing')->group(function () {
+    Route::get('about', [LandingController::class, 'about']);
+    Route::get('news', [LandingController::class, 'news']);
+    Route::get('testimonials', [LandingController::class, 'testimonials']);
+    Route::get('features', [LandingController::class, 'features']);
+    Route::get('benefits', [LandingController::class, 'benefits']);
+    Route::get('faqs', [LandingController::class, 'faqs']);
+    Route::get('all', [LandingController::class, 'all']);
 });
 
 

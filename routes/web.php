@@ -9,6 +9,12 @@ use App\Http\Controllers\Admin\TournamentController;
 use App\Http\Controllers\Admin\GeneralSettingController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\LandingAboutController;
+use App\Http\Controllers\Admin\LandingFeatureController;
+use App\Http\Controllers\Admin\LandingBenefitController;
+use App\Http\Controllers\Admin\LandingTestimonialController;
+use App\Http\Controllers\Admin\LandingFaqController;
+use App\Http\Controllers\Admin\LandingNewsController;
 
 // Welcome page
 Route::get('/', function () {
@@ -66,6 +72,16 @@ Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->gro
     // Notifications management
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
+
+    // Landing - üst grup
+    Route::prefix('landing')->name('landing.')->group(function () {
+        Route::resource('about', LandingAboutController::class)->parameters(['about' => 'about']);
+        Route::resource('features', LandingFeatureController::class)->parameters(['features' => 'feature']);
+        Route::resource('benefits', LandingBenefitController::class)->parameters(['benefits' => 'benefit']);
+        Route::resource('testimonials', LandingTestimonialController::class)->parameters(['testimonials' => 'testimonial']);
+        Route::resource('faqs', LandingFaqController::class)->parameters(['faqs' => 'faq']);
+        Route::resource('news', LandingNewsController::class)->parameters(['news' => 'news']);
+    });
 });
 
 Route::get('private/lesley/jetwaldes/api/documentation', function () {
