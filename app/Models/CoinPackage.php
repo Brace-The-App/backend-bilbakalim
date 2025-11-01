@@ -75,11 +75,11 @@ class CoinPackage extends Model
 
     public function getIsPopularAttribute()
     {
-        return $this->is_popular;
+        return (bool) ($this->attributes['is_popular'] ?? false);
     }
 
     public function getIsActiveAttribute()
     {
-        return $this->is_active;
+        return (bool) ($this->attributes['is_active'] ?? false);
     }
 }

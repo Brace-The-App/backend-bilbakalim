@@ -92,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('accept/{inviteCode}', [FriendInviteController::class, 'accept']);
     });
     
+    // Game Settings route
+    Route::get('game-settings', [QuizController::class, 'getGameSettings']);
+    
     // Quiz routes
     Route::prefix('quiz')->group(function () {
         // Normal Quiz (Sonsuz Mod)

@@ -48,28 +48,42 @@ class QuizController extends Controller
     public function startNormalQuiz(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Aktif oyun var mı kontrol et
         $activeGame = IndividualGame::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'normal')
             ->first();
-            
+
         if ($activeGame) {
+            // Aktif oyunun settings içindeki jokerleri User tablosundaki güncel değerlerle senkronize et
+            $settings = $activeGame->settings ?? [];
+            $settings['jokers'] = [
+                'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                'double_answer' => $user->double_answer_jokers ?? 0,
+                'hint' => $user->hint_jokers ?? 0
+            ];
+
+            // Settings'i güncelle
+            $activeGame->update(['settings' => $settings]);
+            $activeGame->refresh();
+
             return response()->json([
                 'success' => false,
                 'message' => 'Zaten aktif bir oyununuz var.',
+                'game' => null,
+                'question' => null,
                 'active_game' => $activeGame
-            ], 400);
+            ], 200);
         }
-        
+
         // Kullanıcının mevcut joker sayılarını al, yoksa başlangıç jokerlerini ver
         $userJokers = [
             'fifty_fifty' => $user->fifty_fifty_jokers ?? config('app.joker_counts.fifty_fifty', 1),
             'double_answer' => $user->double_answer_jokers ?? config('app.joker_counts.double_answer', 1),
             'hint' => $user->hint_jokers ?? config('app.joker_counts.hint', 1)
         ];
-        
+
         // Eğer kullanıcının jokerleri yoksa, başlangıç jokerlerini ver
         if (is_null($user->fifty_fifty_jokers)) {
             $user->update([
@@ -78,8 +92,10 @@ class QuizController extends Controller
                 'hint_jokers' => config('app.joker_counts.hint', 1)
             ]);
         }
-        
+
         // Yeni oyun oluştur
+        // Kullanıcının güncel joker sayılarını al (yoksa 0 olarak başlat)
+        $user->refresh(); // User'ı yeniden yükle
         $game = IndividualGame::create([
             'user_id' => $user->id,
             'game_type' => 'normal',
@@ -98,16 +114,16 @@ class QuizController extends Controller
                 'current_difficulty' => 'easy',
                 'jokers_used' => [],
                 'jokers' => [
-                    'fifty_fifty' => 1,
-                    'double_answer' => 1,
-                    'hint' => 1
+                    'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                    'double_answer' => $user->double_answer_jokers ?? 0,
+                    'hint' => $user->hint_jokers ?? 0
                 ]
             ]
         ]);
-        
+
         // İlk soruyu getir (kolay seviye)
         $question = $this->getNextQuestion($game);
-        
+
         // Socket.IO'ya quiz başlatma bildirimi gönder
         \Log::info('Quiz başlatma webhook gönderiliyor', [
             'game_id' => $game->id,
@@ -115,15 +131,16 @@ class QuizController extends Controller
             'game_type' => 'normal'
         ]);
         $this->broadcastQuizStarted($game, $question);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Normal quiz başlatıldı.',
             'game' => $game,
-            'question' => $question
+            'question' => $question,
+            'active_game' => null
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/normal/answer",
@@ -173,24 +190,24 @@ class QuizController extends Controller
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint',
             'second_option' => 'nullable|in:1,2,3,4' // Çift cevap için ikinci seçenek
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif oyun bulunamadı.'
             ], 404);
         }
-        
+
         // Normal Quiz'de süre sınırı yok
-        
+
         $question = Question::find($request->question_id);
-        
+
         // Joker kullanımı kontrolü
         $jokerUsed = null;
         if ($request->joker_used) {
@@ -201,20 +218,20 @@ class QuizController extends Controller
                 $game->update(['settings' => $settings]);
             }
         }
-        
+
         // Çift cevap joker kontrolü
         $isCorrect = false;
         if ($jokerUsed === 'double_answer' && $request->second_option) {
             // Çift cevap: iki seçenekten biri doğru olmalı
-            $isCorrect = ($question->correct_answer === $request->selected_option) || 
-                        ($question->correct_answer === $request->second_option);
+            $isCorrect = ($question->correct_answer === $request->selected_option) ||
+                ($question->correct_answer === $request->second_option);
         } else {
             // Normal cevap
             $isCorrect = $question->correct_answer === $request->selected_option;
         }
-        
+
         $timeSpent = $request->time_spent ?? 30;
-        
+
         // Cevabı kaydet
         GameAnswer::create([
             'individual_game_id' => $game->id,
@@ -226,17 +243,17 @@ class QuizController extends Controller
             'time_spent' => $timeSpent,
             'joker_used' => $jokerUsed,
             'answered_at' => now(),
-            'user_answer' => $jokerUsed === 'double_answer' ? 
-                $request->selected_option . ',' . $request->second_option : 
+            'user_answer' => $jokerUsed === 'double_answer' ?
+                $request->selected_option . ',' . $request->second_option :
                 $request->selected_option
         ]);
-        
+
         // Oyun istatistiklerini güncelle
         $coinsChange = $isCorrect ? $question->coin_value : -$question->coin_value;
-        
+
         $settings = $game->settings ?? [];
         $settings['total_questions_answered'] = ($settings['total_questions_answered'] ?? 0) + 1;
-        
+
         $game->update([
             'question_count' => $game->question_count + 1,
             'correct_answers' => $isCorrect ? $game->correct_answers + 1 : $game->correct_answers,
@@ -245,10 +262,10 @@ class QuizController extends Controller
             'total_time_seconds' => $game->total_time_seconds + $timeSpent,
             'settings' => $settings
         ]);
-        
+
         // Kullanıcının jetonunu güncelle
         $user->increment('coins', $coinsChange);
-        
+
         // Socket.IO'ya cevap bildirimi gönder
         \Log::info('Quiz cevap webhook gönderiliyor', [
             'game_id' => $game->id,
@@ -258,10 +275,10 @@ class QuizController extends Controller
             'coins_earned' => $coinsChange
         ]);
         $this->broadcastQuizAnswer($game, $user, $question, $isCorrect, $coinsChange);
-        
+
         // Sonraki soruyu getir
         $nextQuestion = $this->getNextQuestion($game);
-        
+
         return response()->json([
             'success' => true,
             'is_correct' => $isCorrect,
@@ -279,7 +296,7 @@ class QuizController extends Controller
             'next_question' => $nextQuestion
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/normal/end",
@@ -316,31 +333,31 @@ class QuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id'
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif oyun bulunamadı.'
             ], 404);
         }
-        
+
         $game->update([
             'status' => 'completed',
             'completed_at' => now()
         ]);
-        
+
         // Kullanıcının cevaplarını getir
         $answers = GameAnswer::where('individual_game_id', $game->id)
             ->with('question')
             ->orderBy('answered_at', 'asc')
             ->get();
-        
+
         $answerDetails = $answers->map(function ($answer) {
             return [
                 'question_id' => $answer->question_id,
@@ -356,10 +373,10 @@ class QuizController extends Controller
                 'answered_at' => $answer->answered_at
             ];
         });
-        
+
         // Socket.IO'ya quiz tamamlanma bildirimi gönder
         $this->broadcastQuizCompleted($game, $user, $answerDetails->toArray());
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Oyun tamamlandı.',
@@ -374,7 +391,7 @@ class QuizController extends Controller
             'answer_details' => $answerDetails
         ]);
     }
-    
+
     /**
      * @OA\Get(
      *     path="/api/quiz/normal/history",
@@ -400,13 +417,13 @@ class QuizController extends Controller
             ->where('status', 'completed')
             ->orderBy('completed_at', 'desc')
             ->paginate(20);
-            
+
         return response()->json([
             'success' => true,
             'games' => $games
         ]);
     }
-    
+
     /**
      * @OA\Get(
      *     path="/api/quiz/normal/details/{game_id}",
@@ -437,27 +454,27 @@ class QuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id'
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('game_type', 'normal')
             ->where('status', 'completed')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Oyun bulunamadı.'
             ], 404);
         }
-        
+
         // Kullanıcının cevaplarını getir
         $answers = GameAnswer::where('individual_game_id', $game->id)
             ->with('question')
             ->orderBy('answered_at', 'asc')
             ->get();
-        
+
         $answerDetails = $answers->map(function ($answer) {
             return [
                 'question_id' => $answer->question_id,
@@ -473,14 +490,14 @@ class QuizController extends Controller
                 'answered_at' => $answer->answered_at
             ];
         });
-        
+
         return response()->json([
             'success' => true,
             'game' => $game,
             'answer_details' => $answerDetails
         ]);
     }
-    
+
     /**
      * @OA\Get(
      *     path="/api/quiz/normal/jokers",
@@ -507,7 +524,7 @@ class QuizController extends Controller
     public function getJokers(): JsonResponse
     {
         $user = Auth::user();
-        
+
         return response()->json([
             'success' => true,
             'jokers' => [
@@ -519,7 +536,7 @@ class QuizController extends Controller
             'user_coins' => $user->coins
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/normal/use-joker",
@@ -561,24 +578,24 @@ class QuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint'
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'normal')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif normal oyun bulunamadı.'
             ], 404);
         }
-        
+
         $question = Question::find($request->question_id);
         $jokerType = $request->joker_type;
-        
+
         // Joker hakkı kontrolü
         $settings = $game->settings;
         if ($settings['jokers'][$jokerType] <= 0) {
@@ -587,7 +604,7 @@ class QuizController extends Controller
                 'message' => 'Bu joker hakkınız kalmamış.'
             ], 400);
         }
-        
+
         // Joker kullanımı
         $result = [];
         switch ($jokerType) {
@@ -601,11 +618,11 @@ class QuizController extends Controller
                 $result = $this->useHintJoker($question);
                 break;
         }
-        
+
         // Joker hakkını azalt
         $settings['jokers'][$jokerType]--;
         $game->update(['settings' => $settings]);
-        
+
         return response()->json([
             'success' => true,
             'joker_type' => $jokerType,
@@ -613,7 +630,7 @@ class QuizController extends Controller
             'jokers_remaining' => $settings['jokers']
         ]);
     }
-    
+
     /**
      * 50-50 Joker
      */
@@ -621,21 +638,21 @@ class QuizController extends Controller
     {
         $choices = ['1', '2', '3', '4'];
         $correctAnswer = $question->correct_answer;
-        
+
         // Doğru cevabı hariç tut, 2 yanlış seçeneği kaldır
         $wrongChoices = array_filter($choices, function($choice) use ($correctAnswer) {
             return $choice !== $correctAnswer;
         });
-        
+
         $removeChoices = array_slice($wrongChoices, 0, 2);
-        
+
         return [
             'type' => 'fifty_fifty',
             'removed_choices' => $removeChoices,
             'remaining_choices' => array_diff($choices, $removeChoices)
         ];
     }
-    
+
     /**
      * Çift Cevap Joker
      */
@@ -646,7 +663,7 @@ class QuizController extends Controller
             'message' => 'Artık 2 seçenek işaretleyebilirsiniz. İkisinden biri doğru olmalı.'
         ];
     }
-    
+
     /**
      * İpucu Joker
      */
@@ -657,13 +674,13 @@ class QuizController extends Controller
             'Doğru cevap ' . $question->correct_answer . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
         ];
-        
+
         return [
             'type' => 'hint',
             'hint' => $hints[array_rand($hints)]
         ];
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/normal/buy-joker",
@@ -706,20 +723,20 @@ class QuizController extends Controller
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
             'quantity' => 'required|integer|min:1|max:10'
         ]);
-        
+
         $user = Auth::user();
         $jokerType = $request->joker_type;
         $quantity = $request->quantity;
-        
+
         // Joker fiyatları (config'den alınabilir)
         $jokerPrices = [
             'fifty_fifty' => config('app.joker_prices.fifty_fifty', 100),
             'double_answer' => config('app.joker_prices.double_answer', 200),
             'hint' => config('app.joker_prices.hint', 150)
         ];
-        
+
         $totalCost = $jokerPrices[$jokerType] * $quantity;
-        
+
         if ($user->coins < $totalCost) {
             return response()->json([
                 'success' => false,
@@ -728,17 +745,39 @@ class QuizController extends Controller
                 'current_coins' => $user->coins
             ], 400);
         }
-        
+
         // Coin'i düş ve joker'i ekle
         $user->decrement('coins', $totalCost);
         $user->increment($jokerType . '_jokers', $quantity);
-        
+
+        // User'ı yeniden yükle ki güncel joker değerlerini alabilelim
+        $user->refresh();
+
+        // Kullanıcının aktif oyunu varsa, oyunun settings içindeki jokerleri de güncelle
+        $activeGame = IndividualGame::where('user_id', $user->id)
+            ->where('game_type', 'normal')
+            ->where('status', 'active')
+            ->first();
+
+        if ($activeGame) {
+            $settings = $activeGame->settings ?? [];
+
+            // User tablosundaki güncel joker değerlerini settings'e yansıt
+            $settings['jokers'] = [
+                'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                'double_answer' => $user->double_answer_jokers ?? 0,
+                'hint' => $user->hint_jokers ?? 0
+            ];
+
+            $activeGame->update(['settings' => $settings]);
+        }
+
         $jokerNames = [
             'fifty_fifty' => '%50-%50 Joker',
             'double_answer' => 'Çift Cevap Joker',
             'hint' => 'İpucu Joker'
         ];
-        
+
         return response()->json([
             'success' => true,
             'message' => "{$quantity} adet {$jokerNames[$jokerType]} satın alındı.",
@@ -749,7 +788,7 @@ class QuizController extends Controller
             'new_joker_count' => $user->{$jokerType . '_jokers'}
         ]);
     }
-    
+
     /**
      * Sonraki soruyu getir
      */
@@ -757,39 +796,39 @@ class QuizController extends Controller
     {
         $settings = $game->settings ?? [];
         $totalAnswered = $settings['total_questions_answered'] ?? 0;
-        
+
         // İlk 10 soru kolay, sonrakiler rastgele
         if ($totalAnswered < 10) {
             $question = Question::active()
                 ->byLevel('easy')
                 ->inRandomOrder()
                 ->first();
-                
+
             $settings['current_difficulty'] = 'easy';
         } else {
             $difficulties = ['easy', 'medium', 'hard'];
             $randomDifficulty = $difficulties[array_rand($difficulties)];
-            
+
             $question = Question::active()
                 ->byLevel($randomDifficulty)
                 ->inRandomOrder()
                 ->first();
-                
+
             $settings['current_difficulty'] = $randomDifficulty;
         }
-        
+
         $game->update(['settings' => $settings]);
-        
+
         return $question;
     }
-    
+
     /**
      * Socket.IO'ya quiz başlatma bildirimi gönder
      */
     private function broadcastQuizStarted(IndividualGame $game, $question): void
     {
         $webhookService = app(WebhookService::class);
-        
+
         $webhookService->sendQuizStarted(
             $game->id,
             $game->user_id,
@@ -797,14 +836,14 @@ class QuizController extends Controller
             $question
         );
     }
-    
+
     /**
      * Socket.IO'ya quiz cevap bildirimi gönder
      */
     private function broadcastQuizAnswer(IndividualGame $game, User $user, $question, bool $isCorrect, int $coinsChange): void
     {
         $webhookService = app(WebhookService::class);
-        
+
         $webhookService->sendQuizAnswer(
             $game->id,
             $user->id,
@@ -823,14 +862,14 @@ class QuizController extends Controller
             ]
         );
     }
-    
+
     /**
      * Socket.IO'ya quiz tamamlanma bildirimi gönder
      */
     private function broadcastQuizCompleted(IndividualGame $game, User $user, array $answerDetails): void
     {
         $webhookService = app(WebhookService::class);
-        
+
         $webhookService->sendQuizCompleted(
             $game->id,
             $user->id,
@@ -881,7 +920,7 @@ class QuizController extends Controller
     public function startMobileNormalQuiz(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Aktif oyun kontrolü
         $activeGame = IndividualGame::where('user_id', $user->id)
             ->where('game_type', 'normal')
@@ -889,87 +928,145 @@ class QuizController extends Controller
             ->first();
 
         if ($activeGame) {
+            try {
+                // Aktif oyunun settings içindeki jokerleri User tablosundaki güncel değerlerle senkronize et
+                $settings = $activeGame->settings ?? [];
+                $settings['jokers'] = [
+                    'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                    'double_answer' => $user->double_answer_jokers ?? 0,
+                    'hint' => $user->hint_jokers ?? 0
+                ];
+
+                // Settings'i güncelle
+                $activeGame->update(['settings' => $settings]);
+                $activeGame->refresh();
+            } catch (\Exception $e) {
+                \Log::error('Aktif oyun joker güncelleme hatası', [
+                    'error' => $e->getMessage(),
+                    'user_id' => $user->id,
+                    'game_id' => $activeGame->id
+                ]);
+                // Hata olsa bile oyunu döndür
+            }
+
             return response()->json([
-                'success' => false,
+                'success' => true,
                 'message' => 'Zaten aktif bir normal oyununuz var.',
-                'active_game' => $activeGame
-            ], 400);
+                'active_game' => $activeGame,
+                'game' => null,
+                'questions' => null,
+            ], 200);
         }
 
-        $questionCount = $request->question_count ?? 10;
-        $timeLimit = config('app.quiz.normal.time_limit_seconds', 600);
+        try {
+            $questionCount = $request->question_count ?? 10;
+            $timeLimit = config('app.quiz.normal.time_limit_seconds', 600);
 
-        // İlk 10 soru kolay, sonrakiler rastgele
-        $easyQuestions = Question::where('question_level', 'easy')
-            ->where('is_active', true)
-            ->inRandomOrder()
-            ->limit(min(10, $questionCount))
-            ->get();
-
-        $remainingCount = $questionCount - $easyQuestions->count();
-        $randomQuestions = collect();
-        
-        if ($remainingCount > 0) {
-            $randomQuestions = Question::where('is_active', true)
-                ->whereNotIn('id', $easyQuestions->pluck('id'))
+            // İlk 10 soru kolay, sonrakiler rastgele
+            $easyQuestions = Question::where('question_level', 'easy')
+                ->where('is_active', true)
                 ->inRandomOrder()
-                ->limit($remainingCount)
+                ->limit(min(10, $questionCount))
                 ->get();
-        }
 
-        $allQuestions = $easyQuestions->merge($randomQuestions);
+            $remainingCount = $questionCount - $easyQuestions->count();
+            $randomQuestions = collect();
 
-        // Oyun oluştur
-        $game = IndividualGame::create([
-            'user_id' => $user->id,
-            'game_type' => 'normal',
-            'difficulty_level' => 'mixed',
-            'question_count' => $questionCount,
-            'time_limit_seconds' => $timeLimit,
-            'joker_count' => 0,
-            'score' => 0,
-            'correct_answers' => 0,
-            'wrong_answers' => 0,
-            'coins_earned' => 0,
-            'status' => 'active',
-            'started_at' => now(),
-            'settings' => [
-                'easy_questions_count' => $easyQuestions->count(),
-                'current_difficulty' => 'easy',
-                'total_questions_count' => $questionCount
-            ]
-        ]);
+            if ($remainingCount > 0) {
+                $randomQuestions = Question::where('is_active', true)
+                    ->whereNotIn('id', $easyQuestions->pluck('id'))
+                    ->inRandomOrder()
+                    ->limit($remainingCount)
+                    ->get();
+            }
 
-        // Webhook gönder
-        Log::info('Mobil Normal Quiz başlatma webhook gönderiliyor', [
-            'game_id' => $game->id,
-            'user_id' => $game->user_id,
-            'game_type' => 'normal',
-            'question_count' => $questionCount
-        ]);
-        
-        $this->broadcastQuizStarted($game, $allQuestions->first());
+            $allQuestions = $easyQuestions->merge($randomQuestions);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Mobil normal quiz başlatıldı.',
-            'game' => $game,
-            'questions' => $allQuestions->map(function($question) {
-                return [
-                    'id' => $question->id,
-                    'question' => $question->question,
-                    'one_choice' => $question->one_choice,
-                    'two_choice' => $question->two_choice,
-                    'three_choice' => $question->three_choice,
-                    'four_choice' => $question->four_choice,
-                    'correct_answer' => $question->correct_answer,
-                    'category_id' => $question->category_id,
+            // Eğer yeterli soru yoksa hata döndür
+            if ($allQuestions->count() < $questionCount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Yeterli soru bulunamadı. Lütfen daha az soru sayısı deneyin.',
+                    'available_questions' => $allQuestions->count(),
+                    'requested_count' => $questionCount
+                ], 400);
+            }
+
+            // Oyun oluştur
+            // Kullanıcının güncel joker sayılarını al
+            $user->refresh(); // User'ı yeniden yükle
+            $game = IndividualGame::create([
+                'user_id' => $user->id,
+                'game_type' => 'normal',
+                'difficulty_level' => 'mixed',
+                'question_count' => $questionCount,
+                'time_limit_seconds' => $timeLimit,
+                'joker_count' => 0,
+                'score' => 0,
+                'correct_answers' => 0,
+                'wrong_answers' => 0,
+                'coins_earned' => 0,
+                'status' => 'active',
+                'started_at' => now(),
+                'settings' => [
+                    'easy_questions_count' => $easyQuestions->count(),
+                    'current_difficulty' => 'easy',
+                    'total_questions_count' => $questionCount,
+                    'jokers' => [
+                        'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                        'double_answer' => $user->double_answer_jokers ?? 0,
+                        'hint' => $user->hint_jokers ?? 0
+                    ]
+                ]
+            ]);
+
+            // Webhook gönder (soru varsa)
+            if ($allQuestions->isNotEmpty()) {
+                Log::info('Mobil Normal Quiz başlatma webhook gönderiliyor', [
+                    'game_id' => $game->id,
+                    'user_id' => $game->user_id,
+                    'game_type' => 'normal',
+                    'question_count' => $questionCount
+                ]);
+
+                $this->broadcastQuizStarted($game, $allQuestions->first());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mobil normal quiz başlatıldı.',
+                'game' => $game,
+                'questions' => $allQuestions->map(function($question) {
+                    return [
+                        'id' => $question->id,
+                        'question' => $question->question,
+                        'one_choice' => $question->one_choice,
+                        'two_choice' => $question->two_choice,
+                        'three_choice' => $question->three_choice,
+                        'four_choice' => $question->four_choice,
+                        'correct_answer' => $question->correct_answer,
+                        'category_id' => $question->category_id,
                     'question_level' => $question->question_level,
                     'coin_value' => $question->coin_value,
-                    'image' => $question->image
-                ];
-            })
-        ]);
+                    'image' => $question->image ? asset('storage/' . $question->image) : null
+                    ];
+                }),
+                'active_game' => null,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Mobil Normal Quiz başlatma hatası', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Quiz başlatılırken bir hata oluştu: ' . $e->getMessage(),
+                'game' => null,
+                'questions' => null,
+            ], 500);
+        }
     }
 
     /**
@@ -1166,5 +1263,51 @@ class QuizController extends Controller
             default:
                 return '';
         }
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/game-settings",
+     *     summary="Get Game Settings",
+     *     description="Get static game settings including package configurations",
+     *     tags={"Quiz"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Game settings retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Game settings retrieved successfully"),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="packages", type="object",
+     *                     @OA\Property(property="mini_package", type="integer", example=50),
+     *                     @OA\Property(property="medium_package", type="integer", example=100),
+     *                     @OA\Property(property="large_package", type="integer", example=150)
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     )
+     * )
+     */
+    public function getGameSettings(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => 'Game settings retrieved successfully',
+            'data' => [
+                'packages' => [
+                    'mini_package' => 50,
+                    'medium_package' => 100,
+                    'large_package' => 150
+                ]
+            ]
+        ]);
     }
 }

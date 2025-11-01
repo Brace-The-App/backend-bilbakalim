@@ -1185,7 +1185,7 @@ class PremiumQuizController extends Controller
                     'category_id' => $question->category_id,
                     'question_level' => $question->question_level,
                     'coin_value' => $question->coin_value,
-                    'image' => $question->image
+                    'image' => $question->image ? asset('storage/' . $question->image) : null
                 ];
             }),
             'jokers' => [
