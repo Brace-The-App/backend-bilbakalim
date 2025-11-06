@@ -127,8 +127,17 @@ class AuthController extends Controller
      *                 @OA\Property(property="email", type="string", format="email", example="john@example.com"),
      *                 @OA\Property(property="phone", type="string", example="+905551234567"),
      *                 @OA\Property(property="password", type="string", format="password", example="password123"),
-     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="password123")
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
      *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="name", type="string", example="John"),
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="phone", type="string", example="+905551234567"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
+     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
      *         )
      *     ),
      *     @OA\Response(
@@ -160,6 +169,7 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'phone' => 'required|string|max:20',
             'password' => 'required|string|min:8|confirmed',
+            'device_id' => 'nullable|string|max:255',
         ]);
 
         $user = new User();
@@ -170,6 +180,9 @@ class AuthController extends Controller
         $user->account_status = 'active';
         $user->password = bcrypt($request->password);
         $user->coins = 1000;
+        if ($request->has('device_id') && $request->device_id) {
+            $user->device_id = $request->device_id;
+        }
         $user->save();
 
         // Assign default role
@@ -183,19 +196,64 @@ class AuthController extends Controller
         ]);
     }
     /**
-     * Profile Update
-     *
-     * Profile Update the user with given data if valid.
-     *
-     * @bodyParam name string Name for the user.
-     * @bodyParam surname string Surname for the user.
-     * @bodyParam phone string Phone for the user.
-     * @bodyParam email    string The email of the user.
-     * @bodyParam password string Password for the user.
-     *
-     * @param Request $request
-     * @return void
-     * @authenticated
+     * @OA\Post(
+     *     path="/api/me/update",
+     *     summary="Update User Profile",
+     *     description="Update authenticated user's profile information",
+     *     operationId="updateProfile",
+     *     tags={"Auth"},
+     *     security={{"sanctum":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 @OA\Property(property="name", type="string", example="John"),
+     *                 @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *                 @OA\Property(property="phone", type="string", example="+905551234567"),
+     *                 @OA\Property(property="password", type="string", format="password", example="newpassword123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123"),
+     *                 @OA\Property(property="profile_image", type="string", format="binary", description="Profile image file (max: 2MB)"),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="name", type="string", example="John"),
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="phone", type="string", example="+905551234567"),
+     *             @OA\Property(property="password", type="string", format="password", example="newpassword123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123"),
+     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Profile updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Kullanıcı bilgilerini bir şekilde güncellediniz."),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="user", type="object")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     )
+     * )
      */
     public function edit(UserUpdateRequest $request)
     {
@@ -249,14 +307,30 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout
-     *
-     * Logout
-     *
-     * @authenticated
-     *
-     * @return void
-     *
+     * @OA\Post(
+     *     path="/api/logout",
+     *     summary="User Logout",
+     *     description="Logout authenticated user and revoke all access tokens",
+     *     operationId="logout",
+     *     tags={"Auth"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Logout successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Başarılı bir şekilde çıkış yapıldı."),
+     *             @OA\Property(property="data", type="array", @OA\Items())
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     )
+     * )
      */
     public function logout()
     {

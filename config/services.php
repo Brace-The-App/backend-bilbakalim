@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'netgsm' => [
+        'username' => env('NETGSM_USERNAME', '8503055373'),
+        'password' => env('NETGSM_PASSWORD', 'F1AF196'),
+        'msgheader' => env('NETGSM_MSGHEADER', 'ATOM GIDA'),
+        'api_url' => env('NETGSM_API_URL', 'https://api.netgsm.com.tr/sms/rest/v2/send'),
+    ],
+
 ];

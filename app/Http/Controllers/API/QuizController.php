@@ -1146,7 +1146,7 @@ class QuizController extends Controller
 
                 // Cevabı kaydet
                 GameAnswer::create([
-                    'game_id' => $game->id,
+                    'individual_game_id' => $game->id,
                     'game_session_id' => null,
                     'user_id' => $user->id,
                     'question_id' => $question->id,

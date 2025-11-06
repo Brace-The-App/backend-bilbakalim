@@ -32,6 +32,7 @@ class RegisterRequest extends BaseRequest
                 'min:8',
                 'regex:/^.*(?=.{3,})(?=.*[a-zA-Z])(?=.*[0-9]).*$/'
             ],
+            'device_id' => 'nullable|string|max:255',
         ];
     }
 

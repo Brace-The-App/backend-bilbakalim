@@ -4,6 +4,7 @@ namespace App\Http\Services;
 
 use App\Http\Custom\Response;
 use App\Http\Requests\LoginRequest;
+use App\Http\Requests\UserUpdateRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -26,19 +27,27 @@ class AuthServices
 
 
     /**
-     * @param LoginRequest $request
-     * @return array
+     * @param UserUpdateRequest $request
+     * @return User
      */
-    public function edit(LoginRequest $request)
+    public function edit(UserUpdateRequest $request)
     {
         $user = User::findOrFail(Auth::user()->id);
 
-        $input = $request->only(['name', 'surname', 'email', 'phone', 'password']);
+        $input = $request->only(['name', 'email', 'phone', 'password', 'device_id']);
 
         if (!empty($input['password'])) {
             $input['password'] = Hash::make($input['password']);
         } else {
             unset($input['password']);
+        }
+
+        // Profile image upload
+        if ($request->hasFile('profile_image')) {
+            $image = $request->file('profile_image');
+            $imageName = time() . '_' . $image->getClientOriginalName();
+            $image->storeAs('public/profile_images', $imageName);
+            $input['profile_image'] = 'profile_images/' . $imageName;
         }
 
         $user->update($input);

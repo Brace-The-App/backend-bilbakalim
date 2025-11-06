@@ -21,12 +21,15 @@ class UserUpdateRequest extends BaseRequest
      */
     public function rules(): array
     {
+        $userId = auth()->id();
+        
         return [
             'name' => 'nullable|string',
-            'surname' => 'nullable|string',
-            'email' => 'nullable|email|unique:users,email,', 
+            'email' => 'nullable|email|unique:users,email,' . $userId,
             'password' => 'nullable|string|min:6|confirmed',
             'phone' => 'nullable|string',
+            'profile_image' => 'nullable|image|max:2048',
+            'device_id' => 'nullable|string|max:255',
         ];
     }
 }

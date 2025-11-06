@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use App\Http\Services\NetGsmService;
 
 class VerificationCodeService
 {
@@ -125,15 +126,27 @@ class VerificationCodeService
             // Set rate limit
             $this->setRateLimit($phone, 'phone');
 
-            // Here you would integrate with SMS service
-            // For now, we'll just log it
-            Log::info("Verification code for phone {$phone}: {$code} for purpose: {$purpose}");
+            // Send SMS via NetGSM
+            $smsMessage = $this->getSmsMessage($code, $purpose);
+            $netGsmService = new NetGsmService();
+            $smsResult = $netGsmService->sendSms($phone, $smsMessage);
+
+            if (!$smsResult['success']) {
+                Log::error("NetGSM SMS sending failed for phone {$phone}: " . ($smsResult['message'] ?? 'Unknown error'));
+                
+                return [
+                    'success' => false,
+                    'message' => 'SMS gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
+                    'code' => 500
+                ];
+            }
+
+            Log::info("Verification code sent via SMS to phone {$phone} for purpose: {$purpose}");
 
             return [
                 'success' => true,
                 'message' => 'Doğrulama kodu telefon numaranıza gönderildi.',
-                'code' => 200,
-                'debug_code' => $code // Remove this in production
+                'code' => 200
             ];
 
         } catch (\Exception $e) {
@@ -240,6 +253,26 @@ class VerificationCodeService
             'password_reset' => 'Şifre Sıfırlama',
             default => 'Doğrulama'
         };
+    }
+
+    /**
+     * Get SMS message based on purpose
+     *
+     * @param string $code
+     * @param string $purpose
+     * @return string
+     */
+    private function getSmsMessage(string $code, string $purpose): string
+    {
+        $purposeText = match($purpose) {
+            'registration' => 'Hesap doğrulama',
+            'login' => 'Giriş doğrulama',
+            'update' => 'Bilgi güncelleme',
+            'password_reset' => 'Şifre sıfırlama',
+            default => 'Doğrulama'
+        };
+
+        return "{$purposeText} kodunuz: {$code} Bu kod 15 dakika geçerlidir.";
     }
 
     /**
