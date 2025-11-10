@@ -163,22 +163,22 @@ class AuthController extends Controller
      *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 required={"name","email","phone","password","password_confirmation"},
-     *                 @OA\Property(property="name", type="string", example="John"),
-     *                 @OA\Property(property="email", type="string", format="email", example="john@example.com"),
-     *                 @OA\Property(property="phone", type="string", example="+905551234567"),
-     *                 @OA\Property(property="password", type="string", format="password", example="password123"),
-     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
-     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *                 required={"phone"},
+     *                 @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
+     *                 @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *                 @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *             )
      *         ),
      *         @OA\JsonContent(
-     *             @OA\Property(property="name", type="string", example="John"),
-     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
-     *             @OA\Property(property="phone", type="string", example="+905551234567"),
-     *             @OA\Property(property="password", type="string", format="password", example="password123"),
-     *             @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
-     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *             @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
+     *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *         )
      *     ),
      *     @OA\Response(
@@ -205,25 +205,31 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'phone' => 'required|string|max:20',
-            'password' => 'required|string|min:8|confirmed',
-            'device_id' => 'nullable|string|max:255',
-        ]);
+        $data = $request->validated();
 
         $user = new User();
-        $user->name = $request->name;
-        $user->email = $request->email;
         $user->phone = $request->phone;
         $user->role_id = 3;
         $user->account_status = 'active';
-        $user->password = bcrypt($request->password);
         $user->coins = 1000;
+        
+        // Optional alanları ekle
+        if ($request->has('name') && $request->name) {
+            $user->name = $request->name;
+        }
+        
+        if ($request->has('email') && $request->email) {
+            $user->email = $request->email;
+        }
+        
+        if ($request->has('password') && $request->password) {
+            $user->password = bcrypt($request->password);
+        }
+        
         if ($request->has('device_id') && $request->device_id) {
             $user->device_id = $request->device_id;
         }
+        
         $user->save();
 
         // Assign default role
@@ -247,24 +253,36 @@ class AuthController extends Controller
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *                 @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *                 @OA\Property(property="phone", type="string", description="Telefon numarası (opsiyonel)", example="+905551234567"),
+     *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
+     *                 @OA\Property(property="profile_image", type="string", format="binary", description="Profil resmi (opsiyonel, max: 2MB). Dosya olarak gönderilebilir veya base64 string formatında gönderilebilir (data:image/png;base64,...)", example=""),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
+     *             )
+     *         ),
+     *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 @OA\Property(property="name", type="string", example="John"),
-     *                 @OA\Property(property="email", type="string", format="email", example="john@example.com"),
-     *                 @OA\Property(property="phone", type="string", example="+905551234567"),
-     *                 @OA\Property(property="password", type="string", format="password", example="newpassword123"),
-     *                 @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123"),
-     *                 @OA\Property(property="profile_image", type="string", format="binary", description="Profile image file (max: 2MB)"),
-     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *                 @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *                 @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *                 @OA\Property(property="phone", type="string", description="Telefon numarası (opsiyonel)", example="+905551234567"),
+     *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
+     *                 @OA\Property(property="profile_image", type="string", description="Profil resmi base64 string formatında (opsiyonel, max: 2MB). Format: data:image/png;base64,... veya sadece base64 string", example="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *             )
      *         ),
      *         @OA\JsonContent(
-     *             @OA\Property(property="name", type="string", example="John"),
-     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
-     *             @OA\Property(property="phone", type="string", example="+905551234567"),
-     *             @OA\Property(property="password", type="string", format="password", example="newpassword123"),
-     *             @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123"),
-     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (optional)", example="fcm-device-token-12345")
+     *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *             @OA\Property(property="phone", type="string", description="Telefon numarası (opsiyonel)", example="+905551234567"),
+     *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
+     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *         )
      *     ),
      *     @OA\Response(

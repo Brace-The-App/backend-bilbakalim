@@ -9,6 +9,7 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 class AuthServices
 {
@@ -34,25 +35,48 @@ class AuthServices
     {
         $user = User::findOrFail(Auth::user()->id);
 
-        $input = $request->only(['name', 'email', 'phone', 'password', 'device_id']);
+        $input = [];
 
-        if (!empty($input['password'])) {
-            $input['password'] = Hash::make($input['password']);
-        } else {
-            unset($input['password']);
+        // Sadece gönderilen ve dolu alanları ekle
+        if ($request->filled('name')) {
+            $input['name'] = $request->name;
         }
 
-        // Profile image upload
+        if ($request->filled('email')) {
+            $input['email'] = $request->email;
+        }
+
+        if ($request->filled('phone')) {
+            $input['phone'] = $request->phone;
+        }
+
+        if ($request->filled('password')) {
+            $input['password'] = Hash::make($request->password);
+        }
+
+        if ($request->filled('device_id')) {
+            $input['device_id'] = $request->device_id;
+        }
+
+        // Önce dosya olarak gönderilmiş mi kontrol et (multipart/form-data)
         if ($request->hasFile('profile_image')) {
+            // Eski profil resmini sil
+            if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
+                Storage::disk('public')->delete($user->profile_image);
+            }
+
             $image = $request->file('profile_image');
-            $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->storeAs('public/profile_images', $imageName);
-            $input['profile_image'] = 'profile_images/' . $imageName;
+            $path = $image->store('profile_images', 'public');
+            $input['profile_image'] = $path;
         }
 
-        $user->update($input);
 
-        return $user;
+        // Sadece dolu input varsa güncelle
+        if (!empty($input)) {
+            $user->update($input);
+        }
+
+        return $user->fresh();
     }
 
 

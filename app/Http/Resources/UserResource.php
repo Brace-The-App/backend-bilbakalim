@@ -24,6 +24,8 @@ class UserResource extends JsonResource
             'is_premium' => $this->is_premium,
             'account_status' => $this->account_status,
             'created_at' => $this->created_at,
+            'profile_image' => 'https://bilbakalim.online/storage/' . $this->profile_image,
+            'profile_completed' => ($this->name && $this->email && $this->phone && $this->password) ? true : false,
         ];
     }
 }
