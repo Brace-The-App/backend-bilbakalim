@@ -116,11 +116,17 @@ class PremiumQuizController extends Controller
         // Socket.IO'ya quiz başlatma bildirimi gönder
         $this->broadcastQuizStarted($game, $question);
         
+        // Question'dan correct_answer'ı gizle
+        $questionData = $question ? $question->toArray() : null;
+        if ($questionData) {
+            unset($questionData['correct_answer']);
+        }
+        
         return response()->json([
             'success' => true,
             'message' => 'Premium quiz başlatıldı.',
             'game' => $game,
-            'question' => $question,
+            'question' => $questionData,
             'jokers' => $game->settings['jokers']
         ]);
     }
@@ -175,7 +181,7 @@ class PremiumQuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id',
             'question_id' => 'required|exists:questions,id',
-            'selected_option' => 'required|in:1,2,3,4',
+            'selected_option' => 'nullable|in:1,2,3,4',
             'time_spent' => 'nullable|integer|min:1',
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint',
             'second_option' => 'nullable|in:1,2,3,4' // Çift cevap için ikinci seçenek
@@ -197,46 +203,39 @@ class PremiumQuizController extends Controller
         
         $question = Question::find($request->question_id);
         
-        // Joker kullanımı kontrolü
-        $jokerUsed = null;
-        if ($request->joker_used) {
-            $settings = $game->settings;
-            if ($settings['jokers'][$request->joker_used] > 0) {
-                $settings['jokers'][$request->joker_used]--;
-                $jokerUsed = $request->joker_used;
-                $game->update(['settings' => $settings]);
-                
-                // Kullanıcının genel joker sayısını da azalt
-                $this->decrementUserJoker($user, $request->joker_used);
-            }
-        }
-        
-        // Çift cevap joker kontrolü
-        $isCorrect = false;
-        if ($jokerUsed === 'double_answer' && $request->second_option) {
-            // Çift cevap: iki seçenekten biri doğru olmalı
-            $isCorrect = ($question->correct_answer === $request->selected_option) || 
-                        ($question->correct_answer === $request->second_option);
+        // Eğer selected_option null veya boş ise (süre doldu), yanlış olarak işaretle
+        $selectedOption = $request->selected_option;
+        if (empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
+            $isCorrect = false;
+            $selectedOption = null;
+            $jokerUsed = null;
         } else {
-            // Normal cevap
-            $isCorrect = $question->correct_answer === $request->selected_option;
+            // Joker kullanımı kontrolü
+            $jokerUsed = null;
+            if ($request->joker_used) {
+                $settings = $game->settings;
+                if ($settings['jokers'][$request->joker_used] > 0) {
+                    $settings['jokers'][$request->joker_used]--;
+                    $jokerUsed = $request->joker_used;
+                    $game->update(['settings' => $settings]);
+                    
+                    // Kullanıcının genel joker sayısını da azalt
+                    $this->decrementUserJoker($user, $request->joker_used);
+                }
+            }
+            
+            // Çift cevap joker kontrolü
+            if ($jokerUsed === 'double_answer' && $request->second_option) {
+                // Çift cevap: iki seçenekten biri doğru olmalı
+                $isCorrect = ($question->correct_answer === $selectedOption) || 
+                            ($question->correct_answer === $request->second_option);
+            } else {
+                // Normal cevap
+                $isCorrect = $question->correct_answer === $selectedOption;
+            }
         }
         
         $timeSpent = $request->time_spent ?? 30;
-        
-        // Joker kullanımı kontrolü
-        $jokerUsed = null;
-        if ($request->joker_used) {
-            $settings = $game->settings;
-            if ($settings['jokers'][$request->joker_used] > 0) {
-                $settings['jokers'][$request->joker_used]--;
-                $jokerUsed = $request->joker_used;
-                $game->update(['settings' => $settings]);
-                
-                // Kullanıcının genel joker sayısını da azalt
-                $this->decrementUserJoker($user, $request->joker_used);
-            }
-        }
         
         // Cevabı kaydet
         GameAnswer::create([
@@ -244,14 +243,14 @@ class PremiumQuizController extends Controller
             'game_session_id' => null, // Premium quiz için null
             'user_id' => $user->id,
             'question_id' => $question->id,
-            'selected_option' => $request->selected_option,
+            'selected_option' => $selectedOption,
             'is_correct' => $isCorrect,
             'time_spent' => $timeSpent,
             'joker_used' => $jokerUsed,
             'answered_at' => now(),
-            'user_answer' => $jokerUsed === 'double_answer' ? 
-                $request->selected_option . ',' . $request->second_option : 
-                $request->selected_option
+            'user_answer' => ($jokerUsed === 'double_answer' && $selectedOption && $request->second_option) ? 
+                $selectedOption . ',' . $request->second_option : 
+                ($selectedOption ?? null)
         ]);
         
         // Oyun istatistiklerini güncelle
@@ -282,7 +281,6 @@ class PremiumQuizController extends Controller
                 'success' => false,
                 'message' => 'Yanlış cevap! Oyun bitti.',
                 'is_correct' => false,
-                'correct_option' => $question->correct_answer,
                 'earned_coins' => $coinsChange,
                 'game_stats' => [
                     'total_questions' => $game->question_count,
@@ -346,7 +344,6 @@ class PremiumQuizController extends Controller
             return response()->json([
                 'success' => true,
                 'is_correct' => $isCorrect,
-                'correct_option' => $question->correct_answer,
                 'earned_coins' => $coinsChange,
                 'game_completed' => true,
                 'final_stats' => [
@@ -365,10 +362,15 @@ class PremiumQuizController extends Controller
         // Sonraki soruyu getir
         $nextQuestion = $this->getNextPremiumQuestion($game);
         
+        // Sonraki sorudan correct_answer'ı gizle
+        $nextQuestionData = $nextQuestion ? $nextQuestion->toArray() : null;
+        if ($nextQuestionData) {
+            unset($nextQuestionData['correct_answer']);
+        }
+        
         return response()->json([
             'success' => true,
             'is_correct' => $isCorrect,
-            'correct_option' => $question->correct_answer,
             'earned_coins' => $coinsChange,
             'joker_used' => $jokerUsed,
             'game_stats' => [
@@ -380,7 +382,7 @@ class PremiumQuizController extends Controller
                 'user_coins' => $user->coins
             ],
             'jokers' => $game->settings['jokers'],
-            'next_question' => $nextQuestion
+            'next_question' => $nextQuestionData
         ]);
     }
     

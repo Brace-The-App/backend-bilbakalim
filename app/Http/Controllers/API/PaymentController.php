@@ -24,8 +24,8 @@ class PaymentController extends Controller
     /**
      * @OA\Post(
      *     path="/api/payments/initiate",
-     *     summary="Ödeme başlat",
-     *     description="Jeton satın alma için ödeme işlemini başlatır",
+     *     summary="Ödeme işle",
+     *     description="Mobil ödeme tamamlandıktan sonra çağrılır. Ödeme detayını coin_purchases'e kaydeder, coin_history'ye ekler ve kullanıcının coins alanına ekler.",
      *     tags={"Payments"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -33,24 +33,29 @@ class PaymentController extends Controller
      *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 @OA\Property(property="coin_package_id", type="integer", description="Jeton paketi ID"),
-     *                 @OA\Property(property="payment_method", type="string", enum={"credit_card","paypal","apple_pay","google_pay"}, description="Ödeme yöntemi"),
-     *                 @OA\Property(property="payment_provider", type="string", enum={"stripe","paypal","iyzico","paytr"}, description="Ödeme sağlayıcısı")
+     *                 @OA\Property(property="coin_package_id", type="integer", description="Jeton paketi ID", example=1),
+     *                 @OA\Property(property="payment_method", type="string", enum={"credit_card","paypal","apple_pay","google_pay"}, description="Ödeme yöntemi", example="credit_card"),
+     *                 @OA\Property(property="payment_provider", type="string", enum={"stripe","paypal","iyzico","paytr"}, description="Ödeme sağlayıcısı", example="stripe"),
+     *                 @OA\Property(property="status", type="string", enum={"completed","failed"}, description="Ödeme durumu", example="completed"),
+     *                 @OA\Property(property="transaction_id", type="string", description="İşlem ID", example="txn_123456"),
+     *                 @OA\Property(property="payment_data", type="object", description="Ödeme verileri (opsiyonel)")
      *             )
      *         )
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Ödeme başlatıldı",
+     *         description="Ödeme işlendi",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="message", type="string", example="Ödeme başlatıldı"),
+     *             @OA\Property(property="message", type="string", example="Ödeme başarıyla tamamlandı."),
      *             @OA\Property(property="data", type="object",
      *                 @OA\Property(property="payment", type="object"),
      *                 @OA\Property(property="coin_purchase", type="object"),
-     *                 @OA\Property(property="payment_url", type="string", example="https://checkout.stripe.com/pay/..."),
      *                 @OA\Property(property="amount", type="string", example="39.99 TRY"),
-     *                 @OA\Property(property="total_coins", type="integer", example=600)
+     *                 @OA\Property(property="coin_amount", type="integer", example=500),
+     *                 @OA\Property(property="bonus_coins", type="integer", example=100),
+     *                 @OA\Property(property="total_coins", type="integer", example=600),
+     *                 @OA\Property(property="user_coins", type="integer", example=1600)
      *             )
      *         )
      *     )
@@ -58,10 +63,23 @@ class PaymentController extends Controller
      */
     public function initiatePayment(Request $request): JsonResponse
     {
+        // payment_data JSON string ise array'e çevir
+        if ($request->has('payment_data') && is_string($request->payment_data)) {
+            $decoded = json_decode($request->payment_data, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $request->merge(['payment_data' => $decoded]);
+            } else {
+                $request->merge(['payment_data' => null]);
+            }
+        }
+
         $request->validate([
             'coin_package_id' => 'required|exists:coin_packages,id',
             'payment_method' => 'required|in:credit_card,paypal,apple_pay,google_pay',
-            'payment_provider' => 'required|in:stripe,paypal,iyzico,paytr'
+            'payment_provider' => 'required|in:stripe,paypal,iyzico,paytr',
+            'transaction_id' => 'nullable|string',
+            'payment_data' => 'nullable|array',
+            'status' => 'required|in:completed,failed'
         ]);
 
         try {
@@ -78,15 +96,20 @@ class PaymentController extends Controller
 
             DB::beginTransaction();
 
+            $user = Auth::user();
+
             // Ödeme kaydı oluştur
             $payment = Payment::create([
-                'user_id' => Auth::id(),
+                'user_id' => $user->id,
                 'payment_id' => Str::uuid(),
                 'payment_method' => $request->payment_method,
                 'payment_provider' => $request->payment_provider,
                 'amount' => $coinPackage->price,
                 'currency' => $coinPackage->currency,
-                'status' => 'pending',
+                'status' => $request->status,
+                'transaction_id' => $request->transaction_id,
+                'payment_data' => $request->payment_data,
+                'paid_at' => $request->status === 'completed' ? now() : null,
                 'metadata' => [
                     'coin_package_id' => $coinPackage->id,
                     'coin_amount' => $coinPackage->coin_amount,
@@ -95,32 +118,63 @@ class PaymentController extends Controller
                 ]
             ]);
 
-            // Jeton satın alma kaydı oluştur
+            // Coin purchase kaydını oluştur
             $coinPurchase = CoinPurchase::create([
-                'user_id' => Auth::id(),
+                'user_id' => $user->id,
                 'coin_package_id' => $coinPackage->id,
                 'payment_id' => $payment->id,
                 'coin_amount' => $coinPackage->coin_amount,
                 'bonus_coins' => $coinPackage->bonus_coins,
                 'price' => $coinPackage->price,
                 'currency' => $coinPackage->currency,
-                'status' => 'pending'
+                'status' => $request->status === 'completed' ? 'completed' : 'failed',
+                'completed_at' => $request->status === 'completed' ? now() : null
             ]);
+
+            // Ödeme başarılıysa coin işlemlerini yap
+            if ($request->status === 'completed') {
+                // Kullanıcının mevcut coin bakiyesini al
+                $balanceBefore = $user->coins;
+                
+                // Kullanıcının coins alanına coin_package'daki coin_amount'ı ekle
+                $user->increment('coins', $coinPackage->coin_amount);
+                
+                // Güncel bakiyeyi al
+                $balanceAfter = $user->coins;
+                
+                // Coin alım geçmişini coin_history tablosuna kaydet
+                $user->coinHistory()->create([
+                    'coin_amount' => $coinPackage->coin_amount,
+                    'transaction_type' => 'purchase',
+                    'status' => 'completed',
+                    'description' => 'Jeton satın alma',
+                    'metadata' => [
+                        'coin_package_id' => $coinPackage->id,
+                        'coin_purchase_id' => $coinPurchase->id,
+                        'payment_id' => $payment->id,
+                        'coin_amount' => $coinPackage->coin_amount,
+                        'bonus_coins' => $coinPackage->bonus_coins,
+                        'price' => $coinPackage->price,
+                        'currency' => $coinPackage->currency
+                    ],
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $balanceAfter
+                ]);
+            }
 
             DB::commit();
 
-            // Ödeme sağlayıcısına yönlendirme URL'si oluştur
-            $paymentUrl = $this->createPaymentUrl($payment, $request->payment_provider);
-
             return response()->json([
                 'success' => true,
-                'message' => 'Ödeme başlatıldı.',
+                'message' => $request->status === 'completed' ? 'Ödeme başarıyla tamamlandı.' : 'Ödeme başarısız oldu.',
                 'data' => [
                     'payment' => $payment,
                     'coin_purchase' => $coinPurchase,
-                    'payment_url' => $paymentUrl,
                     'amount' => $coinPackage->formatted_price,
-                    'total_coins' => $coinPackage->total_coins
+                    'coin_amount' => $coinPackage->coin_amount,
+                    'bonus_coins' => $coinPackage->bonus_coins,
+                    'total_coins' => $coinPackage->total_coins,
+                    'user_coins' => $user->fresh()->coins
                 ]
             ]);
 
@@ -128,7 +182,7 @@ class PaymentController extends Controller
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Ödeme başlatılırken hata oluştu.',
+                'message' => 'Ödeme işlenirken hata oluştu.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -174,59 +228,6 @@ class PaymentController extends Controller
         ]);
     }
 
-    /**
-     * Ödeme webhook'u
-     */
-    public function paymentWebhook(Request $request): JsonResponse
-    {
-        $request->validate([
-            'payment_id' => 'required',
-            'status' => 'required|in:pending,completed,failed,refunded',
-            'transaction_id' => 'nullable|string',
-            'payment_data' => 'nullable|array'
-        ]);
-
-        $payment = Payment::where('payment_id', $request->payment_id)->first();
-
-        if (!$payment) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Ödeme bulunamadı.'
-            ], 404);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $oldStatus = $payment->status;
-            $payment->update([
-                'status' => $request->status,
-                'transaction_id' => $request->transaction_id,
-                'payment_data' => $request->payment_data,
-                'paid_at' => $request->status === 'completed' ? now() : null,
-                'refunded_at' => $request->status === 'refunded' ? now() : null
-            ]);
-
-            if ($request->status === 'completed' && $oldStatus !== 'completed') {
-                $this->completePayment($payment);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Ödeme durumu güncellendi.'
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Ödeme durumu güncellenirken hata oluştu.',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Ödeme geçmişi
@@ -315,38 +316,53 @@ class PaymentController extends Controller
     }
 
     /**
-     * Ödemeyi tamamla
+     * Ödemeyi tamamla (checkPaymentStatus için)
      */
     private function completePayment(Payment $payment): void
     {
         $coinPurchase = $payment->coinPurchases()->first();
         
         if ($coinPurchase) {
-            // Jeton satın alma işlemini tamamla
-            $coinPurchase->update([
-                'status' => 'completed',
-                'completed_at' => now()
-            ]);
-
-            // Kullanıcının coin'ini güncelle
-            $user = $payment->user;
-            $user->increment('total_coins', $coinPurchase->total_coins);
-
-            // Coin geçmişi kaydet
-            $user->coinHistory()->create([
-                'coin_amount' => $coinPurchase->total_coins,
-                'transaction_type' => 'purchase',
-                'status' => 'completed',
-                'description' => 'Jeton satın alma',
-                'metadata' => [
-                    'coin_package_id' => $coinPurchase->coin_package_id,
-                    'payment_id' => $payment->id,
-                    'coin_amount' => $coinPurchase->coin_amount,
-                    'bonus_coins' => $coinPurchase->bonus_coins
-                ],
-                'balance_before' => $user->total_coins - $coinPurchase->total_coins,
-                'balance_after' => $user->total_coins
-            ]);
+            $this->processCompletedPayment($payment, $coinPurchase);
         }
     }
+
+
+    /**
+     * Tamamlanan ödemeyi işle (eski metod - geriye dönük uyumluluk için)
+     */
+    private function processCompletedPayment(Payment $payment, CoinPurchase $coinPurchase): void
+    {
+        $user = $payment->user;
+        $coinPackage = $coinPurchase->coinPackage;
+        
+        // Kullanıcının mevcut coin bakiyesini al
+        $balanceBefore = $user->coins;
+        
+        // Kullanıcının coins alanına coin_package'daki coin_amount'ı ekle
+        $user->increment('coins', $coinPackage->coin_amount);
+        
+        // Güncel bakiyeyi al
+        $balanceAfter = $user->coins;
+        
+        // Coin alım geçmişini coin_history tablosuna kaydet
+        $user->coinHistory()->create([
+            'coin_amount' => $coinPackage->coin_amount,
+            'transaction_type' => 'purchase',
+            'status' => 'completed',
+            'description' => 'Jeton satın alma',
+            'metadata' => [
+                'coin_package_id' => $coinPackage->id,
+                'coin_purchase_id' => $coinPurchase->id,
+                'payment_id' => $payment->id,
+                'coin_amount' => $coinPackage->coin_amount,
+                'bonus_coins' => $coinPurchase->bonus_coins,
+                'price' => $coinPurchase->price,
+                'currency' => $coinPurchase->currency
+            ],
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter
+        ]);
+    }
+
 }

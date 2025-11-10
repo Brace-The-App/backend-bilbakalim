@@ -56,7 +56,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('payments')->group(function () {
         Route::post('initiate', [PaymentController::class, 'initiatePayment']);
         Route::get('status/{payment_id}', [PaymentController::class, 'checkPaymentStatus']);
-        Route::post('webhook', [PaymentController::class, 'paymentWebhook']);
         Route::get('history', [PaymentController::class, 'paymentHistory']);
         Route::post('cancel', [PaymentController::class, 'cancelPayment']);
     });

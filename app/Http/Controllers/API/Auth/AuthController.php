@@ -42,7 +42,7 @@ class AuthController extends Controller
      * @OA\Post(
      *     path="/api/auth/login",
      *     summary="User Login",
-     *     description="Authenticate user and return access token",
+     *     description="Authenticate user with email or phone and return access token",
      *     operationId="login",
      *     tags={"Auth"},
      *     @OA\RequestBody(
@@ -50,9 +50,33 @@ class AuthController extends Controller
      *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 required={"email","password"},
-     *                 @OA\Property(property="email", type="string", format="email", example="user@example.com"),
-     *                 @OA\Property(property="password", type="string", format="password", example="password123")
+     *                 required={"type","password"},
+     *                 @OA\Property(
+     *                     property="type",
+     *                     type="string",
+     *                     enum={"email", "phone"},
+     *                     description="Login type: email or phone",
+     *                     example="email"
+     *                 ),
+     *                 @OA\Property(
+     *                     property="email",
+     *                     type="string",
+     *                     format="email",
+     *                     description="Email address (required when type is 'email')",
+     *                     example="user@example.com"
+     *                 ),
+     *                 @OA\Property(
+     *                     property="phone",
+     *                     type="string",
+     *                     description="Phone number (required when type is 'phone')",
+     *                     example="+905551234567"
+     *                 ),
+     *                 @OA\Property(
+     *                     property="password",
+     *                     type="string",
+     *                     format="password",
+     *                     example="password123"
+     *                 )
      *             )
      *         )
      *     ),
@@ -82,31 +106,48 @@ class AuthController extends Controller
     public function login(LoginRequest $request)
     {
         $data = $request->validated();
-        // $user = $this->service->login($request);
-        if (Auth::attemptWhen([
-            'email' => $request->email,
-            'password' => $request->password,
-        ], function (User $user) {
-            return true;
-        })) {
-            $user = $request->user();
-            $token = $user->createToken('bilbakalim');
+        $type = $request->input('type', 'email');
+        $password = $request->password;
 
-            $responseData = [];
-            $responseData['user'] = UserResource::make($user);
-            $responseData['accessToken'] = $token->plainTextToken;
-            return Response::withData(true, "Tebrikler başarılı bir şekilde giriş yaptınız.", $responseData);
+        // Type'a göre kullanıcıyı bul
+        if ($type === 'email') {
+            $user = User::where('email', $request->email)->first();
         } else {
+            // Telefon numarası ile arama - farklı formatları kontrol et
+            $phone = $request->phone;
+            $user = User::where(function($query) use ($phone) {
+                $query->where('phone', $phone)
+                      ->orWhere('phone', '+' . $phone) // +90 veya +05 formatı
+                      ->orWhere('phone', ltrim($phone, '0')); // 05 ise 5 ile başlayan format
+
+                // 90 ile başlıyorsa 0 ekleyerek de ara
+                if (strpos($phone, '90') === 0) {
+                    $query->orWhere('phone', '0' . substr($phone, 2));
+                }
+                // 05 ile başlıyorsa 90 ekleyerek de ara
+                if (strpos($phone, '05') === 0) {
+                    $query->orWhere('phone', '90' . substr($phone, 1));
+                }
+            })->first();
+        }
+
+        // Kullanıcı bulunamadıysa veya şifre yanlışsa
+        if (!$user || !Hash::check($password, $user->password)) {
+            $errorField = $type === 'email' ? 'email' : 'phone';
             return Response::error([
-                'email' => ["Incorrect"],
+                $errorField => ["Incorrect"],
                 'password' => ["Incorrect"]
             ], "Lütfen bilgileri kontrol ediniz.");
         }
-        // if (!Auth::attempt($request->only('email', 'password'))) {
-        //     return Response::withoutData(false, "Lütfen bilgileri kontrol ediniz.");
-        // }
 
+        // Kullanıcıyı manuel olarak authenticate et
+        Auth::login($user);
+        $token = $user->createToken('bilbakalim');
 
+        $responseData = [];
+        $responseData['user'] = UserResource::make($user);
+        $responseData['accessToken'] = $token->plainTextToken;
+        return Response::withData(true, "Tebrikler başarılı bir şekilde giriş yaptınız.", $responseData);
     }
 
 

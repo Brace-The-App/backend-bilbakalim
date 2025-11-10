@@ -22,6 +22,7 @@ class CoinPackageController extends Controller
      *     summary="Jeton paketlerini listele",
      *     description="Mevcut jeton paketlerini listeler",
      *     tags={"Coin Packages"},
+     *     security={{"sanctum":{}}},
      *     @OA\Parameter(
      *         name="currency",
      *         in="query",
