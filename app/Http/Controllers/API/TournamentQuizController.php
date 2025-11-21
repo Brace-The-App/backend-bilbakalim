@@ -141,6 +141,7 @@ class TournamentQuizController extends Controller
         
         // Socket ile katılım bildirimi gönder
         $this->broadcastUserJoinedTournament($tournament, $user);
+        $this->sendTournamentJoinWebhook($tournament, $user);
         
         // Minimum katılım kontrolü ve bekleme mesajı
         $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
@@ -214,11 +215,20 @@ class TournamentQuizController extends Controller
             ], 404);
         }
         
-        // Sadece bekleyen durumda ayrılabilir
-        if ($tournamentUser->status !== 'waiting') {
+        // Sadece turnuva başlamadan önce ayrılabilir (registered veya waiting durumunda)
+        // Turnuva başladıktan sonra (active, participating, completed) ayrılamaz
+        if (in_array($tournamentUser->status, ['active', 'participating', 'completed', 'eliminated'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif turnuvadan ayrılamazsınız.'
+            ], 400);
+        }
+        
+        // Turnuva başlamışsa ayrılamaz
+        if ($tournament->status === 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Turnuva başladıktan sonra ayrılamazsınız.'
             ], 400);
         }
         
@@ -1289,10 +1299,21 @@ class TournamentQuizController extends Controller
                 ->pluck('user_id')
                 ->toArray();
             
-            Http::post("{$socketUrl}/webhook/tournament-started", [
+            $questionPayload = $this->formatQuestionForSocket($firstQuestion);
+            $startTime = $tournament->start_time instanceof \Carbon\Carbon
+                ? $tournament->start_time->toISOString()
+                : now()->toISOString();
+            
+            Http::post("{$socketUrl}/socket-webhooks/webhook/tournament-started", [
                 'tournament_id' => $tournament->id,
+                'tournament_type' => $tournament->tournament_type,
                 'participants' => $participants,
                 'question_count' => $tournament->question_count,
+                'time_limit' => $tournament->tournament_type === 'time_based'
+                    ? ($tournament->duration_minutes ? $tournament->duration_minutes * 60 : null)
+                    : null,
+                'start_time' => $startTime,
+                'first_question' => $questionPayload,
                 'timestamp' => now()->toISOString()
             ]);
             
@@ -1377,29 +1398,51 @@ class TournamentQuizController extends Controller
         try {
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
             
-            $currentParticipants = $tournament->participants()->where('status', 'registered')->count();
+            // Tüm kayıtlı katılımcıları say (registered, waiting, participating durumları)
+            $currentParticipants = TournamentUser::where('tournament_id', $tournament->id)
+                ->whereIn('status', ['registered', 'waiting', 'participating'])
+                ->count();
             
-            Http::post("{$socketUrl}/webhook/user-joined-tournament", [
+            $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
+            $readyToStart = $currentParticipants >= $minParticipants;
+            
+            $waitingMessage = $readyToStart 
+                ? "Turnuva başlamaya hazır! ({$currentParticipants}/{$minParticipants})"
+                : "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
+            
+            $response = Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/user-joined-tournament", [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
                 'user_name' => $user->name,
                 'current_participants' => $currentParticipants,
-                'min_participants' => $tournament->min_participants,
-                'waiting_message' => "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$tournament->min_participants})",
+                'min_participants' => $minParticipants,
+                'ready_to_start' => $readyToStart,
+                'waiting_message' => $waitingMessage,
                 'timestamp' => now()->toISOString()
             ]);
             
-            Log::info('Tournament join webhook sent', [
-                'tournament_id' => $tournament->id,
-                'user_id' => $user->id,
-                'current_participants' => $currentParticipants
-            ]);
+            if ($response->successful()) {
+                Log::info('Tournament join webhook sent successfully', [
+                    'tournament_id' => $tournament->id,
+                    'user_id' => $user->id,
+                    'current_participants' => $currentParticipants,
+                    'response' => $response->json()
+                ]);
+            } else {
+                Log::warning('Tournament join webhook failed', [
+                    'tournament_id' => $tournament->id,
+                    'user_id' => $user->id,
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+            }
             
         } catch (\Exception $e) {
             Log::error('Failed to send tournament join webhook', [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
@@ -1764,5 +1807,30 @@ class TournamentQuizController extends Controller
         Log::info('Score updated', [
             'tournament_id' => $tournament->id
         ]);
+    }
+    
+    /**
+     * Socket'e gönderilecek soru formatı
+     */
+    private function formatQuestionForSocket(?Question $question): ?array
+    {
+        if (!$question) {
+            return null;
+        }
+        
+        $question->loadMissing('category');
+        
+        return [
+            'id' => $question->id,
+            'question' => $question->question,
+            'choices' => $question->choices,
+            'question_level' => $question->question_level,
+            'coin_value' => $question->coin_value,
+            'image' => $question->image,
+            'category' => $question->category ? [
+                'id' => $question->category->id,
+                'name' => $question->category->name,
+            ] : null,
+        ];
     }
 }

@@ -341,44 +341,13 @@ socket.on('connect', () => {
 
 #### Client → Server Events
 ```javascript
-// Normal Quiz
-socket.emit('join_normal_quiz', { game_id: 1, user_id: 123 });
-
-// Premium Quiz
-socket.emit('join_premium_quiz', { game_id: 1, user_id: 123 });
-
 // Tournament
 socket.emit('join_tournament', { tournament_id: 1, user_id: 123 });
 ```
 
 #### Server → Client Events (Tüm Webhook'lar)
 
-##### Quiz Events
-```javascript
-// Quiz başlatıldı
-socket.on('quiz-started', (data) => {
-  console.log('Quiz başladı:', data);
-  // data: { game_id, user_id, game_type, question_count, time_limit, timestamp }
-});
 
-// Cevap gönderildi
-socket.on('quiz-answer-submitted', (data) => {
-  console.log('Cevap gönderildi:', data);
-  // data: { game_id, user_id, question_id, is_correct, coins_earned, game_type, user_coins, game_stats, timestamp }
-});
-
-// Joker kullanıldı
-socket.on('quiz-joker-used', (data) => {
-  console.log('Joker kullanıldı:', data);
-  // data: { game_id, user_id, joker_type, result, timestamp }
-});
-
-// Quiz tamamlandı
-socket.on('quiz-completed', (data) => {
-  console.log('Quiz tamamlandı:', data);
-  // data: { game_id, user_id, game_type, final_stats, answer_details, reward, timestamp }
-});
-```
 
 ##### Tournament Events
 ```javascript

@@ -223,8 +223,18 @@ class QuizController extends Controller
             // Joker kullanımı kontrolü
             $jokerUsed = null;
             if ($request->joker_used) {
-                $settings = $game->settings;
-                if ($settings['jokers'][$request->joker_used] > 0) {
+                $settings = $game->settings ?? [];
+                
+                // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
+                if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
+                    $settings['jokers'] = [
+                        'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                        'double_answer' => $user->double_answer_jokers ?? 0,
+                        'hint' => $user->hint_jokers ?? 0
+                    ];
+                }
+                
+                if (isset($settings['jokers'][$request->joker_used]) && $settings['jokers'][$request->joker_used] > 0) {
                     $settings['jokers'][$request->joker_used]--;
                     $jokerUsed = $request->joker_used;
                     $game->update(['settings' => $settings]);
@@ -570,13 +580,15 @@ class QuizController extends Controller
      *             @OA\Schema(
      *                 @OA\Property(property="game_id", type="integer", example=1),
      *                 @OA\Property(property="question_id", type="integer", example=123),
-     *                 @OA\Property(property="joker_type", type="string", example="fifty_fifty", enum={"fifty_fifty", "double_answer", "hint"})
+     *                 @OA\Property(property="joker_type", type="string", example="fifty_fifty", enum={"fifty_fifty", "double_answer", "hint"}),
+     *                 @OA\Property(property="selected_answer", type="string", example="1", description="Seçilen şık (opsiyonel, 1-4 arası)")
      *             )
      *         ),
      *         @OA\JsonContent(
      *             @OA\Property(property="game_id", type="integer", example=1),
      *             @OA\Property(property="question_id", type="integer", example=123),
-     *             @OA\Property(property="joker_type", type="string", example="fifty_fifty", enum={"fifty_fifty", "double_answer", "hint"})
+     *             @OA\Property(property="joker_type", type="string", example="fifty_fifty", enum={"fifty_fifty", "double_answer", "hint"}),
+     *             @OA\Property(property="selected_answer", type="string", example="1", description="Seçilen şık (opsiyonel, 1-4 arası)")
      *         )
      *     ),
      *     @OA\Response(
@@ -585,18 +597,27 @@ class QuizController extends Controller
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="joker_type", type="string", example="fifty_fifty"),
-     *             @OA\Property(property="result", type="object")
+     *             @OA\Property(property="result", type="object"),
+     *             @OA\Property(property="selected_answer", type="string", example="1", nullable=true),
+     *             @OA\Property(property="is_correct", type="boolean", example=true, nullable=true)
      *         )
      *     )
      * )
      */
     public function useJoker(Request $request): JsonResponse
     {
-        $request->validate([
+        $rules = [
             'game_id' => 'required|exists:individual_games,id',
             'question_id' => 'required|exists:questions,id',
-            'joker_type' => 'required|in:fifty_fifty,double_answer,hint'
-        ]);
+            'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
+        ];
+        
+        // selected_answer sadece null değilse ve boş string değilse validation'a ekle
+        if ($request->has('selected_answer') && $request->selected_answer !== null && $request->selected_answer !== '') {
+            $rules['selected_answer'] = 'required|in:1,2,3,4';
+        }
+        
+        $request->validate($rules);
 
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
@@ -616,8 +637,20 @@ class QuizController extends Controller
         $jokerType = $request->joker_type;
 
         // Joker hakkı kontrolü
-        $settings = $game->settings;
-        if ($settings['jokers'][$jokerType] <= 0) {
+        $settings = $game->settings ?? [];
+        
+        // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
+        if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
+            $user = Auth::user();
+            $settings['jokers'] = [
+                'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                'double_answer' => $user->double_answer_jokers ?? 0,
+                'hint' => $user->hint_jokers ?? 0
+            ];
+        }
+        
+        // Joker tipi kontrolü
+        if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
             return response()->json([
                 'success' => false,
                 'message' => 'Bu joker hakkınız kalmamış.'
@@ -642,12 +675,39 @@ class QuizController extends Controller
         $settings['jokers'][$jokerType]--;
         $game->update(['settings' => $settings]);
 
-        return response()->json([
+        // Kullanıcının genel joker sayısını da azalt
+        $this->decrementUserJoker($user, $jokerType);
+
+        // Seçilen cevabın doğruluğunu kontrol et
+        $selectedAnswer = $request->selected_answer;
+        $isCorrect = null;
+        
+        if ($selectedAnswer !== null) {
+            // Çift cevap joker kontrolü
+            if ($jokerType === 'double_answer' && $request->second_option) {
+                // Çift cevap: iki seçenekten biri doğru olmalı
+                $isCorrect = ($question->correct_answer === $selectedAnswer) || 
+                            ($question->correct_answer === $request->second_option);
+            } else {
+                // Normal cevap kontrolü
+                $isCorrect = $question->correct_answer === $selectedAnswer;
+            }
+        }
+
+        $response = [
             'success' => true,
             'joker_type' => $jokerType,
             'result' => $result,
             'jokers_remaining' => $settings['jokers']
-        ]);
+        ];
+
+        // Eğer seçilen cevap gönderildiyse, response'a ekle
+        if ($selectedAnswer !== null) {
+            $response['selected_answer'] = $selectedAnswer;
+            $response['is_correct'] = $isCorrect;
+        }
+
+        return response()->json($response);
     }
 
     /**
@@ -688,9 +748,12 @@ class QuizController extends Controller
      */
     private function useHintJoker(Question $question): array
     {
+        // Şık numarasını harfe çevir (1 -> A, 2 -> B, 3 -> C, 4 -> D)
+        $answerMap = ['1' => 'A', '2' => 'B', '3' => 'C', '4' => 'D'];
+        $answerLetter = $answerMap[$question->correct_answer] ?? $question->correct_answer;
+        
         $hints = [
-            'Bu soru ' . $question->question_level . ' seviyesinde.',
-            'Doğru cevap ' . $question->correct_answer . ' şıkkında.',
+            'Doğru cevap ' . $answerLetter . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
         ];
 
@@ -974,6 +1037,11 @@ class QuizController extends Controller
                 'active_game' => $activeGame,
                 'game' => null,
                 'questions' => null,
+                'jokers' => [
+                    'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                    'double_answer' => $user->double_answer_jokers ?? 0,
+                    'hint' => $user->hint_jokers ?? 0
+                ]
             ], 200);
         }
 
@@ -1071,6 +1139,11 @@ class QuizController extends Controller
                     ];
                 }),
                 'active_game' => null,
+                'jokers' => [
+                    'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                    'double_answer' => $user->double_answer_jokers ?? 0,
+                    'hint' => $user->hint_jokers ?? 0
+                ]
             ]);
         } catch (\Exception $e) {
             \Log::error('Mobil Normal Quiz başlatma hatası', [
@@ -1281,6 +1354,25 @@ class QuizController extends Controller
                 return $question->four_choice['tr'] ?? $question->four_choice;
             default:
                 return '';
+        }
+    }
+
+    /**
+     * Kullanıcının joker sayısını azalt
+     * Her joker kullanımında 1 azaltır
+     */
+    private function decrementUserJoker(User $user, string $jokerType): void
+    {
+        switch ($jokerType) {
+            case 'fifty_fifty':
+                $user->decrement('fifty_fifty_jokers', 1);
+                break;
+            case 'double_answer':
+                $user->decrement('double_answer_jokers', 1);
+                break;
+            case 'hint':
+                $user->decrement('hint_jokers', 1);
+                break;
         }
     }
 

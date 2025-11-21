@@ -220,8 +220,8 @@
                 console.log('Player Eliminated:', data);
             });
 
-            socket.on('tournament_next_question', (data) => {
-                addLog(`📝 Sonraki soru: ${data.questionNumber}. soru`, 'event-tournament');
+            socket.on('tournament-next-question', (data) => {
+                addLog(`📝 Sonraki soru: ${data.question_number}. soru`, 'event-tournament');
                 console.log('Tournament Next Question:', data);
             });
         }

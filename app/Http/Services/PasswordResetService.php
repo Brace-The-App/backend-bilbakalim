@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use App\Http\Services\NetGsmService;
 
 class PasswordResetService
 {
@@ -112,15 +113,27 @@ class PasswordResetService
             // Set rate limit
             $this->setRateLimit($phone, 'phone');
 
-            // Here you would integrate with SMS service
-            // For now, we'll just log it
-            Log::info("Password reset code for phone {$phone}: {$code}");
+            // Send SMS via NetGSM
+            $smsMessage = $this->getSmsMessage($code);
+            $netGsmService = new NetGsmService();
+            $smsResult = $netGsmService->sendSms($phone, $smsMessage);
+
+            if (!$smsResult['success']) {
+                Log::error("NetGSM SMS sending failed for phone {$phone}: " . ($smsResult['message'] ?? 'Unknown error'));
+                
+                return [
+                    'success' => false,
+                    'message' => 'SMS gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
+                    'code' => 500
+                ];
+            }
+
+            Log::info("Password reset code sent via SMS to phone {$phone}");
 
             return [
                 'success' => true,
                 'message' => 'Şifre sıfırlama kodu telefon numaranıza gönderildi.',
-                'code' => 200,
-                'debug_code' => $code // Remove this in production
+                'code' => 200
             ];
 
         } catch (\Exception $e) {
@@ -145,7 +158,7 @@ class PasswordResetService
     public function verifyPasswordResetCode(string $identifier, string $code, string $type = 'email'): array
     {
         try {
-            $verificationResult = $this->verifyCode($identifier, $code, $type);
+            $verificationResult = $this->verifyCodeFromTrait($identifier, $code, $type);
             
             if (!$verificationResult['success']) {
                 return [
@@ -269,5 +282,16 @@ class PasswordResetService
                 'code' => 500
             ];
         }
+    }
+
+    /**
+     * Get SMS message for password reset
+     *
+     * @param string $code
+     * @return string
+     */
+    private function getSmsMessage(string $code): string
+    {
+        return "Şifre sıfırlama kodunuz: {$code} Bu kod 15 dakika geçerlidir.";
     }
 }

@@ -6,8 +6,6 @@
     <title>Socket Test - BilBakalim</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
@@ -17,6 +15,30 @@
         .question-item { border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 5px; }
         .controls { margin: 20px 0; }
         button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            min-width: 220px;
+            padding: 10px 15px;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: fadeIn 0.2s ease, fadeOut 0.2s ease 2.8s forwards;
+        }
+        .toast.success { background: #28a745; }
+        .toast.info { background: #17a2b8; }
+        .toast.warning { background: #ffc107; color: #000; }
+        .toast.error { background: #dc3545; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
     </style>
 </head>
 <body>
@@ -48,6 +70,27 @@
     <script>
         let socket = null;
         let isConnected = false;
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container';
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.appendChild(toastContainer);
+        });
+
+        function showToast(type, message) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        // Eski kodların toastr çağrılarına karşı yedek
+        window.toastr = {
+            success: (msg) => showToast('success', msg || ''),
+            info: (msg) => showToast('info', msg || ''),
+            warning: (msg) => showToast('warning', msg || ''),
+            error: (msg) => showToast('error', msg || '')
+        };
 
         // Socket bağlantısını başlat
         function initSocket() {
@@ -75,25 +118,25 @@
             // Soru eventlerini dinle
             socket.on('question_created', (data) => {
                 addLog('🆕 Yeni soru oluşturuldu: ' + JSON.stringify(data));
-                toastr.success('Yeni soru eklendi!');
+                showToast('success', 'Yeni soru eklendi!');
                 testQuestions(); // Soruları yenile
             });
 
             socket.on('question_updated', (data) => {
                 addLog('✏️ Soru güncellendi: ' + JSON.stringify(data));
-                toastr.info('Soru güncellendi!');
+                showToast('info', 'Soru güncellendi!');
                 testQuestions(); // Soruları yenile
             });
 
             socket.on('question_deleted', (data) => {
                 addLog('🗑️ Soru silindi: ' + JSON.stringify(data));
-                toastr.warning('Soru silindi!');
+                showToast('warning', 'Soru silindi!');
                 testQuestions(); // Soruları yenile
             });
 
             socket.on('category_updated', (data) => {
                 addLog('📁 Kategori güncellendi: ' + JSON.stringify(data));
-                toastr.info('Kategori güncellendi!');
+                showToast('info', 'Kategori güncellendi!');
             });
         }
 
