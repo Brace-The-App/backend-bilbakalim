@@ -1,0 +1,2058 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnuva Test - Tüm Akış</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { opacity: 0.9; }
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        @media (max-width: 1024px) {
+            .content { grid-template-columns: 1fr; }
+        }
+        .panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+        }
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-2px); }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #218838; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-warning:hover { background: #e0a800; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-info:hover { background: #138496; }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.processing { background: #fff3cd; color: #856404; }
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-item {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-left: 3px solid #667eea;
+            padding-left: 10px;
+        }
+        .log-item.success { border-left-color: #28a745; }
+        .log-item.error { border-left-color: #dc3545; }
+        .log-item.warning { border-left-color: #ffc107; }
+        .log-item.info { border-left-color: #17a2b8; }
+        .question-card {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .question-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .option-btn {
+            padding: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .option-btn:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+        }
+        .option-btn.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+        .leaderboard {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .leaderboard-item.first {
+            border-left-color: #ffd700;
+            background: #fff9e6;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .auto-test-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .auto-test-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🏆 Turnuva Test - Tüm Akış</h1>
+        <p>Socket bağlantıları, API istekleri ve turnuva akışının tam testi</p>
+    </div>
+
+    <div class="content">
+        <!-- Sol Panel: Kontroller -->
+        <div class="panel">
+            <h2>⚙️ Kontroller</h2>
+
+            <div id="status" class="status disconnected">
+                ❌ Socket Bağlantısı: Bağlanıyor...
+            </div>
+
+            <div class="input-group">
+                <label>API Base URL:</label>
+                <input type="text" id="apiUrl" value="https://bilbakalim.online/api" placeholder="API URL">
+            </div>
+
+            <div class="input-group">
+                <label>Auth Token:</label>
+                <input type="text" id="authToken" placeholder="Bearer token (login sonrası otomatik doldurulur)">
+            </div>
+
+            <div class="input-group">
+                <label>User ID:</label>
+                <input type="number" id="userId" value="1" placeholder="Kullanıcı ID">
+            </div>
+
+            <div class="input-group">
+                <label>User Name:</label>
+                <input type="text" id="userName" value="Test User" placeholder="Kullanıcı Adı">
+            </div>
+
+            <div class="input-group">
+                <label>Email (Login için):</label>
+                <input type="email" id="email" placeholder="email@example.com">
+            </div>
+
+            <div class="input-group">
+                <label>Password (Login için):</label>
+                <input type="password" id="password" placeholder="Şifre">
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border: 2px solid #ffc107;">
+                <h3 style="color: #856404; margin-bottom: 15px;">🏆 Turnuva Ayarları</h3>
+
+                <div class="input-group">
+                    <label>Turnuva Türü:</label>
+                    <select id="tournamentType" onchange="updateTournamentSettings()">
+                        <option value="question_based">Soru Bazlı (Question Based)</option>
+                        <option value="time_based">Süre Bazlı (Time Based)</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="questionCountGroup">
+                    <label>Soru Sayısı (Question Based için):</label>
+                    <input type="number" id="totalQuestions" value="5" min="1" max="20" placeholder="Soru sayısı">
+                </div>
+
+                <div class="input-group" id="durationGroup" style="display: none;">
+                    <label>Süre (Time Based için - dakika):</label>
+                    <input type="number" id="durationMinutes" value="5" min="1" max="120" placeholder="Dakika">
+                </div>
+
+                <div class="input-group">
+                    <label>Minimum Katılımcı Sayısı:</label>
+                    <input type="number" id="minParticipants" value="1" min="1" max="10" placeholder="Min katılımcı">
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background: #f0f4ff; border-radius: 8px; border: 2px solid #667eea;">
+                <p style="color: #666; margin-bottom: 15px; font-size: 14px;">Tüm API'ler socket event'lerini de tetikler</p>
+
+                <h3 style="color: #667eea; margin-bottom: 10px; font-size: 16px;">1️⃣ Bağlantı ve Giriş</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn btn-success" onclick="login()">🔑 Login</button>
+                    <button class="btn btn-primary" onclick="connectSocket()">🔌 Socket Bağlan</button>
+                    <button class="btn btn-info" onclick="userJoin()">👤 User Join</button>
+                </div>
+
+                <h3 style="color: #667eea; margin-bottom: 10px; font-size: 16px;">2️⃣ Turnuva İşlemleri</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn btn-warning" onclick="createTournament()">➕ Turnuva Oluştur</button>
+                    <button class="btn btn-success" onclick="joinTournamentSocket()">🏆 Socket'e Katıl</button>
+                    <button class="btn btn-success" onclick="joinTournamentAPI()">📡 Turnuvaya Katıl</button>
+                    <button class="btn btn-warning" onclick="startTournament()">🚀 Turnuva Başlat</button>
+                </div>
+
+                <h3 style="color: #667eea; margin-bottom: 10px; font-size: 16px;">3️⃣ Oyun Akışı</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn btn-info" onclick="getQuestion()">❓ Soru Al</button>
+                    <button class="btn btn-success" onclick="getStatus()">📊 Durum</button>
+                    <button class="btn btn-info" onclick="getResults()">🏁 Sonuçlar</button>
+                </div>
+
+                <h3 style="color: #667eea; margin-bottom: 10px; font-size: 16px;">4️⃣ Yardımcı İşlemler</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn btn-primary" onclick="checkUserConnection()">🔍 Kullanıcı Bağlantı Kontrol</button>
+                    <button class="btn btn-primary" onclick="getSocketHealth()">💚 Socket Health</button>
+                    <button class="btn btn-info" onclick="getTournamentUsers()">👥 Turnuva Kullanıcıları</button>
+                    <button class="btn btn-warning" onclick="checkTournamentTime()">⏱️ Süre Kontrol</button>
+                    <button class="btn btn-info" onclick="getWaitingStatus()">⏳ Bekleme Durumu</button>
+                </div>
+
+                <h3 style="color: #667eea; margin-bottom: 10px; font-size: 16px;">5️⃣ Diğer</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    <button class="btn btn-success" onclick="getActiveMultiplayer()">🎮 Aktif Multiplayer</button>
+                    <button class="btn btn-success" onclick="getQuestionBased()">❓ Question Based</button>
+                    <button class="btn btn-danger" onclick="leaveTournament()">🚪 Turnuvadan Ayrıl</button>
+                    <button class="btn btn-danger" onclick="clearLogs()">🗑️ Logları Temizle</button>
+                </div>
+            </div>
+
+            <button class="btn auto-test-btn" onclick="runFullTest()">
+                🚀 OTOMATIK TAM TEST ÇALIŞTIR
+            </button>
+
+            <div id="progress" style="margin-top: 20px; display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sağ Panel: Loglar ve Bilgiler -->
+        <div class="panel">
+            <h2>📝 Event Logları</h2>
+            <div id="logs" class="log-container"></div>
+        </div>
+    </div>
+
+    <!-- Soru Kartı -->
+    <div class="panel" style="margin: 20px; display: none;" id="questionPanel">
+        <h2>❓ Mevcut Soru</h2>
+        <div id="questionCard" class="question-card">
+            <p>Soru yükleniyor...</p>
+        </div>
+    </div>
+
+    <!-- Leaderboard / Tournament Users -->
+    <div class="panel" style="margin: 20px; display: none;" id="leaderboardPanel">
+        <h2>📊 Leaderboard</h2>
+        <div id="leaderboard"></div>
+    </div>
+</div>
+
+<script>
+    const API_URL = 'https://bilbakalim.online/api';
+    const SOCKET_URL = 'https://bilbakalim.online';
+
+    let socket = null;
+    let authToken = null;
+    let currentTournamentId = null;
+    let currentQuestion = null;
+    let currentQuestionNumber = 0;
+    let totalQuestions = 5;
+    let testStep = 0;
+    let testSteps = [];
+    let waitingForNextQuestion = false; // Yeni soru bekleniyor mu?
+    let currentTournamentType = 'question_based'; // Mevcut turnuva türü
+
+    // Turnuva türü değiştiğinde ayarları güncelle
+    function updateTournamentSettings() {
+        const tournamentType = document.getElementById('tournamentType')?.value || 'question_based';
+        currentTournamentType = tournamentType;
+
+        const questionCountGroup = document.getElementById('questionCountGroup');
+        const durationGroup = document.getElementById('durationGroup');
+
+        if (tournamentType === 'question_based') {
+            questionCountGroup.style.display = 'block';
+            durationGroup.style.display = 'none';
+        } else if (tournamentType === 'time_based') {
+            questionCountGroup.style.display = 'none';
+            durationGroup.style.display = 'block';
+        }
+
+        addLog(`🔄 Turnuva türü değiştirildi: ${tournamentType === 'question_based' ? 'Soru Bazlı' : 'Süre Bazlı'}`, 'info');
+    }
+
+    // API Response helper - meta.status veya success formatını destekler
+    function parseApiResponse(data) {
+        // Format 1: { meta: { status, message }, data: {...} }
+        if (data.meta && data.meta.status !== undefined) {
+            return {
+                success: data.meta.status,
+                message: data.meta.message,
+                data: data.data || data
+            };
+        }
+        // Format 2: { success, message, data } veya direkt data
+        return {
+            success: data.success !== undefined ? data.success : true,
+            message: data.message || '',
+            data: data.data || data
+        };
+    }
+
+    // Socket bağlantısı
+    function connectSocket() {
+        if (socket && socket.connected) {
+            addLog('⚠️ Socket zaten bağlı', 'warning');
+            return;
+        }
+
+        addLog('🔌 Socket bağlantısı kuruluyor...', 'info');
+        socket = io(SOCKET_URL, {
+            transports: ['websocket', 'polling'],
+            path: '/socket.io',
+            reconnection: true,
+            reconnectionDelay: 1000
+        });
+
+        setupSocketListeners();
+    }
+
+    // Socket event listener'ları
+    function setupSocketListeners() {
+        socket.on('connect', () => {
+            updateStatus('✅ Socket Bağlandı', 'connected');
+            addLog('✅ Socket bağlantısı kuruldu: ' + socket.id, 'success');
+        });
+
+        socket.on('disconnect', () => {
+            updateStatus('❌ Socket Bağlantısı Kesildi', 'disconnected');
+            addLog('❌ Socket bağlantısı kesildi', 'error');
+        });
+
+        socket.on('connect_error', (error) => {
+            updateStatus('❌ Socket Bağlantı Hatası', 'disconnected');
+            addLog('❌ Socket bağlantı hatası: ' + error.message, 'error');
+        });
+
+        socket.on('welcome', (data) => {
+            addLog('👋 Welcome: ' + JSON.stringify(data, null, 2), 'success');
+        });
+
+        socket.on('joined_tournament', (data) => {
+            addLog('🏆 joined_tournament: ' + JSON.stringify(data, null, 2), 'success');
+        });
+
+        socket.on('user-joined-tournament', (data) => {
+            addLog('👥 ✅ user-joined-tournament EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'success');
+            console.log('👥 user-joined-tournament event:', data);
+
+            // Turnuva bilgisi ve bekleyen kullanıcıları göster
+            if (data.users_in_room && data.users_in_room.length > 0) {
+                let userList = `\n📋 Turnuva Odasındaki Kullanıcılar (${data.users_in_room.length}):\n`;
+                data.users_in_room.forEach((user, index) => {
+                    userList += `${index + 1}. ${user.userName || user.name} (ID: ${user.userId})\n`;
+                });
+                addLog(userList, 'info');
+            }
+
+            addLog(`📊 Turnuva Bilgisi: ${data.current_participants || 0}/${data.min_participants || 0} katılımcı, Hazır: ${data.ready_to_start ? 'Evet' : 'Hayır'}`, 'info');
+        });
+
+        socket.on('waiting-players', (data) => {
+            addLog('⏳ ✅ waiting-players EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'info');
+            console.log('⏳ waiting-players event:', data);
+
+            // Bekleyen kullanıcıları göster
+            if (data.users_in_room && data.users_in_room.length > 0) {
+                let userList = `\n⏳ Bekleyen Kullanıcılar (${data.users_in_room.length}):\n`;
+                data.users_in_room.forEach((user, index) => {
+                    userList += `${index + 1}. ${user.userName || user.name} (ID: ${user.userId})\n`;
+                });
+                addLog(userList, 'info');
+            }
+
+            addLog(`📊 Durum: ${data.waiting_message || 'Bekleniyor...'}`, 'info');
+        });
+
+        socket.on('tournament-started', (data) => {
+            addLog('🚀 ✅ tournament-started EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'success');
+            console.log('🚀 tournament-started event:', data);
+
+            // Gerçek katılımcı bilgilerini göster
+            if (data.participants_info && data.participants_info.length > 0) {
+                let participantList = `\n👥 Turnuva Katılımcıları (${data.participants_info.length}):\n`;
+                data.participants_info.forEach((participant, index) => {
+                    participantList += `${index + 1}. ${participant.userName} (ID: ${participant.userId})\n`;
+                });
+                addLog(participantList, 'info');
+            }
+
+            if (data.first_question) {
+                // first_question formatını choices formatına dönüştür
+                const question = { ...data.first_question };
+                if (!question.choices && (question.one_choice || question.two_choice || question.three_choice || question.four_choice)) {
+                    question.choices = {};
+                    if (question.one_choice) question.choices['1'] = question.one_choice;
+                    if (question.two_choice) question.choices['2'] = question.two_choice;
+                    if (question.three_choice) question.choices['3'] = question.three_choice;
+                    if (question.four_choice) question.choices['4'] = question.four_choice;
+                }
+                displayQuestion(question);
+            }
+        });
+
+        socket.on('tournament-answer-submitted', async (data) => {
+            addLog('📝 ✅ tournament-answer-submitted EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'success');
+            console.log('📝 tournament-answer-submitted event:', data);
+
+            // Leaderboard güncelle
+            if (data.leaderboard && data.leaderboard.length > 0) {
+                displayLeaderboard(data.leaderboard);
+                addLog('📊 Leaderboard güncellendi (Socket)', 'info');
+            }
+
+            // Cevap sonucu bilgisi
+            if (data.is_correct !== undefined) {
+                const result = data.is_correct ? '✅ Doğru' : '❌ Yanlış';
+                addLog(`${result} - Skor: ${data.score || 0} (Değişim: ${data.score_change || 0})`, data.is_correct ? 'success' : 'error');
+            }
+
+            // Socket'ten next_question gelirse onu kullan
+            if (data.next_question) {
+                addLog('🔄 Socket\'ten yeni soru geldi', 'info');
+                waitingForNextQuestion = false; // Artık beklemiyoruz
+                currentQuestion = data.next_question;
+                displayQuestion(data.next_question);
+            } else if (waitingForNextQuestion) {
+                // Eğer hala yeni soru bekliyorsak ve socket'ten gelmediyse API'den çek
+                addLog('📡 Socket\'ten soru gelmedi, API\'den yeni soru çekiliyor...', 'info');
+                waitingForNextQuestion = false;
+                await fetchNextQuestion();
+            }
+        });
+
+        socket.on('tournament-ranking-updated', (data) => {
+            addLog('📊 ✅ tournament-ranking-updated EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'info');
+            console.log('📊 tournament-ranking-updated event:', data);
+            if (data.rankings) {
+                displayLeaderboard(data.rankings);
+            }
+        });
+
+        socket.on('tournament-next-question', async (data) => {
+            addLog('🔄 ✅ tournament-next-question EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'info');
+            console.log('🔄 tournament-next-question event:', data);
+
+            if (data.question) {
+                waitingForNextQuestion = false; // Artık beklemiyoruz
+
+                // Question formatını dönüştür
+                const question = { ...data.question };
+                if (!question.choices && (question.one_choice || question.two_choice || question.three_choice || question.four_choice)) {
+                    question.choices = {};
+                    if (question.one_choice) question.choices['1'] = question.one_choice;
+                    if (question.two_choice) question.choices['2'] = question.two_choice;
+                    if (question.three_choice) question.choices['3'] = question.three_choice;
+                    if (question.four_choice) question.choices['4'] = question.four_choice;
+                }
+
+                currentQuestion = question;
+                displayQuestion(question);
+
+                if (currentTournamentType === 'time_based') {
+                    addLog(`📝 Yeni soru gösteriliyor (Süre Bazlı Turnuva) - Socket`, 'success');
+                } else {
+                    addLog(`📝 Soru ${data.question_number || '?'}/${data.total_questions || '?'} gösteriliyor (Socket)`, 'success');
+                }
+            } else if (waitingForNextQuestion) {
+                // Eğer hala yeni soru bekliyorsak ve socket'ten gelmediyse API'den çek
+                addLog('⚠️ Socket\'ten soru gelmedi, API\'den çekiliyor...', 'warning');
+                waitingForNextQuestion = false;
+                await fetchNextQuestion();
+            }
+        });
+
+        socket.on('player-eliminated', (data) => {
+            addLog('❌ ✅ player-eliminated EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'warning');
+            console.log('❌ player-eliminated event:', data);
+        });
+
+        socket.on('tournament-finished', (data) => {
+            addLog('🏁 ✅ tournament-finished EVENT ALINDI: ' + JSON.stringify(data, null, 2), 'success');
+            console.log('🏁 tournament-finished event:', data);
+            displayLeaderboard(data.final_rankings || []);
+        });
+
+        socket.on('test-response', (data) => {
+            addLog(`✅ Test event response: ${data.event} - ${data.message}`, 'success');
+            if (data.data) {
+                addLog(`📦 Dönen Data: ${JSON.stringify(data.data, null, 2)}`, 'info');
+            }
+            if (data.waiting_data) {
+                addLog(`⏳ Waiting Data: ${JSON.stringify(data.waiting_data, null, 2)}`, 'info');
+            }
+        });
+
+        socket.on('join_tournament_error', (error) => {
+            addLog('❌ join_tournament_error: ' + JSON.stringify(error, null, 2), 'error');
+        });
+
+        // Eski format event'ler (geriye uyumluluk)
+        socket.on('user_joined_tournament', (data) => {
+            addLog('👥 user_joined_tournament (eski format): ' + JSON.stringify(data, null, 2), 'info');
+        });
+
+        socket.on('tournament_joined', (data) => {
+            addLog('🎯 tournament_joined (kullanıcıya özel): ' + JSON.stringify(data, null, 2), 'success');
+        });
+
+        socket.on('user-left-tournament', (data) => {
+            addLog('👋 user-left-tournament: ' + JSON.stringify(data, null, 2), 'warning');
+        });
+
+        socket.on('tournament-users', (data) => {
+            addLog('👥 tournament-users (socket): ' + JSON.stringify(data, null, 2), 'success');
+            if (data.users && data.users.length > 0) {
+                displayTournamentUsers(data.users);
+            }
+        });
+
+        socket.on('tournament-users-error', (error) => {
+            addLog('❌ tournament-users-error: ' + JSON.stringify(error, null, 2), 'error');
+        });
+
+        // Tüm socket event'lerini detaylı logla
+        socket.onAny((eventName, ...args) => {
+            if (!['connect', 'disconnect', 'connect_error'].includes(eventName)) {
+                addLog(`📡 Socket Event [${eventName}]: ` + JSON.stringify(args, null, 2), 'info');
+            }
+        });
+    }
+
+    // Login
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        if (!email || !password) {
+            addLog('❌ Email ve şifre gereklidir', 'error');
+            return;
+        }
+
+        try {
+            addLog('🔑 Login yapılıyor...', 'info');
+            const response = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: 'email',
+                    email: email,
+                    password: password
+                })
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success && parsed.data && parsed.data.accessToken) {
+                authToken = parsed.data.accessToken;
+                document.getElementById('authToken').value = authToken;
+                document.getElementById('userId').value = parsed.data.user.id;
+                document.getElementById('userName').value = parsed.data.user.name || 'Test User';
+                addLog('✅ Login başarılı: ' + JSON.stringify(parsed.data.user, null, 2), 'success');
+            } else {
+                addLog('❌ Login hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Login hatası: ' + error.message, 'error');
+        }
+    }
+
+    // User Join
+    function userJoin() {
+        if (!socket || !socket.connected) {
+            addLog('❌ Önce socket bağlantısı kurun', 'error');
+            return;
+        }
+
+        const userId = parseInt(document.getElementById('userId').value);
+        const userName = document.getElementById('userName').value;
+
+        if (!userId || !userName) {
+            addLog('❌ User ID ve User Name gereklidir', 'error');
+            return;
+        }
+
+        const emitData = { userId, userName };
+        addLog('📤 user_join emit ediliyor: ' + JSON.stringify(emitData, null, 2), 'info');
+        socket.emit('user_join', emitData);
+        addLog('✅ user_join gönderildi: User ' + userId + ' (' + userName + ')', 'success');
+    }
+
+    // Turnuva Oluştur
+    async function createTournament() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        try {
+            // Turnuva türünü al
+            const tournamentType = document.getElementById('tournamentType')?.value || 'question_based';
+            const totalQuestions = document.getElementById('totalQuestions')?.value || 5;
+            const durationMinutes = document.getElementById('durationMinutes')?.value || 5;
+            const minParticipants = document.getElementById('minParticipants')?.value || 1;
+
+            addLog(`➕ ${tournamentType === 'question_based' ? 'Soru Bazlı' : 'Süre Bazlı'} Turnuva oluşturuluyor...`, 'info');
+
+            const requestBody = {
+                type: tournamentType,
+                min_participants: parseInt(minParticipants)
+            };
+
+            // Turnuva türüne göre parametreleri ekle
+            if (tournamentType === 'question_based') {
+                requestBody.question_count = parseInt(totalQuestions);
+            } else if (tournamentType === 'time_based') {
+                requestBody.duration_minutes = parseInt(durationMinutes);
+            }
+
+            addLog('📤 Gönderilen data: ' + JSON.stringify(requestBody, null, 2), 'info');
+
+            const response = await fetch(`${API_URL}/tournament-quiz/create-or-join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success && parsed.data.tournament) {
+                currentTournamentId = parsed.data.tournament.id;
+                addLog('✅ Turnuva oluşturuldu: ' + JSON.stringify(parsed.data.tournament, null, 2), 'success');
+            } else {
+                addLog('❌ Turnuva oluşturma hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Turnuva oluşturma hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Socket'e Turnuva Odasına Katıl
+    function joinTournamentSocket() {
+        if (!socket || !socket.connected) {
+            addLog('❌ Önce socket bağlantısı kurun', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        const userId = parseInt(document.getElementById('userId').value);
+        const emitData = {
+            tournamentId: parseInt(currentTournamentId),
+            userId: userId
+        };
+
+        addLog('📤 join_tournament emit ediliyor: ' + JSON.stringify(emitData, null, 2), 'info');
+        socket.emit('join_tournament', emitData);
+        addLog('✅ join_tournament gönderildi: Tournament ' + currentTournamentId + ', User ' + userId, 'success');
+    }
+
+    // API'ye Turnuvaya Katıl
+    async function joinTournamentAPI() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('📡 API\'ye turnuvaya katılma isteği gönderiliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    tournament_id: parseInt(currentTournamentId)
+                })
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                addLog('✅ API\'ye katılım başarılı: ' + JSON.stringify(parsed.data, null, 2), 'success');
+            } else {
+                addLog('❌ API katılım hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ API katılım hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Turnuva Başlat
+    async function startTournament() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('🚀 Turnuva başlatılıyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    tournament_id: parseInt(currentTournamentId)
+                })
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                // Turnuva türünü güncelle
+                if (parsed.data.tournament) {
+                    currentTournamentType = parsed.data.tournament.tournament_type || currentTournamentType;
+                    addLog(`📊 Turnuva Türü: ${currentTournamentType === 'question_based' ? 'Soru Bazlı' : 'Süre Bazlı'}`, 'info');
+                }
+
+                addLog('✅ Turnuva başlatıldı: ' + JSON.stringify(parsed.data, null, 2), 'success');
+                if (parsed.data.first_question) {
+                    // first_question formatını choices formatına dönüştür
+                    const question = { ...parsed.data.first_question };
+                    if (!question.choices && (question.one_choice || question.two_choice || question.three_choice || question.four_choice)) {
+                        question.choices = {};
+                        if (question.one_choice) question.choices['1'] = question.one_choice;
+                        if (question.two_choice) question.choices['2'] = question.two_choice;
+                        if (question.three_choice) question.choices['3'] = question.three_choice;
+                        if (question.four_choice) question.choices['4'] = question.four_choice;
+                    }
+                    currentQuestion = question;
+                    displayQuestion(question);
+                }
+            } else {
+                addLog('❌ Turnuva başlatma hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Turnuva başlatma hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Soru Al
+    async function getQuestion(questionNumber = null) {
+        if (!authToken || !currentTournamentId) {
+            addLog('❌ Önce login yapın ve turnuva oluşturun', 'error');
+            return false;
+        }
+
+        try {
+            // Turnuva türüne göre soru çekme stratejisi
+            let url;
+            if (currentTournamentType === 'time_based') {
+                // Süre bazlı turnuva: Mevcut aktif soruyu al
+                addLog('📡 Süre bazlı turnuva - Mevcut aktif soru çekiliyor...', 'info');
+                url = `${API_URL}/tournament-quiz/questions/${currentTournamentId}`;
+            } else {
+                // Soru bazlı turnuva: Soru numarasına göre soru al
+                const qNum = questionNumber || (currentQuestionNumber + 1);
+                addLog(`📡 Soru bazlı turnuva - API'den soru çekiliyor... (Soru ${qNum})`, 'info');
+                url = `${API_URL}/tournament-quiz/questions/${currentTournamentId}${qNum > 1 ? `?question_number=${qNum}` : ''}`;
+            }
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+
+                // Turnuva aktif değil hatası ise turnuva bitmiş olabilir
+                if (response.status === 400 && errorText.includes('aktif değil')) {
+                    addLog('🏁 Turnuva bitmiş görünüyor, sonuçlar alınıyor...', 'info');
+                    await getResults();
+                    return false;
+                }
+
+                addLog(`❌ HTTP ${response.status}: ${errorText}`, 'error');
+                return false;
+            }
+
+            const responseData = await response.json();
+            addLog('📥 API Response: ' + JSON.stringify(responseData, null, 2), 'info');
+            const parsed = parseApiResponse(responseData);
+
+            // Turnuva bitmiş kontrolü
+            if (parsed.data && parsed.data.tournament_finished) {
+                addLog('🏁 Turnuva bitmiş, sonuçlar alınıyor...', 'info');
+                await getResults();
+                return false;
+            }
+
+            // Farklı response formatlarını kontrol et
+            let question = null;
+            if (parsed.success) {
+                // Format 1: { success: true, question: {...} }
+                if (parsed.data && parsed.data.question) {
+                    question = parsed.data.question;
+                }
+                // Format 2: { success: true, first_question: {...} } - turnuva başlatıldığında
+                else if (parsed.data && parsed.data.first_question) {
+                    question = parsed.data.first_question;
+                }
+                // Format 3: { success: true, data: { id: ... } } - direkt question
+                else if (parsed.data && parsed.data.id) {
+                    question = parsed.data;
+                }
+                // Format 4: { success: true, data: {...} } - nested
+                else if (parsed.data) {
+                    question = parsed.data;
+                }
+            }
+
+            // Eğer question one_choice formatındaysa choices formatına dönüştür
+            if (question && (question.one_choice || question.two_choice || question.three_choice || question.four_choice)) {
+                if (!question.choices) {
+                    question.choices = {};
+                }
+                if (question.one_choice) {
+                    question.choices['1'] = question.one_choice;
+                }
+                if (question.two_choice) {
+                    question.choices['2'] = question.two_choice;
+                }
+                if (question.three_choice) {
+                    question.choices['3'] = question.three_choice;
+                }
+                if (question.four_choice) {
+                    question.choices['4'] = question.four_choice;
+                }
+                addLog('📝 Soru formatı dönüştürüldü (one_choice -> choices)', 'info');
+            }
+
+            // Question null kontrolü ve format kontrolü
+            if (!question) {
+                addLog('⚠️ Soru bulunamadı. Response: ' + JSON.stringify(responseData, null, 2), 'warning');
+                return false;
+            }
+
+            // Question objesi kontrolü
+            if (!question.id) {
+                addLog('⚠️ Soru ID bulunamadı. Question: ' + JSON.stringify(question, null, 2), 'warning');
+                return false;
+            }
+
+            // Soruyu kaydet ve göster
+            currentQuestion = question;
+
+            // Turnuva türüne göre bilgileri güncelle
+            if (currentTournamentType === 'time_based') {
+                // Süre bazlı turnuva için kalan süreyi göster
+                if (parsed.data && parsed.data.time_remaining !== undefined) {
+                    const minutes = Math.floor(parsed.data.time_remaining / 60);
+                    const seconds = parsed.data.time_remaining % 60;
+                    addLog(`⏱️ Kalan Süre: ${minutes}:${seconds.toString().padStart(2, '0')}`, 'info');
+                }
+            } else {
+                // Soru bazlı turnuva için soru numarası ve toplam soru sayısını güncelle
+                if (parsed.data && parsed.data.question_number) {
+                    currentQuestionNumber = parsed.data.question_number - 1;
+                    addLog(`📊 Soru numarası güncellendi: ${parsed.data.question_number}`, 'info');
+                }
+                if (parsed.data && parsed.data.total_questions) {
+                    totalQuestions = parsed.data.total_questions;
+                    addLog(`📊 Toplam soru sayısı: ${totalQuestions}`, 'info');
+                }
+            }
+
+            // Soruyu göster
+            displayQuestion(question);
+            addLog('✅ Soru alındı ve gösterildi', 'success');
+            addLog(`📝 Soru ID: ${question.id}`, 'info');
+
+            const questionText = typeof question.question === 'object'
+                ? (question.question.tr || question.question.en || JSON.stringify(question.question))
+                : (question.question || 'Soru metni yok');
+            addLog(`📝 Soru: ${questionText.substring(0, 100)}${questionText.length > 100 ? '...' : ''}`, 'info');
+
+            return true;
+        } catch (error) {
+            addLog('❌ Soru alma hatası: ' + error.message, 'error');
+            console.error('Get question error:', error);
+            return false;
+        }
+    }
+
+    // Cevap Gönder (Socket ve API kullanarak) - Eş zamanlı çalışır
+    async function submitAnswer(selectedOption) {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return false;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return false;
+        }
+
+        if (!currentQuestion || !currentQuestion.id) {
+            addLog('❌ Mevcut soru bulunamadı, önce soru alın', 'error');
+            return false;
+        }
+
+        try {
+            addLog(`📝 Cevap gönderiliyor: ${selectedOption} (Soru ID: ${currentQuestion.id}, Soru No: ${currentQuestionNumber + 1})`, 'info');
+
+            const previousQuestionId = currentQuestion.id;
+            const previousQuestionNumber = currentQuestionNumber;
+            waitingForNextQuestion = true;
+
+            // API'ye cevap gönder - Doğrudan /api/tournament-quiz/answer endpoint'ini kullan
+            // Soru bazlı turnuvalar için question_number gönder
+            const requestBody = {
+                tournament_id: parseInt(currentTournamentId),
+                question_id: currentQuestion.id,
+                selected_option: String(selectedOption),
+                time_spent: Math.floor(Math.random() * 20) + 5
+            };
+
+            // Soru bazlı turnuvalar için question_number ekle
+            if (currentTournamentType === 'question_based' && currentQuestionNumber >= 0) {
+                requestBody.question_number = currentQuestionNumber + 1;
+                addLog(`📊 Soru numarası gönderiliyor: ${requestBody.question_number}`, 'info');
+            }
+
+            const response = await fetch(`${API_URL}/tournament-quiz/answer`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                addLog('✅ Cevap başarıyla gönderildi', 'success');
+
+                // Leaderboard güncelle
+                if (parsed.data && parsed.data.leaderboard) {
+                    displayLeaderboard(parsed.data.leaderboard);
+                }
+
+                // Cevap sonucu bilgisi
+                if (parsed.data && parsed.data.is_correct !== undefined) {
+                    const result = parsed.data.is_correct ? '✅ Doğru' : '❌ Yanlış';
+                    const score = parsed.data.new_score || parsed.data.score || 0;
+                    const change = parsed.data.score_change || 0;
+                    addLog(`${result} - Skor: ${score} (Değişim: ${change > 0 ? '+' : ''}${change})`, parsed.data.is_correct ? 'success' : 'error');
+                }
+
+                // Soru numarasını artır
+                currentQuestionNumber++;
+
+                // API response'da next_question varsa onu kullan
+                if (parsed.data && parsed.data.next_question && parsed.data.next_question.id) {
+                    addLog('🔄 API response\'dan yeni soru geldi', 'info');
+                    waitingForNextQuestion = false;
+
+                    // next_question formatını dönüştür
+                    const nextQuestion = { ...parsed.data.next_question };
+                    if (!nextQuestion.choices && (nextQuestion.one_choice || nextQuestion.two_choice || nextQuestion.three_choice || nextQuestion.four_choice)) {
+                        nextQuestion.choices = {};
+                        if (nextQuestion.one_choice) nextQuestion.choices['1'] = nextQuestion.one_choice;
+                        if (nextQuestion.two_choice) nextQuestion.choices['2'] = nextQuestion.two_choice;
+                        if (nextQuestion.three_choice) nextQuestion.choices['3'] = nextQuestion.three_choice;
+                        if (nextQuestion.four_choice) nextQuestion.choices['4'] = nextQuestion.four_choice;
+                    }
+
+                    // Soru numarasını güncelle
+                    if (parsed.data.next_question_number) {
+                        currentQuestionNumber = parsed.data.next_question_number - 1;
+                    }
+
+                    currentQuestion = nextQuestion;
+                    displayQuestion(nextQuestion);
+                    return true;
+                } else {
+                    // next_question null ise turnuva bitmiş olabilir
+                    // Ama önce tournament_finished flag'ini kontrol et
+                    if (parsed.data && parsed.data.tournament_finished === true) {
+                        addLog('🏁 Turnuva bitmiş, sonuçlar alınıyor...', 'info');
+                        waitingForNextQuestion = false;
+                        await getResults();
+                        return true;
+                    } else if (parsed.data && parsed.data.next_question === null && parsed.data.tournament_finished !== false) {
+                        // next_question null ve tournament_finished belirtilmemişse kontrol et
+                        // Süre bazlı turnuvalarda next_question her zaman null olabilir
+                        if (currentTournamentType === 'time_based') {
+                            // Süre bazlı turnuva: next_question null normal, socket'ten soru gelecek
+                            addLog('⏳ Süre bazlı turnuva - next_question null (normal), socket event bekleniyor...', 'info');
+                            waitingForNextQuestion = true;
+                        } else {
+                            // Soru bazlı turnuva: next_question null ise turnuva bitmiş olabilir
+                            addLog('🏁 next_question null - Turnuva bitmiş olabilir, sonuçlar kontrol ediliyor...', 'info');
+                            waitingForNextQuestion = false;
+                            await new Promise((resolve) => setTimeout(resolve, 500));
+                            await getResults();
+                            return true;
+                        }
+                    } else if (parsed.data && parsed.data.tournament_finished === false) {
+                        // Turnuva devam ediyor, süre bazlı turnuva için socket event bekleniyor
+                        addLog('✅ Turnuva devam ediyor (tournament_finished: false)', 'info');
+                        if (currentTournamentType === 'time_based') {
+                            waitingForNextQuestion = true;
+                        }
+                    }
+
+                    // Socket event'ini bekle veya API'den yeni soruyu çek
+                    addLog('⏳ Yeni soru bekleniyor (socket event veya API)...', 'info');
+
+                    // Socket event'ini bekle (1 saniye) - daha hızlı
+                    await new Promise((resolve) => {
+                        setTimeout(() => {
+                            resolve();
+                        }, 1000);
+                    });
+
+                    // Eğer hala yeni soru bekliyorsak ve soru değişmediyse API'den çek
+                    if (waitingForNextQuestion) {
+                        if (currentQuestion && currentQuestion.id === previousQuestionId) {
+                            addLog('📡 Socket event gelmedi, API\'den yeni soru çekiliyor...', 'info');
+                            waitingForNextQuestion = false;
+                            // Sonraki soru numarası ile çek
+                            const fetchResult = await fetchNextQuestion();
+                            if (!fetchResult) {
+                                addLog('🏁 Yeni soru çekilemedi, turnuva bitmiş. Sonuçlar alınıyor...', 'warning');
+                                // Turnuva bitmiş, sonuçları al
+                                await getResults();
+                            }
+                        } else {
+                            addLog('✅ Socket event\'inden yeni soru geldi', 'success');
+                            waitingForNextQuestion = false;
+                        }
+                    } else {
+                        waitingForNextQuestion = false;
+                    }
+                    return true;
+                }
+            } else {
+                addLog('❌ Cevap gönderme hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+                waitingForNextQuestion = false;
+                return false;
+            }
+        } catch (error) {
+            addLog('❌ Cevap gönderme hatası: ' + error.message, 'error');
+            console.error('Submit answer error:', error);
+            waitingForNextQuestion = false;
+            return false;
+        }
+    }
+
+    // API'den sonraki soruyu çek
+    async function fetchNextQuestion() {
+        if (!authToken || !currentTournamentId) {
+            addLog('❌ Auth token veya turnuva ID eksik', 'error');
+            return false;
+        }
+
+        try {
+            // Turnuva türüne göre soru çekme stratejisi
+            let url;
+            if (currentTournamentType === 'time_based') {
+                // Süre bazlı turnuva: Mevcut aktif soruyu al (soru otomatik değişir)
+                addLog('📡 Süre bazlı turnuva - Mevcut aktif soru çekiliyor...', 'info');
+                url = `${API_URL}/tournament-quiz/questions/${currentTournamentId}`;
+            } else {
+                // Soru bazlı turnuva: Sonraki soru numarasını hesapla
+                const nextQuestionNumber = currentQuestionNumber + 2; // +1 zaten yapıldı, +2 yapıyoruz
+                addLog(`📡 Soru bazlı turnuva - API'den yeni soru çekiliyor... (Soru ${nextQuestionNumber})`, 'info');
+                url = `${API_URL}/tournament-quiz/questions/${currentTournamentId}?question_number=${nextQuestionNumber}`;
+            }
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+
+                // Turnuva aktif değil hatası ise turnuva bitmiş olabilir
+                if (response.status === 400 && errorText.includes('aktif değil')) {
+                    addLog('🏁 Turnuva bitmiş görünüyor, sonuçlar alınıyor...', 'info');
+                    await getResults();
+                    return false;
+                }
+
+                addLog(`❌ HTTP ${response.status}: ${errorText}`, 'error');
+                return false;
+            }
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            // Turnuva bitmiş kontrolü
+            if (parsed.data && parsed.data.tournament_finished) {
+                addLog('🏁 Turnuva bitmiş, sonuçlar alınıyor...', 'info');
+                await getResults();
+                return false;
+            }
+
+            // Soru formatını kontrol et
+            let question = null;
+            if (parsed.success) {
+                if (parsed.data && parsed.data.question) {
+                    question = parsed.data.question;
+                } else if (parsed.data && parsed.data.first_question) {
+                    question = parsed.data.first_question;
+                } else if (parsed.data && parsed.data.id) {
+                    question = parsed.data;
+                } else if (parsed.data) {
+                    question = parsed.data;
+                }
+            }
+
+            // Eğer question one_choice formatındaysa choices formatına dönüştür
+            if (question && (question.one_choice || question.two_choice || question.three_choice || question.four_choice)) {
+                if (!question.choices) {
+                    question.choices = {};
+                }
+                if (question.one_choice) {
+                    question.choices['1'] = question.one_choice;
+                }
+                if (question.two_choice) {
+                    question.choices['2'] = question.two_choice;
+                }
+                if (question.three_choice) {
+                    question.choices['3'] = question.three_choice;
+                }
+                if (question.four_choice) {
+                    question.choices['4'] = question.four_choice;
+                }
+                addLog('📝 Soru formatı dönüştürüldü (one_choice -> choices)', 'info');
+            }
+
+            // Soru numarası ve toplam soru sayısını güncelle
+            if (parsed.data && parsed.data.question_number) {
+                currentQuestionNumber = parsed.data.question_number - 1;
+            }
+            if (parsed.data && parsed.data.total_questions) {
+                totalQuestions = parsed.data.total_questions;
+            }
+
+            if (question && question.id) {
+                currentQuestion = question;
+                displayQuestion(question);
+                addLog('✅ Yeni soru alındı ve gösterildi', 'success');
+                return true;
+            } else if (parsed.data && parsed.data.message) {
+                const msg = parsed.data.message;
+                addLog('ℹ️ ' + msg, 'info');
+                if (msg.includes('bitmiş') || msg.includes('tamamlandı') || msg.includes('bitti')) {
+                    addLog('🏁 Turnuva tamamlandı, sonuçları kontrol edin', 'info');
+                    await getResults();
+                    return false;
+                }
+            } else {
+                addLog('⚠️ Yeni soru bulunamadı: ' + JSON.stringify(responseData, null, 2), 'warning');
+                return false;
+            }
+        } catch (error) {
+            addLog('❌ Soru çekme hatası: ' + error.message, 'error');
+            console.error('Fetch next question error:', error);
+            return false;
+        }
+    }
+
+    // Durum Al
+    async function getStatus() {
+        if (!authToken || !currentTournamentId) {
+            addLog('❌ Önce login yapın ve turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/tournament-quiz/status/${currentTournamentId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success && parsed.data) {
+                // Turnuva durumunu doğru şekilde göster
+                const tournamentStatus = parsed.data.tournament?.status || parsed.data.status || 'unknown';
+                const userStatus = parsed.data.user_participation?.status || 'unknown';
+
+                addLog(`📊 Turnuva Durumu: ${tournamentStatus}`, 'info');
+                addLog(`👤 Kullanıcı Durumu: ${userStatus}`, 'info');
+
+                if (parsed.data.tournament) {
+                    addLog(`📋 Turnuva: ${parsed.data.tournament.title} (ID: ${parsed.data.tournament.id})`, 'info');
+                }
+
+                if (parsed.data.leaderboard && parsed.data.leaderboard.length > 0) {
+                    addLog(`🏆 Liderlik Tablosu: ${parsed.data.leaderboard.length} katılımcı`, 'info');
+                }
+
+                // Detaylı bilgi için full response'u göster
+                addLog('📊 Detaylı Durum: ' + JSON.stringify(parsed.data, null, 2), 'info');
+            } else {
+                addLog('⚠️ Durum bilgisi alınamadı: ' + JSON.stringify(parsed, null, 2), 'warning');
+            }
+        } catch (error) {
+            addLog('❌ Durum alma hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Sonuçlar Al
+    async function getResults() {
+        if (!authToken || !currentTournamentId) {
+            addLog('❌ Önce login yapın ve turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('🏁 Turnuva sonuçları alınıyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/results/${currentTournamentId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                addLog(`❌ Sonuç alma hatası: HTTP ${response.status}: ${errorText}`, 'error');
+                return;
+            }
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success && parsed.data) {
+                // Leaderboard göster
+                if (parsed.data.leaderboard) {
+                    displayLeaderboard(parsed.data.leaderboard);
+                    addLog('🏆 Leaderboard gösterildi', 'success');
+                }
+
+                // Turnuva bilgilerini göster
+                if (parsed.data.tournament) {
+                    const tournament = parsed.data.tournament;
+                    addLog(`🏁 Turnuva Durumu: ${tournament.status}`, 'info');
+                    if (tournament.status === 'completed') {
+                        addLog('✅ Turnuva tamamlandı!', 'success');
+                    }
+                }
+
+                // Detaylı sonuçları logla
+                addLog('🏁 Turnuva sonuçları: ' + JSON.stringify(parsed.data, null, 2), 'success');
+            } else {
+                addLog('❌ Sonuç alma hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Sonuç alma hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Kullanıcı Bağlantı Kontrolü
+    async function checkUserConnection() {
+        const userId = document.getElementById('userId').value;
+        if (!userId) {
+            addLog('❌ User ID gereklidir', 'error');
+            return;
+        }
+
+        try {
+            addLog('🔍 Kullanıcı bağlantı durumu kontrol ediliyor: User ' + userId, 'info');
+            const response = await fetch(`https://bilbakalim.online/socket-webhooks/check-user-connection`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                mode: 'cors',
+                credentials: 'omit',
+                body: JSON.stringify({
+                    userId: parseInt(userId)
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                addLog('⚠️ Response JSON değil, raw text: ' + text, 'warning');
+                return;
+            }
+
+            if (data.success) {
+                const status = data.isConnected ? '✅ BAĞLI' : '❌ BAĞLI DEĞİL';
+                addLog(`${status} - User ${data.userId}, Socket ID: ${data.socketId || 'Yok'}`, data.isConnected ? 'success' : 'warning');
+            } else {
+                addLog('❌ Bağlantı kontrolü hatası: ' + JSON.stringify(data, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Bağlantı kontrolü hatası: ' + error.message, 'error');
+            console.error('Connection check error:', error);
+        }
+    }
+
+    // Socket Health Check
+    async function getSocketHealth() {
+        try {
+            addLog('💚 Socket health kontrol ediliyor...', 'info');
+            const response = await fetch(`https://bilbakalim.online/socket-webhooks/health`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                mode: 'cors',
+                credentials: 'omit'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                addLog('⚠️ Response JSON değil, raw text: ' + text, 'warning');
+                return;
+            }
+
+            if (data) {
+                addLog(`💚 Socket Health: Status: ${data.status || 'N/A'}, Bağlı Kullanıcılar: ${data.connectedUsers || 0}, Aktif Odalar: ${data.activeRooms || 0}`, 'success');
+            } else {
+                addLog('⚠️ Health check response boş', 'warning');
+            }
+        } catch (error) {
+            addLog('❌ Health check hatası: ' + error.message, 'error');
+            console.error('Health check error:', error);
+        }
+    }
+
+    // Turnuva Kullanıcılarını Getir (Socket'ten anlık)
+    function getTournamentUsers() {
+        if (!socket || !socket.connected) {
+            addLog('❌ Önce socket bağlantısı kurun', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        addLog('👥 Socket\'ten turnuva kullanıcıları getiriliyor...', 'info');
+        socket.emit('get-tournament-users', {
+            tournamentId: parseInt(currentTournamentId)
+        });
+        addLog('📤 get-tournament-users emit edildi: Tournament ' + currentTournamentId, 'info');
+    }
+
+    // Turnuvadan Ayrıl
+    async function leaveTournament() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('🚪 Turnuvadan ayrılma isteği gönderiliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/leave`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    tournament_id: parseInt(currentTournamentId)
+                })
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                addLog('✅ Turnuvadan ayrıldınız: ' + JSON.stringify(parsed.data || parsed.message, null, 2), 'success');
+                currentTournamentId = null;
+            } else {
+                addLog('❌ Turnuvadan ayrılma hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Turnuvadan ayrılma hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Turnuva Süre Kontrolü
+    async function checkTournamentTime() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('⏱️ Turnuva süresi kontrol ediliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/check-time`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    tournament_id: parseInt(currentTournamentId)
+                })
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                addLog('⏱️ Turnuva süre bilgisi: ' + JSON.stringify(parsed.data, null, 2), 'info');
+            } else {
+                addLog('❌ Süre kontrol hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Süre kontrol hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Bekleme Durumu
+    async function getWaitingStatus() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        if (!currentTournamentId) {
+            addLog('❌ Önce turnuva oluşturun', 'error');
+            return;
+        }
+
+        try {
+            addLog('⏳ Turnuva bekleme durumu kontrol ediliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/waiting-status/${currentTournamentId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                addLog('⏳ Bekleme durumu: ' + JSON.stringify(parsed.data, null, 2), 'info');
+                if (parsed.data.waiting_message) {
+                    addLog('📢 ' + parsed.data.waiting_message, 'info');
+                }
+            } else {
+                addLog('❌ Bekleme durumu hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Bekleme durumu hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Aktif Multiplayer Turnuvaları
+    async function getActiveMultiplayer() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        try {
+            addLog('🎮 Aktif multiplayer turnuvaları getiriliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/active-multiplayer`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                const tournaments = parsed.data.tournaments || parsed.data || [];
+                addLog(`🎮 Aktif Multiplayer Turnuvaları (${tournaments.length}): ` + JSON.stringify(tournaments, null, 2), 'success');
+            } else {
+                addLog('❌ Aktif multiplayer hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Aktif multiplayer hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Question Based Turnuvaları
+    async function getQuestionBased() {
+        if (!authToken) {
+            addLog('❌ Önce login yapın', 'error');
+            return;
+        }
+
+        try {
+            addLog('❓ Question based turnuvaları getiriliyor...', 'info');
+            const response = await fetch(`${API_URL}/tournament-quiz/question-based`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + authToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            const responseData = await response.json();
+            const parsed = parseApiResponse(responseData);
+
+            if (parsed.success) {
+                const tournaments = parsed.data.tournaments || parsed.data || [];
+                addLog(`❓ Question Based Turnuvaları (${tournaments.length}): ` + JSON.stringify(tournaments, null, 2), 'success');
+            } else {
+                addLog('❌ Question based hatası: ' + JSON.stringify(responseData, null, 2), 'error');
+            }
+        } catch (error) {
+            addLog('❌ Question based hatası: ' + error.message, 'error');
+        }
+    }
+
+    // Turnuva Kullanıcılarını Göster
+    function displayTournamentUsers(users) {
+        const panel = document.getElementById('leaderboardPanel');
+        const board = document.getElementById('leaderboard');
+        panel.style.display = 'block';
+        panel.querySelector('h2').textContent = '👥 Turnuva Odasındaki Kullanıcılar (Anlık)';
+
+        if (!users || users.length === 0) {
+            board.innerHTML = '<p>Turnuva odasında kullanıcı yok</p>';
+            return;
+        }
+
+        const items = users.map((user, index) => {
+            return `
+                    <div class="leaderboard-item">
+                        <div>
+                            <strong>#${index + 1}</strong> ${user.userName || 'User ' + user.userId}
+                            <br><small style="color: #666;">User ID: ${user.userId} | Socket: ${user.socketId.substring(0, 8)}...</small>
+                        </div>
+                        <div>
+                            <span style="color: #28a745;">🟢 Bağlı</span>
+                        </div>
+                    </div>
+                `;
+        }).join('');
+
+        board.innerHTML = `
+                <div style="margin-bottom: 10px;">
+                    <strong>Toplam: ${users.length} kullanıcı</strong>
+                </div>
+                ${items}
+            `;
+    }
+
+    // Soru Göster
+    function displayQuestion(question) {
+        if (!question) {
+            addLog('❌ Gösterilecek soru yok', 'error');
+            return;
+        }
+
+        const panel = document.getElementById('questionPanel');
+        const card = document.getElementById('questionCard');
+
+        if (!panel || !card) {
+            addLog('❌ Soru paneli bulunamadı', 'error');
+            return;
+        }
+
+        panel.style.display = 'block';
+
+        // Soru metnini al
+        let questionText = '';
+        if (typeof question.question === 'object') {
+            questionText = question.question.tr || question.question.en || JSON.stringify(question.question);
+        } else if (question.question) {
+            questionText = question.question;
+        } else {
+            questionText = 'Soru metni bulunamadı';
+        }
+
+        // Seçenekleri al - Farklı formatları destekle
+        let choices = {};
+
+        // Format 1: choices objesi var mı?
+        if (question.choices && typeof question.choices === 'object') {
+            choices = question.choices;
+        }
+        // Format 2: one_choice, two_choice, three_choice, four_choice formatı
+        else if (question.one_choice || question.two_choice || question.three_choice || question.four_choice) {
+            if (question.one_choice) {
+                choices['1'] = question.one_choice;
+            }
+            if (question.two_choice) {
+                choices['2'] = question.two_choice;
+            }
+            if (question.three_choice) {
+                choices['3'] = question.three_choice;
+            }
+            if (question.four_choice) {
+                choices['4'] = question.four_choice;
+            }
+            addLog('📝 Seçenekler one_choice formatından dönüştürüldü', 'info');
+        }
+
+        const choiceKeys = Object.keys(choices);
+
+        if (choiceKeys.length === 0) {
+            card.innerHTML = `
+                    <h3>Soru</h3>
+                    <p style="font-size: 18px; margin: 15px 0;">${questionText}</p>
+                    <p style="color: red;">⚠️ Seçenekler bulunamadı</p>
+                    <p style="color: gray; font-size: 12px;">Question object: ${JSON.stringify(question, null, 2)}</p>
+                `;
+            addLog('⚠️ Soru seçenekleri bulunamadı. Question: ' + JSON.stringify(question, null, 2), 'warning');
+            return;
+        }
+
+        const options = choiceKeys.map(key => {
+            let choiceText = '';
+            if (typeof choices[key] === 'object') {
+                choiceText = choices[key].tr || choices[key].en || JSON.stringify(choices[key]);
+            } else {
+                choiceText = choices[key] || key;
+            }
+            // XSS koruması için escape
+            const safeKey = String(key).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const safeText = String(choiceText).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            // Buton data-attribute ile event listener ekle
+            return `<button class="option-btn" data-option="${safeKey}">${safeKey}. ${safeText}</button>`;
+        }).join('');
+
+        // Soru numarasını göster
+        const questionNum = currentQuestionNumber + 1;
+        const totalNum = totalQuestions || choiceKeys.length;
+
+        card.innerHTML = `
+                <h3>Soru ${questionNum}${totalNum > 0 ? `/${totalNum}` : ''}</h3>
+                <p style="font-size: 18px; margin: 15px 0; font-weight: bold;">${questionText}</p>
+                <div class="options" style="margin-top: 20px;">${options}</div>
+            `;
+
+        // Butonlara event listener ekle - Hemen ekle (delegation pattern kullan)
+        const optionsContainer = card.querySelector('.options');
+        if (optionsContainer) {
+            // Event delegation kullan - daha güvenilir
+            optionsContainer.addEventListener('click', async (e) => {
+                const button = e.target.closest('.option-btn[data-option]');
+                if (!button || button.disabled) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                const option = button.getAttribute('data-option');
+
+                // Tüm butonları devre dışı bırak
+                const allButtons = card.querySelectorAll('.option-btn');
+                allButtons.forEach(b => {
+                    b.disabled = true;
+                    b.style.opacity = '0.6';
+                    b.style.cursor = 'not-allowed';
+                    b.style.pointerEvents = 'none';
+                });
+
+                addLog(`🔘 Seçenek tıklandı: ${option}`, 'info');
+
+                // Cevabı gönder ve yeni soruyu bekle
+                await submitAnswer(option);
+            });
+            addLog(`✅ Seçenek butonları için event listener eklendi (delegation)`, 'info');
+        }
+
+        currentQuestion = question;
+        addLog(`📝 Soru gösterildi: ${questionText.substring(0, 50)}...`, 'info');
+    }
+
+    // Leaderboard Göster
+    function displayLeaderboard(rankings) {
+        const panel = document.getElementById('leaderboardPanel');
+        const board = document.getElementById('leaderboard');
+        panel.style.display = 'block';
+
+        if (!rankings || rankings.length === 0) {
+            board.innerHTML = '<p>Henüz sıralama yok</p>';
+            return;
+        }
+
+        const items = rankings.map((item, index) => {
+            const userName = item.user?.name || item.name || `User ${item.user_id}`;
+            const score = item.score || 0;
+            const rank = item.rank || (index + 1);
+            const isFirst = rank === 1;
+
+            return `
+                    <div class="leaderboard-item ${isFirst ? 'first' : ''}">
+                        <div>
+                            <strong>#${rank}</strong> ${userName}
+                        </div>
+                        <div>
+                            <strong>${score} puan</strong>
+                        </div>
+                    </div>
+                `;
+        }).join('');
+
+        board.innerHTML = items;
+    }
+
+    // Otomatik Tam Test - Tüm soruları al, cevapla ve turnuvayı bitir
+    async function runFullTest() {
+        addLog('🚀 OTOMATIK TAM TEST BAŞLATILIYOR...', 'info');
+        document.getElementById('progress').style.display = 'block';
+        updateProgress(0);
+
+        try {
+            // 1. Başlangıç Adımları
+            const steps = [
+                { name: 'Socket Bağlantısı', func: connectSocket, wait: 2000 },
+                { name: 'Login', func: login, wait: 2000 },
+                { name: 'User Join', func: userJoin, wait: 1000 },
+                { name: 'Turnuva Oluştur', func: createTournament, wait: 2000 },
+                { name: 'Socket\'e Katıl', func: joinTournamentSocket, wait: 1000 },
+                { name: 'API\'ye Katıl', func: joinTournamentAPI, wait: 2000 },
+                { name: 'Turnuva Başlat', func: startTournament, wait: 3000 },
+            ];
+
+            for (let i = 0; i < steps.length; i++) {
+                updateProgress((i / (steps.length + 10)) * 50); // İlk %50 başlangıç adımları
+                addLog(`📋 Adım ${i + 1}/${steps.length}: ${steps[i].name}`, 'info');
+                await steps[i].func();
+                await sleep(steps[i].wait);
+            }
+
+            // 2. İlk soruyu al
+            addLog('📋 İlk soru alınıyor...', 'info');
+            await getQuestion();
+            await sleep(2000);
+
+            // 3. Tüm soruları cevapla - Turnuva bitene kadar devam et
+            let questionNumber = 1;
+            let maxQuestions = 20; // Maksimum soru sayısı (güvenlik için)
+            let consecutiveNoQuestion = 0; // Ardışık soru bulunamama sayacı
+
+            while (questionNumber <= maxQuestions && consecutiveNoQuestion < 3) {
+                updateProgress(50 + ((questionNumber - 1) / maxQuestions) * 40); // %50-90 arası sorular
+
+                if (!currentQuestion) {
+                    addLog(`📋 Soru ${questionNumber}: Soru bulunamadı, API'den çekiliyor...`, 'info');
+                    await getQuestion();
+                    await sleep(2000);
+                    consecutiveNoQuestion++;
+
+                    if (!currentQuestion) {
+                        addLog('⚠️ Soru alınamadı, turnuva bitmiş olabilir', 'warning');
+                        break;
+                    }
+                }
+
+                if (currentQuestion && currentQuestion.id) {
+                    consecutiveNoQuestion = 0; // Soru bulundu, sayacı sıfırla
+                    const options = Object.keys(currentQuestion.choices || {});
+
+                    if (options.length > 0) {
+                        // İlk seçeneği seç
+                        const selectedOption = options[0];
+                        addLog(`📝 Soru ${questionNumber} cevaplanıyor: ${selectedOption}`, 'info');
+
+                        // Cevabı gönder
+                        const answerResult = await submitAnswer(selectedOption);
+
+                        if (!answerResult) {
+                            addLog('⚠️ Cevap gönderilemedi, devam ediliyor...', 'warning');
+                        }
+
+                        // Yeni soru gelene kadar bekle
+                        addLog(`⏳ Soru ${questionNumber} cevabı gönderildi, yeni soru bekleniyor...`, 'info');
+                        await sleep(3000); // Socket event veya API response için bekle
+
+                        // Yeni soru gelip gelmediğini kontrol et
+                        const previousQuestionId = currentQuestion ? currentQuestion.id : null;
+
+                        // Eğer hala aynı soru varsa, API'den yeni soruyu çek
+                        if (currentQuestion && currentQuestion.id === previousQuestionId) {
+                            addLog('📡 Yeni soru gelmedi, API\'den çekiliyor...', 'info');
+                            const fetchResult = await fetchNextQuestion();
+                            if (!fetchResult) {
+                                addLog('⚠️ Yeni soru çekilemedi, turnuva bitmiş olabilir', 'warning');
+                                break;
+                            }
+                            await sleep(1000);
+                        } else {
+                            addLog(`✅ Yeni soru geldi (Soru ${questionNumber + 1})`, 'success');
+                        }
+
+                        questionNumber++;
+                        await sleep(1000); // Sorular arası kısa bekleme
+                    } else {
+                        addLog('⚠️ Soru seçenekleri bulunamadı. Question: ' + JSON.stringify(currentQuestion, null, 2), 'warning');
+                        break;
+                    }
+                } else {
+                    consecutiveNoQuestion++;
+                    if (consecutiveNoQuestion >= 3) {
+                        addLog('⚠️ Ardışık 3 kez soru bulunamadı, turnuva bitmiş olabilir', 'warning');
+                        break;
+                    }
+                    await sleep(1000);
+                }
+            }
+
+            // 4. Sonuçları al
+            updateProgress(90);
+            addLog('📋 Turnuva tamamlandı, sonuçlar alınıyor...', 'info');
+            await sleep(2000);
+            await getResults();
+            await getStatus();
+
+            updateProgress(100);
+            addLog('✅ TAM TEST TAMAMLANDI! Tüm sorular cevaplandı ve turnuva bitti.', 'success');
+        } catch (error) {
+            addLog('❌ Test sırasında hata oluştu: ' + error.message, 'error');
+            console.error('Test error:', error);
+        }
+    }
+
+    // Yardımcı Fonksiyonlar
+    function addLog(message, type = 'info') {
+        const logs = document.getElementById('logs');
+        const timestamp = new Date().toLocaleTimeString();
+        const className = `log-item ${type}`;
+        logs.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        logs.scrollTop = logs.scrollHeight;
+        console.log(`[${timestamp}] ${message}`);
+    }
+
+    function updateStatus(message, className) {
+        const status = document.getElementById('status');
+        status.textContent = message;
+        status.className = 'status ' + className;
+    }
+
+    function updateProgress(percent) {
+        const fill = document.getElementById('progressFill');
+        fill.style.width = percent + '%';
+        fill.textContent = Math.round(percent) + '%';
+    }
+
+    function clearLogs() {
+        document.getElementById('logs').innerHTML = '';
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+
+    // Sayfa yüklendiğinde
+    document.addEventListener('DOMContentLoaded', () => {
+        addLog('📄 Test sayfası yüklendi', 'info');
+        addLog('💡 İpucu: Laravel API\'lerini kullanarak turnuva akışını test edin. API\'ler otomatik olarak socket event\'lerini de tetikler.', 'info');
+    });
+</script>
+</body>
+</html>
+
