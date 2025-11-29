@@ -124,6 +124,21 @@ class User extends Authenticatable
         return $this->hasMany(TournamentUser::class);
     }
 
+    public function diamond()
+    {
+        return $this->hasOne(Diamond::class);
+    }
+
+    public function duelsAsChallenger()
+    {
+        return $this->hasMany(Duel::class, 'challenger_id');
+    }
+
+    public function duelsAsOpponent()
+    {
+        return $this->hasMany(Duel::class, 'opponent_id');
+    }
+
     // Scopes
     public function scopeActive($query)
     {

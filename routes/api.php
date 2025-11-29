@@ -13,6 +13,8 @@ use App\Http\Controllers\API\QuizController;
 use App\Http\Controllers\API\PremiumQuizController;
 use App\Http\Controllers\API\TournamentQuizController;
 use App\Http\Controllers\API\LandingController;
+use App\Http\Controllers\API\DuelController;
+use App\Http\Controllers\API\DiamondController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
@@ -42,16 +44,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('me/update', [AuthController::class, 'edit']);
     Route::get('auth/me', [AuthController::class, 'detail']);
     Route::post('logout', [AuthController::class, 'logout']);
-    
-    
+
+
     // Notification routes
     Route::prefix('notifications')->group(function () {
         Route::post('send', [NotificationController::class, 'send']);
         Route::get('stats', [NotificationController::class, 'stats']);
         Route::get('recent', [NotificationController::class, 'recent']);
     });
-    
-    
+
+
     // Payment routes
     Route::prefix('payments')->group(function () {
         Route::post('initiate', [PaymentController::class, 'initiatePayment']);
@@ -59,7 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('history', [PaymentController::class, 'paymentHistory']);
         Route::post('cancel', [PaymentController::class, 'cancelPayment']);
     });
-    
+
     // Coin Package routes
     Route::prefix('coin-packages')->group(function () {
         Route::get('/', [CoinPackageController::class, 'index']);
@@ -70,7 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('{coinPackage}', [CoinPackageController::class, 'destroy']); // Admin only
         Route::get('{coinPackage}/stats', [CoinPackageController::class, 'stats']); // Admin only
     });
-    
+
     // Coin Purchase routes
     Route::prefix('coin-purchases')->group(function () {
         Route::get('/', [CoinPurchaseController::class, 'index']);
@@ -80,9 +82,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{coinPurchase}/refund', [CoinPurchaseController::class, 'requestRefund']);
         Route::post('{coinPurchase}/cancel', [CoinPurchaseController::class, 'cancel']);
     });
-    
-    
-    
+
+
+
     // Friend Invite routes
     Route::prefix('friend-invites')->group(function () {
         Route::post('create', [FriendInviteController::class, 'create']);
@@ -90,10 +92,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('stats', [FriendInviteController::class, 'stats']);
         Route::post('accept/{inviteCode}', [FriendInviteController::class, 'accept']);
     });
-    
+
     // Game Settings route
     Route::get('game-settings', [QuizController::class, 'getGameSettings']);
-    
+
     // Quiz routes
     Route::prefix('quiz')->group(function () {
         // Normal Quiz (Sonsuz Mod)
@@ -105,11 +107,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('normal/jokers', [QuizController::class, 'getJokers']);
         Route::post('normal/use-joker', [QuizController::class, 'useJoker']);
         Route::post('normal/buy-joker', [QuizController::class, 'buyJoker']);
-        
+
         // Normal Quiz Mobile APIs
         Route::post('normal/mobile/start', [QuizController::class, 'startMobileNormalQuiz']);
         Route::post('normal/mobile/submit-answers', [QuizController::class, 'submitMobileNormalAnswers']);
-        
+
         // Premium Quiz
         Route::post('premium/start', [PremiumQuizController::class, 'startPremiumQuiz']);
         Route::post('premium/answer', [PremiumQuizController::class, 'submitAnswer']);
@@ -118,12 +120,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('premium/details/{game_id}', [PremiumQuizController::class, 'getGameDetails']);
         Route::get('premium/jokers', [PremiumQuizController::class, 'getUserJokers']);
         Route::post('premium/buy-joker', [PremiumQuizController::class, 'buyJoker']);
-        
+
         // Premium Quiz Mobile APIs
         Route::post('premium/mobile/start', [PremiumQuizController::class, 'startMobilePremiumQuiz']);
         Route::post('premium/mobile/submit-answers', [PremiumQuizController::class, 'submitMobilePremiumAnswers']);
     });
-    
+
     // Tournament Quiz routes
     Route::prefix('tournament-quiz')->group(function () {
         Route::post('create-or-join', [TournamentQuizController::class, 'createOrJoinTournament']);
@@ -136,10 +138,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('questions/{tournament_id}', [TournamentQuizController::class, 'getTournamentQuestions']);
         Route::post('check-time', [TournamentQuizController::class, 'checkTournamentTime']);
         Route::get('waiting-status/{tournament_id}', [TournamentQuizController::class, 'getWaitingStatus']);
-        
+
         // Yeni endpoint'ler
         Route::get('active-multiplayer', [TournamentQuizController::class, 'getActiveMultiplayerTournaments']);
         Route::get('question-based', [TournamentQuizController::class, 'getQuestionBasedTournaments']);
+    });
+
+    // Duel (Meydan Okuma) routes
+    Route::prefix('duel')->group(function () {
+        Route::post('create', [DuelController::class, 'create']);
+        Route::get('status/{duel_id}', [DuelController::class, 'status']);
+        Route::post('accept/{duel_id}', [DuelController::class, 'accept']);
+        Route::post('reject/{duel_id}', [DuelController::class, 'reject']);
+        Route::post('leave/{duel_id}', [DuelController::class, 'leave']);
+        Route::post('answer/{duel_id}', [DuelController::class, 'submitAnswer']);
+    });
+
+    // Diamond (Elmas) routes
+    Route::prefix('diamond')->group(function () {
+        Route::get('balance', [DiamondController::class, 'getBalance']);
+        Route::get('packages', [DiamondController::class, 'getPackages']);
+        Route::post('purchase', [DiamondController::class, 'purchase']);
+        Route::post('transfer-to-card', [DiamondController::class, 'transferToCard']);
     });
 });
 
@@ -153,6 +173,3 @@ Route::prefix('landing')->group(function () {
     Route::get('faqs', [LandingController::class, 'faqs']);
     Route::get('all', [LandingController::class, 'all']);
 });
-
-
-

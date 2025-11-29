@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnuva Socket Test - BilBakalim</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status { 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .controls { 
+            margin: 20px 0; 
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        button { 
+            padding: 12px 20px; 
+            margin: 5px; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        button:hover { opacity: 0.8; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-info { background: #17a2b8; color: white; }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .event-log {
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 5px; 
+            max-height: 400px; 
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event-item {
+            padding: 5px;
+            margin: 5px 0;
+            border-left: 3px solid #007bff;
+            background: white;
+        }
+        .event-item.success { border-left-color: #28a745; }
+        .event-item.error { border-left-color: #dc3545; }
+        .event-item.warning { border-left-color: #ffc107; }
+        .tournament-info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            min-width: 220px;
+            padding: 12px 18px;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+            animation: fadein 0.3s ease, fadeout 0.3s ease 3s forwards;
+        }
+        .toast.success { background: #28a745; }
+        .toast.error { background: #dc3545; }
+        .toast.warning { background: #ffc107; color: #000; }
+        .toast.info { background: #17a2b8; }
+        @keyframes fadein {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeout {
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🏆 Turnuva Socket Test - BilBakalim</h1>
+
+    <div id="status" class="status disconnected">
+        ❌ Socket Bağlantısı: Bağlanıyor...
+    </div>
+
+    <div class="input-group">
+        <label>User ID:</label>
+        <input type="number" id="userId" value="1" placeholder="Kullanıcı ID">
+    </div>
+
+    <div class="input-group">
+        <label>User Name:</label>
+        <input type="text" id="userName" value="Test User" placeholder="Kullanıcı Adı">
+    </div>
+
+    <div class="input-group">
+        <label>Tournament ID:</label>
+        <input type="number" id="tournamentId" value="1" placeholder="Turnuva ID">
+    </div>
+
+    <div class="controls">
+        <button class="btn-primary" onclick="connectSocket()">🔌 Socket Bağlan</button>
+        <button class="btn-success" onclick="joinUser()">👤 Kullanıcı Girişi</button>
+        <button class="btn-info" onclick="joinTournament()">🏆 Turnuvaya Katıl</button>
+        <button class="btn-warning" onclick="testWebhook('user-joined')">👥 Kullanıcı Katılım Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('tournament-started')">🚀 Turnuva Başlatma Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('tournament-finished')">🏁 Turnuva Bitiş Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('answer-submitted')">📝 Cevap Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('ranking-updated')">📊 Sıralama Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('player-eliminated')">❌ Oyuncu Elenme Webhook</button>
+        <button class="btn-warning" onclick="testWebhook('tournament-next-question')">🔄 Sonraki Soru Webhook</button>
+        <button class="btn-danger" onclick="clearLogs()">🗑️ Logları Temizle</button>
+    </div>
+
+    <div class="grid">
+        <div>
+            <h3>📊 Turnuva Bilgileri:</h3>
+            <div id="tournament-info" class="tournament-info">
+                <p>Henüz turnuva bilgisi yok.</p>
+            </div>
+        </div>
+        <div>
+            <h3>📝 Event Logları:</h3>
+            <div id="logs" class="event-log"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let socket = null;
+    let isConnected = false;
+    let isInActiveTournament = false;
+    let wasInTournament = false;
+    let currentTournamentId = null;
+
+    const toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.addEventListener('DOMContentLoaded', () => {
+        document.body.appendChild(toastContainer);
+    });
+
+    function showToast(type, message) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 3500);
+    }
+
+    // Socket bağlantısını başlat
+    function connectSocket() {
+        if (socket && socket.connected) {
+            addLog('⚠️ Socket zaten bağlı', 'warning');
+            return;
+        }
+
+        socket = io('https://bilbakalim.online', {
+            transports: ['websocket', 'polling'],
+            path: '/socket.io'
+        });
+
+        socket.on('connect', () => {
+            isConnected = true;
+            updateStatus('✅ Socket Bağlantısı: Bağlandı', 'connected');
+            addLog('✅ Socket bağlantısı kuruldu', 'success');
+            
+            if (wasInTournament) {
+                showToast('info', 'Bağlantınız yeniden kuruldu. Yeni turnuvaya katılabilirsiniz.');
+            }
+        });
+
+        socket.on('disconnect', () => {
+            isConnected = false;
+            updateStatus('❌ Socket Bağlantısı: Bağlantı kesildi', 'disconnected');
+            addLog('❌ Socket bağlantısı kesildi', 'error');
+            
+            if (isInActiveTournament) {
+                showToast('error', 'Bağlantınız kesildi. Turnuvadan elendiniz.');
+                isInActiveTournament = false;
+                wasInTournament = true;
+            }
+        });
+
+        socket.on('connect_error', (error) => {
+            updateStatus('❌ Socket Bağlantısı: Hata - ' + error.message, 'disconnected');
+            addLog('❌ Socket bağlantı hatası: ' + error.message, 'error');
+        });
+
+        // Welcome event
+        socket.on('welcome', (data) => {
+            addLog('👋 Hoş geldin: ' + JSON.stringify(data), 'success');
+        });
+
+        // Tournament events
+        socket.on('joined_tournament', (data) => {
+            console.log('✅ joined_tournament event alındı:', data);
+            if (!data || Object.keys(data).length === 0) {
+                addLog('⚠️ joined_tournament: Data boş veya undefined!', 'error');
+                showToast('error', 'Turnuva katılımı: Data alınamadı!');
+            } else {
+                addLog('🏆 Turnuvaya katıldınız: ' + JSON.stringify(data, null, 2), 'success');
+                showToast('success', 'Turnuvaya katıldınız!');
+            }
+        });
+
+        socket.on('user-joined-tournament', (data) => {
+            console.log('✅ user-joined-tournament event alındı:', data);
+            if (!data || Object.keys(data).length === 0) {
+                addLog('⚠️ user-joined-tournament: Data boş veya undefined!', 'error');
+                showToast('error', 'Kullanıcı katılımı: Data alınamadı!');
+            } else {
+                addLog('👥 Kullanıcı katıldı: ' + JSON.stringify(data, null, 2), 'success');
+                updateTournamentInfo(data);
+                const name = data.name || data.user_name || 'Bilinmeyen';
+                showToast('info', `${name} turnuvaya katıldı (${data.current_participants}/${data.min_participants})`);
+            }
+        });
+
+        // Eski format için de dinle (geriye uyumluluk)
+        socket.on('user_joined_tournament', (data) => {
+            console.log('✅ user_joined_tournament (eski format) event alındı:', data);
+            addLog('👥 Kullanıcı katıldı (eski format): ' + JSON.stringify(data, null, 2), 'success');
+            updateTournamentInfo(data);
+        });
+
+        socket.on('waiting-players', (data) => {
+            addLog('⏳ Oyuncular durumu: ' + JSON.stringify(data), data.ready_to_start ? 'success' : 'warning');
+            updateTournamentInfo(data);
+            
+            if (data.ready_to_start) {
+                showToast('success', data.waiting_message || 'Turnuva başlamaya hazır!');
+                addLog('✅ Turnuva başlamaya hazır! ready_to_start: true', 'success');
+                autoStartTournament(data.tournament_id);
+            } else {
+                showToast('warning', data.waiting_message || 'Oyuncular bekleniyor...');
+                addLog('⏳ Oyuncular bekleniyor... ready_to_start: false', 'warning');
+            }
+        });
+
+        socket.on('tournament-started', (data) => {
+            addLog('🚀 Turnuva başladı: ' + JSON.stringify(data), 'success');
+            isInActiveTournament = true;
+            wasInTournament = false;
+            currentTournamentId = data.tournament_id;
+            showToast('success', 'Turnuva başladı!');
+        });
+
+        socket.on('tournament-answer-submitted', (data) => {
+            addLog('📝 Turnuva cevabı: ' + JSON.stringify(data), 'success');
+        });
+
+        socket.on('tournament-ranking-updated', (data) => {
+            addLog('📊 Sıralama güncellendi: ' + JSON.stringify(data), 'success');
+            if (data.rankings && data.rankings.length > 0) {
+                displayRankings(data.rankings);
+            }
+        });
+
+        socket.on('player-eliminated', (data) => {
+            addLog('❌ Oyuncu elendi: ' + JSON.stringify(data), 'error');
+            showToast('warning', `${data.name} elendi: ${data.reason}`);
+        });
+
+        socket.on('tournament-finished', (data) => {
+            addLog('🏁 Turnuva bitti: ' + JSON.stringify(data), 'success');
+            isInActiveTournament = false;
+            wasInTournament = true;
+            currentTournamentId = null;
+            showToast('success', 'Turnuva bitti!');
+            if (data.winner) {
+                showToast('info', `Kazanan: ${data.winner.name || 'Bilinmiyor'}`);
+            }
+        });
+
+        socket.on('tournament-next-question', (data) => {
+            addLog('❓ Sonraki soru: ' + JSON.stringify(data), 'success');
+            showToast('info', `Soru ${data.question_number}/${data.total_questions}`);
+        });
+    }
+
+    // Kullanıcı girişi
+    function joinUser() {
+        if (!socket || !socket.connected) {
+            showToast('error', 'Önce socket bağlantısı kurun!');
+            return;
+        }
+
+        const userId = document.getElementById('userId').value;
+        const userName = document.getElementById('userName').value;
+
+        if (!userId || !userName) {
+            showToast('error', 'User ID ve User Name gereklidir!');
+            return;
+        }
+
+        const emitData = {
+            userId: parseInt(userId),
+            userName: userName
+        };
+
+        addLog('📤 user_join emit ediliyor: ' + JSON.stringify(emitData), 'success');
+        
+        socket.emit('user_join', emitData);
+
+        addLog('👤 Kullanıcı girişi gönderildi: User ' + userId + ' (' + userName + ')', 'success');
+    }
+
+    // Turnuvaya katıl
+    function joinTournament() {
+        if (!socket || !socket.connected) {
+            showToast('error', 'Turnuva için socket bağlantısı gereklidir. Lütfen önce bağlanın.');
+            addLog('❌ Socket bağlantısı yok!', 'error');
+            return;
+        }
+
+        const tournamentId = document.getElementById('tournamentId').value;
+        const userId = document.getElementById('userId').value;
+
+        if (!tournamentId || !userId) {
+            showToast('error', 'Tournament ID ve User ID gereklidir!');
+            addLog('❌ Tournament ID veya User ID eksik!', 'error');
+            return;
+        }
+
+        const emitData = {
+            tournamentId: parseInt(tournamentId),
+            userId: parseInt(userId)
+        };
+
+        console.log('📤 join_tournament emit ediliyor:', emitData);
+        addLog('📤 join_tournament emit ediliyor: ' + JSON.stringify(emitData, null, 2), 'success');
+        
+        // Önce user_join yapılmış mı kontrol et, yapılmamışsa yap
+        const userName = document.getElementById('userName').value || `User ${userId}`;
+        if (!socket.hasListeners('welcome')) {
+            addLog('⚠️ user_join yapılmamış, önce kullanıcı girişi yapılıyor...', 'warning');
+            socket.emit('user_join', {
+                userId: parseInt(userId),
+                userName: userName
+            });
+        }
+
+        socket.emit('join_tournament', emitData);
+
+        currentTournamentId = tournamentId;
+        addLog('🏆 Turnuvaya katılma isteği gönderildi: Tournament ' + tournamentId + ', User ' + userId, 'success');
+        
+        // Error handler ekle
+        socket.once('join_tournament_error', (error) => {
+            console.error('❌ join_tournament hatası:', error);
+            addLog('❌ join_tournament hatası: ' + JSON.stringify(error, null, 2), 'error');
+            showToast('error', error.message || 'Turnuvaya katılma hatası');
+        });
+
+        // Response handler - 5 saniye timeout
+        setTimeout(() => {
+            if (!socket.hasListeners('joined_tournament')) {
+                addLog('⚠️ joined_tournament event 5 saniye içinde gelmedi!', 'warning');
+            }
+        }, 5000);
+    }
+
+    // Otomatik turnuva başlatma (ready_to_start: true geldiğinde)
+    async function autoStartTournament(tournamentId) {
+        try {
+            addLog('🚀 Turnuva otomatik başlatılıyor: Tournament ' + tournamentId, 'success');
+            
+            // Laravel API'sine turnuva başlatma isteği gönder
+            const response = await fetch(`https://bilbakalim.online/api/tournament-quiz/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (localStorage.getItem('token') || ''),
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    tournament_id: parseInt(tournamentId)
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                addLog('✅ Turnuva başlatma isteği başarılı: ' + data.message, 'success');
+                showToast('success', 'Turnuva başlatıldı!');
+            } else {
+                addLog('❌ Turnuva başlatma hatası: ' + (data.message || 'Bilinmeyen hata'), 'error');
+                showToast('error', 'Turnuva başlatılamadı: ' + (data.message || 'Bilinmeyen hata'));
+            }
+        } catch (error) {
+            addLog('❌ Turnuva başlatma hatası: ' + error.message, 'error');
+            showToast('error', 'Turnuva başlatma hatası: ' + error.message);
+        }
+    }
+
+    // Webhook test et
+    async function testWebhook(type) {
+        const tournamentId = document.getElementById('tournamentId').value;
+        const userId = document.getElementById('userId').value;
+        const userName = document.getElementById('userName').value;
+
+        let url = '';
+        let body = {};
+
+        switch(type) {
+            case 'user-joined':
+                url = '/socket-webhooks/webhook/user-joined-tournament';
+                // Test için: ready_to_start true durumu (minimum katılımcı sayısına ulaşıldı)
+                const currentParticipants = 2;
+                const minParticipants = 2;
+                const isReady = currentParticipants >= minParticipants;
+                
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    user_id: parseInt(userId),
+                    user_name: userName,
+                    current_participants: currentParticipants,
+                    min_participants: minParticipants,
+                    waiting_message: isReady ? 'Turnuva başlamaya hazır!' : 'Diğer oyuncular bekleniyor...',
+                    ready_to_start: isReady
+                };
+                break;
+            case 'tournament-started':
+                url = '/socket-webhooks/webhook/tournament-started';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    tournament_type: 'question_based',
+                    participants: [parseInt(userId), 2, 3],
+                    question_count: 10,
+                    time_limit: null
+                };
+                break;
+            case 'tournament-finished':
+                url = '/socket-webhooks/webhook/tournament-finished';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    final_rankings: [
+                        { user_id: parseInt(userId), name: userName, score: 100 },
+                        { user_id: 2, name: 'User 2', score: 80 }
+                    ],
+                    winner: { user_id: parseInt(userId), name: userName, score: 100 },
+                    winners: [
+                        { user_id: parseInt(userId), name: userName, score: 100 },
+                        { user_id: 2, name: 'User 2', score: 80 }
+                    ],
+                    end_reason: 'completed'
+                };
+                break;
+            case 'answer-submitted':
+                url = '/socket-webhooks/webhook/tournament-answer-submitted';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    user_id: parseInt(userId),
+                    question_id: 1,
+                    is_correct: true,
+                    score_change: 10,
+                    current_score: 50,
+                    speed_bonus: 5,
+                    leaderboard: [
+                        { user_id: parseInt(userId), name: userName, score: 50 }
+                    ]
+                };
+                break;
+            case 'ranking-updated':
+                url = '/socket-webhooks/webhook/tournament-ranking-updated';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    rankings: [
+                        { user_id: parseInt(userId), name: userName, score: 50, rank: 1 },
+                        { user_id: 2, name: 'User 2', score: 30, rank: 2 }
+                    ]
+                };
+                break;
+            case 'player-eliminated':
+                url = '/socket-webhooks/webhook/tournament-player-eliminated';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    user_id: 2,
+                    user_name: 'User 2',
+                    reason: 'coins_zero',
+                    remaining_players: 2,
+                    final_score: 30,
+                    position: 2
+                };
+                break;
+            case 'tournament-next-question':
+                url = '/socket-webhooks/webhook/tournament-next-question';
+                body = {
+                    tournament_id: parseInt(tournamentId),
+                    question_number: 2,
+                    total_questions: 10,
+                    question: {
+                        id: 102,
+                        question: { tr: 'Türkiye\'nin başkenti neresidir?', en: 'What is the capital of Turkey?' },
+                        choices: {
+                            '1': { tr: 'İstanbul', en: 'Istanbul' },
+                            '2': { tr: 'Ankara', en: 'Ankara' },
+                            '3': { tr: 'İzmir', en: 'Izmir' },
+                            '4': { tr: 'Bursa', en: 'Bursa' }
+                        },
+                        image: null,
+                        question_level: 'easy'
+                    }
+                };
+                break;
+        }
+
+        try {
+            addLog(`🚀 Webhook test ediliyor: ${type}`, 'success');
+            const response = await fetch(`https://bilbakalim.online${url}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                addLog(`✅ Webhook başarılı: ${type}`, 'success');
+                showToast('success', 'Webhook başarıyla gönderildi!');
+            } else {
+                addLog(`❌ Webhook hatası: ${data.message}`, 'error');
+                showToast('error', 'Webhook hatası: ' + data.message);
+            }
+        } catch (error) {
+            addLog(`❌ Webhook hatası: ${error.message}`, 'error');
+            showToast('error', 'Webhook hatası: ' + error.message);
+        }
+    }
+
+    // Durum güncelle
+    function updateStatus(message, className) {
+        const status = document.getElementById('status');
+        status.textContent = message;
+        status.className = 'status ' + className;
+    }
+
+    // Log ekle
+    function addLog(message, type = '') {
+        const logs = document.getElementById('logs');
+        const timestamp = new Date().toLocaleTimeString();
+        const className = type ? `event-item ${type}` : 'event-item';
+        logs.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        logs.scrollTop = logs.scrollHeight;
+    }
+
+    // Turnuva bilgilerini güncelle
+    function updateTournamentInfo(data) {
+        const infoDiv = document.getElementById('tournament-info');
+        const readyStatus = data.ready_to_start ? 
+            '<span style="color: green; font-weight: bold;">✅ BAŞLAMAYA HAZIR</span>' : 
+            '<span style="color: orange; font-weight: bold;">⏳ BEKLENİYOR</span>';
+        
+        infoDiv.innerHTML = `
+            <p><strong>Turnuva ID:</strong> ${data.tournament_id || 'N/A'}</p>
+            <p><strong>Katılımcılar:</strong> ${data.current_participants || 0}/${data.min_participants || 2}</p>
+            <p><strong>Durum:</strong> ${readyStatus}</p>
+            <p><strong>ready_to_start:</strong> <strong style="color: ${data.ready_to_start ? 'green' : 'orange'}">${data.ready_to_start ? 'true' : 'false'}</strong></p>
+            <p><strong>Mesaj:</strong> ${data.waiting_message || 'N/A'}</p>
+        `;
+    }
+
+    // Sıralamayı göster
+    function displayRankings(rankings) {
+        const infoDiv = document.getElementById('tournament-info');
+        let html = '<h4>📊 Sıralama:</h4>';
+        rankings.forEach((player, index) => {
+            html += `<p>${index + 1}. ${player.name || 'User ' + player.user_id} - ${player.score || 0} puan</p>`;
+        });
+        infoDiv.innerHTML = html;
+    }
+
+    // Logları temizle
+    function clearLogs() {
+        document.getElementById('logs').innerHTML = '';
+    }
+
+    // Sayfa yüklendiğinde socket'i başlat
+    document.addEventListener('DOMContentLoaded', function() {
+        connectSocket();
+    });
+</script>
+</body>
+</html>

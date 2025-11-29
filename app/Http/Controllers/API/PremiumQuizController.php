@@ -118,11 +118,8 @@ class PremiumQuizController extends Controller
         // Socket.IO'ya quiz başlatma bildirimi gönder
         $this->broadcastQuizStarted($game, $question);
         
-        // Question'dan correct_answer'ı gizle
-        $questionData = $question ? $question->toArray() : null;
-        if ($questionData) {
-            unset($questionData['correct_answer']);
-        }
+        // Soruyu çoklu dil formatında formatla
+        $questionData = $question ? $this->formatQuestionMultilingual($question) : null;
         
         return response()->json([
             'success' => true,
@@ -364,11 +361,8 @@ class PremiumQuizController extends Controller
         // Sonraki soruyu getir
         $nextQuestion = $this->getNextPremiumQuestion($game);
         
-        // Sonraki sorudan correct_answer'ı gizle
-        $nextQuestionData = $nextQuestion ? $nextQuestion->toArray() : null;
-        if ($nextQuestionData) {
-            unset($nextQuestionData['correct_answer']);
-        }
+        // Soruyu çoklu dil formatında formatla
+        $nextQuestionData = $nextQuestion ? $this->formatQuestionMultilingual($nextQuestion) : null;
         
         return response()->json([
             'success' => true,
@@ -675,10 +669,47 @@ class PremiumQuizController extends Controller
     
     /**
      * Sonraki premium soruyu getir
+     * Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
      */
     private function getNextPremiumQuestion(IndividualGame $game): ?Question
     {
         $settings = $game->settings;
+        $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+        
+        // Reklam sorusu kontrolü
+        $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
+        $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
+        
+        // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
+        // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
+        if ($adAppearanceFrequency > 0 && $currentQuestionNumber % $adAppearanceFrequency === 0) {
+            // Reklam kategorisini bul (name'i "Reklam" veya "reklam" olan kategori)
+            $adCategory = \App\Models\Category::where('is_active', true)
+                ->get()
+                ->filter(function($category) {
+                    $nameTr = strtolower($category->getTranslation('name', 'tr', false) ?? '');
+                    $nameEn = strtolower($category->getTranslation('name', 'en', false) ?? '');
+                    return strpos($nameTr, 'reklam') !== false || strpos($nameEn, 'advertisement') !== false;
+                })
+                ->first();
+
+            // Eğer reklam kategorisi bulunduysa ve soru varsa, reklam sorusu seç
+            if ($adCategory) {
+                // Reklam kategorisinden soru seç
+                $adQuestion = Question::where('is_active', true)
+                    ->where('category_id', $adCategory->id)
+                    ->inRandomOrder()
+                    ->first();
+                    
+                // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
+                if ($adQuestion) {
+                    return $adQuestion;
+                }
+            }
+            // Eğer reklam kategorisi yoksa veya reklam sorusu yoksa, normal soru seçimine geç (aşağıdaki kod devam eder)
+        }
+        
+        // Normal soru seçimi
         $mediumRemaining = $settings['medium_questions_remaining'] ?? 7;
         $hardRemaining = $settings['hard_questions_remaining'] ?? 8;
         
@@ -702,6 +733,99 @@ class PremiumQuizController extends Controller
         $game->update(['settings' => $settings]);
         
         return $question;
+    }
+    
+    /**
+     * Soruyu çoklu dil formatında formatla
+     */
+    private function formatQuestionMultilingual(?Question $question): ?array
+    {
+        if (!$question) {
+            return null;
+        }
+
+        $question->loadMissing('category');
+
+        $imageUrl = $question->image;
+        if (!empty($imageUrl)) {
+            $imageUrl = $this->formatImageUrl($imageUrl);
+        }
+
+        // Çoklu dil desteği - tr ve en
+        $questionTr = $question->getTranslation('question', 'tr');
+        $questionEn = $question->getTranslation('question', 'en');
+        
+        $choicesTr = [
+            '1' => $question->getTranslation('one_choice', 'tr'),
+            '2' => $question->getTranslation('two_choice', 'tr'),
+            '3' => $question->getTranslation('three_choice', 'tr'),
+            '4' => $question->getTranslation('four_choice', 'tr'),
+        ];
+        
+        $choicesEn = [
+            '1' => $question->getTranslation('one_choice', 'en'),
+            '2' => $question->getTranslation('two_choice', 'en'),
+            '3' => $question->getTranslation('three_choice', 'en'),
+            '4' => $question->getTranslation('four_choice', 'en'),
+        ];
+
+        $categoryNameTr = null;
+        $categoryNameEn = null;
+        if ($question->category) {
+            $categoryNameTr = $question->category->getTranslation('name', 'tr');
+            $categoryNameEn = $question->category->getTranslation('name', 'en');
+        }
+
+        return [
+            'id' => $question->id,
+            'question' => [
+                'tr' => $questionTr,
+                'en' => $questionEn,
+            ],
+            'choices' => [
+                'tr' => $choicesTr,
+                'en' => $choicesEn,
+            ],
+            'question_level' => $question->question_level,
+            'coin_value' => $question->coin_value,
+            'image' => $imageUrl,
+            'category' => $question->category ? [
+                'id' => $question->category->id,
+                'name' => [
+                    'tr' => $categoryNameTr,
+                    'en' => $categoryNameEn,
+                ],
+            ] : null,
+        ];
+    }
+    
+    /**
+     * Görsel URL'ini tam URL'e çevir
+     */
+    private function formatImageUrl(?string $imagePath): ?string
+    {
+        if (empty($imagePath)) {
+            return null;
+        }
+
+        // Eğer zaten tam URL ise, olduğu gibi döndür
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            return $imagePath;
+        }
+
+        // Eğer storage/questions/ ile başlıyorsa, sadece questions/ kısmını al
+        if (strpos($imagePath, 'storage/questions/') !== false) {
+            $imagePath = str_replace('storage/questions/', 'questions/', $imagePath);
+        }
+
+        // Eğer questions/ ile başlamıyorsa, ekle
+        if (strpos($imagePath, 'questions/') !== 0) {
+            $imagePath = 'questions/' . ltrim($imagePath, '/');
+        }
+
+        // Tam URL oluştur
+        $baseUrl = config('app.url', 'https://bilbakalim.online');
+        return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
     }
     
     /**
@@ -1279,20 +1403,60 @@ class PremiumQuizController extends Controller
         $questionCount = $request->question_count ?? config('app.quiz.premium.question_count', 15);
         $timeLimit = config('app.quiz.premium.time_limit_seconds', 1800);
 
-        // Soru dağılımı: 7 orta, 8 zor (toplam 15 soru)
-        $mediumQuestions = Question::where('question_level', 'medium')
-            ->where('is_active', true)
-            ->inRandomOrder()
-            ->limit(7)
-            ->get();
+        // Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
+        $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
+        $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
+        
+        // Reklam kategorisini bul
+        $adCategory = \App\Models\Category::where('is_active', true)
+            ->get()
+            ->filter(function($category) {
+                $nameTr = strtolower($category->getTranslation('name', 'tr', false) ?? '');
+                $nameEn = strtolower($category->getTranslation('name', 'en', false) ?? '');
+                return strpos($nameTr, 'reklam') !== false || strpos($nameEn, 'advertisement') !== false;
+            })
+            ->first();
 
-        $hardQuestions = Question::where('question_level', 'hard')
-            ->where('is_active', true)
-            ->inRandomOrder()
-            ->limit(8)
-            ->get();
-
-        $allQuestions = $mediumQuestions->merge($hardQuestions);
+        $allQuestions = collect();
+        $adQuestionIndex = 0;
+        
+        // Soru dağılımı: Reklam sorusu mantığıyla birlikte
+        // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
+        for ($i = 1; $i <= $questionCount; $i++) {
+            // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa ve reklam kategorisi varsa, reklam sorusu seç
+            if ($adAppearanceFrequency > 0 && $i % $adAppearanceFrequency === 0 && $adCategory) {
+                $adQuestions = Question::where('is_active', true)
+                    ->where('category_id', $adCategory->id)
+                    ->inRandomOrder()
+                    ->get();
+                    
+                if ($adQuestions->isNotEmpty()) {
+                    $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
+                    $allQuestions->push($adQuestion);
+                    $adQuestionIndex++;
+                    continue;
+                }
+            }
+            
+            // Normal soru seçimi: İlk 7 orta, sonraki 8 zor
+            if ($allQuestions->where('question_level', 'medium')->count() < 7) {
+                $question = Question::where('question_level', 'medium')
+                    ->where('is_active', true)
+                    ->whereNotIn('id', $allQuestions->pluck('id'))
+                    ->inRandomOrder()
+                    ->first();
+            } else {
+                $question = Question::where('question_level', 'hard')
+                    ->where('is_active', true)
+                    ->whereNotIn('id', $allQuestions->pluck('id'))
+                    ->inRandomOrder()
+                    ->first();
+            }
+            
+            if ($question) {
+                $allQuestions->push($question);
+            }
+        }
 
         // Oyun oluştur
         $game = IndividualGame::create([
@@ -1335,19 +1499,7 @@ class PremiumQuizController extends Controller
             'message' => 'Mobil premium quiz başlatıldı.',
             'game' => $game,
             'questions' => $allQuestions->map(function($question) {
-                return [
-                    'id' => $question->id,
-                    'question' => $question->question,
-                    'one_choice' => $question->one_choice,
-                    'two_choice' => $question->two_choice,
-                    'three_choice' => $question->three_choice,
-                    'four_choice' => $question->four_choice,
-                    'correct_answer' => $question->correct_answer,
-                    'category_id' => $question->category_id,
-                    'question_level' => $question->question_level,
-                    'coin_value' => $question->coin_value,
-                    'image' => $question->image ? asset('storage/' . $question->image) : null
-                ];
+                return $this->formatQuestionMultilingual($question);
             }),
             'jokers' => [
                 'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,

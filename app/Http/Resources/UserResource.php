@@ -14,10 +14,20 @@ class UserResource extends JsonResource
      */
     public function toArray($request)
     {
+        // Elmas bakiyesini al (eğer yoksa 0)
+        $diamondBalance = 0;
+        if ($this->relationLoaded('diamond')) {
+            $diamondBalance = $this->diamond ? $this->diamond->balance : 0;
+        } else {
+            $diamond = $this->diamond;
+            $diamondBalance = $diamond ? $diamond->balance : 0;
+        }
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'coins' => $this->coins,
+            'diamonds' => $diamondBalance,
             'role_id' => $this->role_id,
             'phone' => $this->phone,
             'email' => $this->email,

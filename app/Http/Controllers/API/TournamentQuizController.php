@@ -1009,16 +1009,10 @@ class TournamentQuizController extends Controller
             }
         }
 
-        // next_question'ı formatla (correct_answer'ı gizle)
+        // next_question'ı formatla (correct_answer'ı gizle ve çoklu dil desteği)
         $nextQuestionData = null;
         if ($nextQuestion) {
-            $nextQuestionData = $nextQuestion->toArray();
-            // correct_answer'ı gizle
-            unset($nextQuestionData['correct_answer']);
-            // Görsel URL'ini tam URL'e çevir
-            if (!empty($nextQuestionData['image'])) {
-                $nextQuestionData['image'] = $this->formatImageUrl($nextQuestionData['image']);
-            }
+            $nextQuestionData = $this->formatQuestionMultilingual($nextQuestion);
         }
 
         return response()->json([
@@ -1236,11 +1230,8 @@ class TournamentQuizController extends Controller
             // Kalan süreyi hesapla
             $timeRemaining = $this->getTimeRemaining($tournament);
 
-            // Görsel URL'ini formatla
-            $questionData = $question->toArray();
-            if (!empty($questionData['image'])) {
-                $questionData['image'] = $this->formatImageUrl($questionData['image']);
-            }
+            // Soruyu çoklu dil formatında formatla
+            $questionData = $this->formatQuestionMultilingual($question);
 
             return response()->json([
                 'success' => true,
@@ -1294,11 +1285,8 @@ class TournamentQuizController extends Controller
                 ], 404);
             }
 
-            // Görsel URL'ini formatla
-            $questionData = $question->toArray();
-            if (!empty($questionData['image'])) {
-                $questionData['image'] = $this->formatImageUrl($questionData['image']);
-            }
+            // Soruyu çoklu dil formatında formatla
+            $questionData = $this->formatQuestionMultilingual($question);
 
             return response()->json([
                 'success' => true,
@@ -1324,9 +1312,47 @@ class TournamentQuizController extends Controller
     /**
      * Belirli soru ID'lerini hariç tutarak deterministik soru getir (ilk soru gibi)
      * Soru numarasına göre deterministik seçim yapar
+     * Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
      */
     private function getTournamentQuestionDeterministic(Tournament $tournament, int $questionNumber, array $excludedQuestionIds = []): ?Question
     {
+        // Reklam sorusu kontrolü
+        $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
+        $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
+        
+        // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
+        // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
+        if ($adAppearanceFrequency > 0 && $questionNumber % $adAppearanceFrequency === 0) {
+            // Reklam kategorisini bul (name'i "Reklam" veya "reklam" olan kategori)
+            $adCategory = \App\Models\Category::where('is_active', true)
+                ->get()
+                ->filter(function($category) {
+                    $nameTr = strtolower($category->getTranslation('name', 'tr', false) ?? '');
+                    $nameEn = strtolower($category->getTranslation('name', 'en', false) ?? '');
+                    return strpos($nameTr, 'reklam') !== false || strpos($nameEn, 'advertisement') !== false;
+                })
+                ->first();
+
+            // Eğer reklam kategorisi bulunduysa ve soru varsa, reklam sorusu seç
+            if ($adCategory) {
+                // Reklam kategorisinden soru seç
+                $adQuestions = Question::where('is_active', true)
+                    ->where('category_id', $adCategory->id)
+                    ->whereNotIn('id', $excludedQuestionIds)
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
+                if ($adQuestions->isNotEmpty()) {
+                    // Soru numarasına göre reklam sorusu seç
+                    $adQuestionIndex = (($questionNumber / $adAppearanceFrequency) - 1) % $adQuestions->count();
+                    return $adQuestions->get($adQuestionIndex);
+                }
+            }
+            // Eğer reklam kategorisi yoksa veya reklam sorusu yoksa, normal soru seçimine geç (aşağıdaki kod devam eder)
+        }
+
+        // Normal soru seçimi
         // Önce tüm aktif soruları al (sıralı)
         $allQuestions = Question::where('is_active', true)
             ->orderBy('id', 'asc')
@@ -1363,13 +1389,46 @@ class TournamentQuizController extends Controller
 
     /**
      * Turnuva sorularını getir - Herkes aynı soruyu görür
+     * Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
      */
     private function getTournamentQuestion(Tournament $tournament, int $questionNumber): ?Question
     {
-        // Soru numarasına göre soru seçimi
-        // Farklı sorular için farklı kategoriler veya zorluk seviyeleri kullanılabilir
-        // Şimdilik basit bir yaklaşım: aktif sorulardan sırayla seç
+        // Reklam sorusu kontrolü
+        $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
+        $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
+        
+        // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
+        // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
+        if ($adAppearanceFrequency > 0 && $questionNumber % $adAppearanceFrequency === 0) {
+            // Reklam kategorisini bul (name'i "Reklam" veya "reklam" olan kategori)
+            $adCategory = \App\Models\Category::where('is_active', true)
+                ->get()
+                ->filter(function($category) {
+                    $nameTr = strtolower($category->getTranslation('name', 'tr', false) ?? '');
+                    $nameEn = strtolower($category->getTranslation('name', 'en', false) ?? '');
+                    return strpos($nameTr, 'reklam') !== false || strpos($nameEn, 'advertisement') !== false;
+                })
+                ->first();
 
+            // Eğer reklam kategorisi bulunduysa ve soru varsa, reklam sorusu seç
+            if ($adCategory) {
+                // Reklam kategorisinden soru seç
+                $adQuestions = Question::where('is_active', true)
+                    ->where('category_id', $adCategory->id)
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
+                if ($adQuestions->isNotEmpty()) {
+                    // Soru numarasına göre reklam sorusu seç
+                    $adQuestionIndex = (($questionNumber / $adAppearanceFrequency) - 1) % $adQuestions->count();
+                    return $adQuestions->get($adQuestionIndex);
+                }
+            }
+            // Eğer reklam kategorisi yoksa veya reklam sorusu yoksa, normal soru seçimine geç (aşağıdaki kod devam eder)
+        }
+
+        // Normal soru seçimi
         $questions = Question::where('is_active', true)
             ->orderBy('id', 'asc')
             ->get();
@@ -2491,9 +2550,9 @@ class TournamentQuizController extends Controller
     }
 
     /**
-     * Socket'e gönderilecek soru formatı
+     * Soruyu çoklu dil formatında formatla
      */
-    private function formatQuestionForSocket(?Question $question): ?array
+    private function formatQuestionMultilingual(?Question $question): ?array
     {
         if (!$question) {
             return null;
@@ -2506,17 +2565,59 @@ class TournamentQuizController extends Controller
             $imageUrl = $this->formatImageUrl($imageUrl);
         }
 
+        // Çoklu dil desteği - tr ve en
+        $questionTr = $question->getTranslation('question', 'tr');
+        $questionEn = $question->getTranslation('question', 'en');
+        
+        $choicesTr = [
+            '1' => $question->getTranslation('one_choice', 'tr'),
+            '2' => $question->getTranslation('two_choice', 'tr'),
+            '3' => $question->getTranslation('three_choice', 'tr'),
+            '4' => $question->getTranslation('four_choice', 'tr'),
+        ];
+        
+        $choicesEn = [
+            '1' => $question->getTranslation('one_choice', 'en'),
+            '2' => $question->getTranslation('two_choice', 'en'),
+            '3' => $question->getTranslation('three_choice', 'en'),
+            '4' => $question->getTranslation('four_choice', 'en'),
+        ];
+
+        $categoryNameTr = null;
+        $categoryNameEn = null;
+        if ($question->category) {
+            $categoryNameTr = $question->category->getTranslation('name', 'tr');
+            $categoryNameEn = $question->category->getTranslation('name', 'en');
+        }
+
         return [
             'id' => $question->id,
-            'question' => $question->question,
-            'choices' => $question->choices,
+            'question' => [
+                'tr' => $questionTr,
+                'en' => $questionEn,
+            ],
+            'choices' => [
+                'tr' => $choicesTr,
+                'en' => $choicesEn,
+            ],
             'question_level' => $question->question_level,
             'coin_value' => $question->coin_value,
             'image' => $imageUrl,
             'category' => $question->category ? [
                 'id' => $question->category->id,
-                'name' => $question->category->name,
+                'name' => [
+                    'tr' => $categoryNameTr,
+                    'en' => $categoryNameEn,
+                ],
             ] : null,
         ];
+    }
+
+    /**
+     * Socket'e gönderilecek soru formatı
+     */
+    private function formatQuestionForSocket(?Question $question): ?array
+    {
+        return $this->formatQuestionMultilingual($question);
     }
 }

@@ -98,6 +98,33 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Düello odasına katılma
+    socket.on('join_duel', (data) => {
+        console.log('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
+        
+        if (!data || !data.duelId || !data.userId) {
+            socket.emit('join_duel_error', {
+                success: false,
+                message: 'duelId ve userId gereklidir'
+            });
+            return;
+        }
+        
+        const { duelId, userId, userName } = data;
+        const roomName = `duel_${duelId}`;
+        
+        socket.join(roomName);
+        socket.join(`user_${userId}`);
+        
+        console.log(`✅ Kullanıcı ${userId} düello odasına katıldı: ${roomName}`);
+        
+        socket.emit('duel_joined', {
+            success: true,
+            duel_id: duelId,
+            room: roomName
+        });
+    });
+
     // Turnuva odasına katılma
     socket.on('join_tournament', (data) => {
         console.log('📥 join_tournament event alındı:', JSON.stringify(data, null, 2));
@@ -828,6 +855,161 @@ app.post('/socket-webhooks/webhook/tournament-next-question', (req, res) => {
 
     console.log(`Turnuva sonraki soru: Tournament ${tournament_id}, Question ${question_number}/${total_questions}`);
     res.json({ success: true, message: 'Tournament next question webhook processed' });
+});
+
+// ===== DÜELLO (MEYDAN OKUMA) WEBHOOK'LARI =====
+
+app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-created', JSON.stringify(req.body));
+        const { duel_id, challenger_id, opponent_id, multiplier, question_value, requires_acceptance } = req.body;
+        
+        if (!duel_id || !challenger_id || !opponent_id) {
+            return res.status(400).json({ success: false, message: 'Eksik parametreler' });
+        }
+        
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            challenger_id: parseInt(challenger_id),
+            opponent_id: parseInt(opponent_id),
+            multiplier: multiplier || 'x1',
+            question_value: question_value || 10,
+            requires_acceptance: requires_acceptance || false, // X2/X4/X8 için true
+            timestamp: new Date().toISOString()
+        };
+        
+        // X2/X4/X8 ise sadece rakibe bildirim gönder (kabul/reddet seçeneği ile)
+        if (requires_acceptance) {
+            io.to(`user_${opponent_id}`).emit('duel-challenge-request', {
+                ...data,
+                message: `${multiplier} düello isteği geldi! Kabul et veya reddet.`
+            });
+        } else {
+            // X1 ise her iki kullanıcıya da bildirim gönder
+            io.to(`user_${challenger_id}`).emit('duel-created', data);
+            io.to(`user_${opponent_id}`).emit('duel-created', data);
+        }
+        
+        io.to(roomName).emit('duel-created', data);
+        
+        console.log('✅ duel-created event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel created webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-started', JSON.stringify(req.body));
+        const { duel_id, challenger_id, opponent_id, question } = req.body;
+        
+        if (!duel_id) {
+            return res.status(400).json({ success: false, message: 'duel_id gerekli' });
+        }
+        
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            challenger_id: parseInt(challenger_id),
+            opponent_id: parseInt(opponent_id),
+            question: question,
+            timestamp: new Date().toISOString()
+        };
+        
+        io.to(roomName).emit('duel-started', data);
+        io.to(`user_${challenger_id}`).emit('duel-started', data);
+        io.to(`user_${opponent_id}`).emit('duel-started', data);
+        
+        console.log('✅ duel-started event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel started webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-answer', JSON.stringify(req.body));
+        const { duel_id, user_id, is_correct, both_answered } = req.body;
+        
+        if (!duel_id || !user_id) {
+            return res.status(400).json({ success: false, message: 'Eksik parametreler' });
+        }
+        
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            user_id: parseInt(user_id),
+            is_correct: is_correct,
+            both_answered: both_answered,
+            timestamp: new Date().toISOString()
+        };
+        
+        io.to(roomName).emit('duel-answer', data);
+        
+        console.log('✅ duel-answer event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel answer webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
+        const { duel_id, question, question_number } = req.body;
+        
+        if (!duel_id || !question) {
+            return res.status(400).json({ success: false, message: 'Eksik parametreler' });
+        }
+        
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            question: question,
+            question_number: question_number,
+            timestamp: new Date().toISOString()
+        };
+        
+        io.to(roomName).emit('duel-next-question', data);
+        
+        console.log('✅ duel-next-question event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel next question webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
+        const { duel_id, winner_id } = req.body;
+        
+        if (!duel_id) {
+            return res.status(400).json({ success: false, message: 'duel_id gerekli' });
+        }
+        
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            winner_id: winner_id ? parseInt(winner_id) : null,
+            timestamp: new Date().toISOString()
+        };
+        
+        io.to(roomName).emit('duel-finished', data);
+        
+        console.log('✅ duel-finished event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel finished webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Health check endpoint
