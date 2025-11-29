@@ -8,6 +8,8 @@ use App\Models\IndividualGame;
 use App\Models\GameAnswer;
 use App\Models\User;
 use App\Models\Package;
+use App\Models\Tournament;
+use App\Models\TournamentUser;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -428,7 +430,7 @@ class PremiumQuizController extends Controller
     public function useJoker(Request $request): JsonResponse
     {
         $rules = [
-            'game_id' => 'required|exists:individual_games,id',
+            'game_id' => 'required|integer',
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
         ];
@@ -441,40 +443,88 @@ class PremiumQuizController extends Controller
         $request->validate($rules);
         
         $user = Auth::user();
-        $game = IndividualGame::where('id', $request->game_id)
+        $gameId = $request->game_id;
+        $jokerType = $request->joker_type;
+        $isTournament = false;
+        $game = null;
+        $tournament = null;
+        $tournamentUser = null;
+        
+        // Önce premium quiz olarak kontrol et
+        $game = IndividualGame::where('id', $gameId)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'premium')
             ->first();
-            
+        
+        // Eğer premium quiz değilse, turnuva olarak kontrol et
         if (!$game) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Aktif premium oyun bulunamadı.'
-            ], 404);
-        }
-        
-        $settings = $game->settings ?? [];
-        $jokerType = $request->joker_type;
-        
-        // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
-        if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
-            $settings['jokers'] = [
-                'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
-                'double_answer' => $user->double_answer_jokers ?? 0,
-                'hint' => $user->hint_jokers ?? 0
-            ];
-        }
-        
-        // Joker tipi kontrolü
-        if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bu joker türü kalmadı.'
-            ], 400);
+            $tournament = Tournament::where('id', $gameId)
+                ->where('status', 'active')
+                ->first();
+            
+            if ($tournament) {
+                $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
+                    ->where('user_id', $user->id)
+                    ->whereIn('status', ['active', 'waiting'])
+                    ->first();
+                
+                if ($tournamentUser) {
+                    $isTournament = true;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Aktif turnuva katılımınız bulunamadı.'
+                    ], 404);
+                }
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aktif premium oyun veya turnuva bulunamadı.'
+                ], 404);
+            }
         }
         
         $question = Question::find($request->question_id);
+        
+        if (!$question) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Soru bulunamadı.'
+            ], 404);
+        }
+        
+        // Turnuva için joker kontrolü
+        if ($isTournament) {
+            // Turnuva joker hakkı kontrolü (joker_hakki alanı)
+            if ($tournamentUser->joker_hakki <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Turnuva joker hakkınız kalmadı.'
+                ], 400);
+            }
+        } else {
+            // Premium quiz için joker kontrolü
+            $settings = $game->settings ?? [];
+            
+            // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
+            if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
+                $settings['jokers'] = [
+                    'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
+                    'double_answer' => $user->double_answer_jokers ?? 0,
+                    'hint' => $user->hint_jokers ?? 0
+                ];
+            }
+            
+            // Joker tipi kontrolü
+            if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bu joker türü kalmadı.'
+                ], 400);
+            }
+        }
+        
         $result = [];
         
         switch ($jokerType) {
@@ -490,14 +540,32 @@ class PremiumQuizController extends Controller
         }
         
         // Joker hakkını azalt
-        $settings['jokers'][$jokerType]--;
-        $game->update(['settings' => $settings]);
-        
-        // Kullanıcının genel joker sayısını da azalt
-        $this->decrementUserJoker($user, $jokerType);
+        if ($isTournament) {
+            // Turnuva için sadece joker_hakki azaltılır (genel joker azaltılmaz)
+            $tournamentUser->decrement('joker_hakki');
+            $remainingJokers = [
+                'fifty_fifty' => 0,
+                'double_answer' => 0,
+                'hint' => 0,
+                'tournament_jokers' => $tournamentUser->joker_hakki
+            ];
+        } else {
+            // Premium quiz için settings'teki jokerleri azalt
+            $settings['jokers'][$jokerType]--;
+            $game->update(['settings' => $settings]);
+            
+            // Kullanıcının genel joker sayısını da azalt
+            $this->decrementUserJoker($user, $jokerType);
+            
+            $remainingJokers = $settings['jokers'];
+        }
         
         // Socket.IO'ya joker kullanım bildirimi gönder
-        $this->broadcastJokerUsed($game, $user, $jokerType, $result);
+        if ($isTournament) {
+            $this->broadcastTournamentJokerUsed($tournament, $user, $jokerType, $result);
+        } else {
+            $this->broadcastJokerUsed($game, $user, $jokerType, $result);
+        }
         
         // Seçilen cevabın doğruluğunu kontrol et
         $selectedAnswer = $request->selected_answer;
@@ -519,7 +587,8 @@ class PremiumQuizController extends Controller
             'success' => true,
             'joker_type' => $jokerType,
             'result' => $result,
-            'remaining_jokers' => $settings['jokers']
+            'remaining_jokers' => $remainingJokers,
+            'game_type' => $isTournament ? 'tournament' : 'premium'
         ];
         
         // Eğer seçilen cevap gönderildiyse, response'a ekle
@@ -746,6 +815,8 @@ class PremiumQuizController extends Controller
                 'message' => "Tebrikler! Yüksek başarı ödülünü kazandınız! ({$accuracyRate}% başarı)"
             ];
         }
+
+        $minAccuracyRate = config('app.reward_min_accuracy_rate', 80);
         
         return [
             'type' => 'none',
@@ -1048,6 +1119,40 @@ class PremiumQuizController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to broadcast premium quiz joker used', [
                 'game_id' => $game->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+    
+    /**
+     * Socket.IO'ya turnuva joker kullanım bildirimi gönder
+     */
+    private function broadcastTournamentJokerUsed(Tournament $tournament, User $user, string $jokerType, array $result): void
+    {
+        try {
+            $webhookService = app(\App\Http\Services\WebhookService::class);
+            $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
+                ->where('user_id', $user->id)
+                ->first();
+            
+            $webhookService->sendWebhook('/socket-webhooks/webhook/tournament-joker-used', [
+                'tournament_id' => $tournament->id,
+                'user_id' => $user->id,
+                'joker_type' => $jokerType,
+                'result' => $result,
+                'remaining_jokers' => $tournamentUser ? $tournamentUser->joker_hakki : 0,
+                'timestamp' => now()->toISOString()
+            ]);
+            
+            Log::info('Tournament joker used broadcast sent', [
+                'tournament_id' => $tournament->id,
+                'user_id' => $user->id,
+                'joker_type' => $jokerType
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to broadcast tournament joker used', [
+                'tournament_id' => $tournament->id,
                 'error' => $e->getMessage()
             ]);
         }

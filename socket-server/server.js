@@ -723,6 +723,46 @@ app.post('/socket-webhooks/webhook/tournament-answer-submitted', (req, res) => {
     res.json({ success: true, message: 'Tournament answer submitted webhook processed' });
 });
 
+app.post('/socket-webhooks/webhook/tournament-joker-used', (req, res) => {
+    try {
+        const { tournament_id, user_id, joker_type, result, remaining_jokers } = req.body;
+
+        if (!tournament_id || !user_id || !joker_type) {
+            console.error('❌ Webhook: tournament_id, user_id veya joker_type eksik', req.body);
+            return res.status(400).json({
+                success: false,
+                message: 'tournament_id, user_id ve joker_type gereklidir'
+            });
+        }
+
+        const roomName = `tournament_${tournament_id}`;
+        const user = connectedUsers.get(userSocketMap.get(parseInt(user_id)));
+
+        const jokerData = {
+            tournament_id: parseInt(tournament_id),
+            user_id: parseInt(user_id),
+            user_name: user?.userName || `User ${user_id}`,
+            joker_type: joker_type,
+            result: result || {},
+            remaining_jokers: remaining_jokers || 0,
+            timestamp: new Date().toISOString()
+        };
+
+        console.log('📤 tournament-joker-used event gönderiliyor:', JSON.stringify(jokerData, null, 2));
+        io.to(roomName).emit('tournament-joker-used', jokerData);
+        console.log(`✅ Turnuva joker kullanıldı: User ${user_id} - Tournament ${tournament_id}, Joker: ${joker_type}, Room: ${roomName}`);
+
+        res.json({ success: true, message: 'Tournament joker used webhook processed' });
+    } catch (error) {
+        console.error('❌ Webhook işleme hatası:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Webhook işlenirken hata oluştu',
+            error: error.message
+        });
+    }
+});
+
 app.post('/socket-webhooks/webhook/tournament-ranking-updated', (req, res) => {
     const { tournament_id, rankings } = req.body;
 

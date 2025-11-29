@@ -309,43 +309,6 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
-        // Önce mevcut boş turnuvaları kontrol et
-        $existingTournament = Tournament::where('status', 'active')
-            ->where('tournament_type', $request->type)
-            ->where('min_participants', $minParticipants)
-            ->whereHas('participants', function($query) {
-                $query->where('status', 'waiting');
-            }, '<', $minParticipants)
-            ->whereDoesntHave('participants', function($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
-            ->first();
-
-        if ($existingTournament) {
-            // Mevcut turnuvaya katıl
-            $tournamentUser = TournamentUser::create([
-                'tournament_id' => $existingTournament->id,
-                'user_id' => $user->id,
-                'status' => 'waiting',  // Enum'da 'waiting' var
-                'score' => 0,
-                'coins' => $user->coins
-            ]);
-
-            $currentParticipants = $existingTournament->participants()->where('status', 'waiting')->count();
-            $waitingMessage = "Mevcut turnuvaya katıldınız. Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
-
-            // Socket bildirimi
-            $this->sendTournamentJoinWebhook($existingTournament, $user);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Mevcut turnuvaya katıldınız.',
-                'action' => 'joined',
-                'tournament' => $existingTournament,
-                'waiting_message' => $waitingMessage
-            ]);
-        }
-
         // Yeni turnuva oluştur
         $startTime = now();
         $endTime = $request->type === 'time_based'
@@ -369,14 +332,6 @@ class TournamentQuizController extends Controller
             'status' => 'upcoming'
         ]);
 
-        // Kullanıcıyı turnuvaya ekle
-        $tournamentUser = TournamentUser::create([
-            'tournament_id' => $tournament->id,
-            'user_id' => $user->id,
-            'status' => 'waiting',  // Enum'da 'waiting' var
-            'score' => 0,
-            'coins' => $user->coins
-        ]);
 
         $waitingMessage = "Yeni turnuva oluşturuldu. Diğer oyuncular bekleniyor... (1/{$minParticipants})";
 
@@ -454,7 +409,9 @@ class TournamentQuizController extends Controller
         }
 
         // Tüm katılımcıların socket bağlantısı kontrolü
+        // Sadece waiting veya active durumundaki katılımcıları kontrol et
         $participants = TournamentUser::where('tournament_id', $tournament->id)
+            ->whereIn('status', ['waiting', 'active'])
             ->with('user')
             ->get();
 
@@ -464,6 +421,15 @@ class TournamentQuizController extends Controller
         // WebhookService ile socket bağlantısı kontrolü
         $webhookService = app(\App\Http\Services\WebhookService::class);
         $userIds = $participants->pluck('user_id')->toArray();
+
+        // Eğer hiç katılımcı yoksa hata döndür
+        if (empty($userIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Turnuvaya katılımcı bulunamadı.'
+            ], 400);
+        }
+
         $connectionStatus = $webhookService->checkUsersConnection($userIds);
 
         foreach ($participants as $participant) {
@@ -515,16 +481,25 @@ class TournamentQuizController extends Controller
         }
 
         // İlk soruyu hazırla (herkes aynı soruyu görecek)
-        $firstQuestion = $this->getTournamentQuestion($tournament, 1);
+        $firstQuestion = $this->getTournamentQuestion($tournament, $tournament->id);
 
         // Turnuva ayarlarını güncelle
+        $settings = $tournament->settings ?? [];
+        $answeredQuestionIds = [];
+
+        // İlk soruyu answered_question_ids listesine ekle (bir daha gelmesin diye)
+        if ($firstQuestion) {
+            $answeredQuestionIds[] = $firstQuestion->id;
+        }
+
         $tournament->update([
-            'settings' => array_merge($tournament->settings ?? [], [
+            'settings' => array_merge($settings, [
                 'current_question_number' => 1,
-                'current_question_id' => $firstQuestion->id,
+                'current_question_id' => $firstQuestion->id ?? null,
                 'question_start_time' => now(),
                 'connected_participants' => count($connectedParticipants),
-                'disconnected_participants' => count($disconnectedParticipants)
+                'disconnected_participants' => count($disconnectedParticipants),
+                'answered_question_ids' => $answeredQuestionIds // İlk soruyu listeye ekle
             ])
         ]);
 
@@ -592,7 +567,7 @@ class TournamentQuizController extends Controller
         $request->validate([
             'tournament_id' => 'required|exists:tournaments,id',
             'question_id' => 'required|exists:questions,id',
-            'selected_option' => 'required|in:1,2,3,4',
+            'selected_option' => 'required|in:1,2,3,4,5',
             'time_spent' => 'nullable|integer|min:1',
             'question_number' => 'nullable|integer|min:1' // Soru bazlı turnuvalar için soru numarası
         ]);
@@ -609,17 +584,11 @@ class TournamentQuizController extends Controller
 
         // Turnuva aktif mi kontrol et - Fresh query ile tekrar çek
         $tournament = $tournament->fresh();
-        if ($tournament->status !== 'active') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Turnuva aktif değil. Mevcut durum: ' . $tournament->status
-            ], 400);
-        }
 
         // Eliminated kullanıcılar da cevap gönderebilir (ama skor güncellenmeyecek)
         $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
-            ->whereIn('status', ['active', 'eliminated'])  // Eliminated kullanıcılar da cevap gönderebilir
+            ->whereIn('status', ['active', 'eliminated', 'completed'])  // Completed kullanıcılar da kontrol edilmeli
             ->first();
 
         if (!$tournamentUser) {
@@ -628,7 +597,32 @@ class TournamentQuizController extends Controller
                 'message' => 'Turnuva katılımınız bulunamadı.'
             ], 404);
         }
-        
+
+        // Eğer turnuva completed durumundaysa, kullanıcının durumunu kontrol et
+        // Eğer kullanıcı hala aktifse ve soruları bitirmemişse, cevap gönderebilmeli
+        if ($tournament->status === 'completed') {
+            // Kullanıcının durumunu kontrol et
+            $userStatus = $tournamentUser->status;
+            $userAnswerCount = count($tournamentUser->answers_detail ?? []);
+
+            // Eğer kullanıcı hala aktifse ve soruları bitirmemişse, cevap gönderebilmeli
+            if ($userStatus === 'active' && $userAnswerCount < $tournament->question_count) {
+                // Kullanıcı hala aktif, cevap gönderebilir
+                // Turnuva completed olsa bile, bu kullanıcı için hala aktif sayılır
+            } else {
+                // Kullanıcı zaten completed veya eliminated, cevap gönderemez
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Turnuva tamamlandı. Artık cevap gönderemezsiniz.'
+                ], 400);
+            }
+        } elseif ($tournament->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Turnuva aktif değil. Mevcut durum: ' . $tournament->status
+            ], 400);
+        }
+
         // Eliminated kullanıcılar için özel kontrol
         $isEliminated = $tournamentUser->status === 'eliminated';
 
@@ -669,12 +663,12 @@ class TournamentQuizController extends Controller
 
         // Coin değişimini hesapla (doğru cevap +coin, yanlış cevap -coin)
         $coinChange = $isCorrect ? $question->coin_value : -$question->coin_value;
-        
+
         // Score = Turnuvadan kazanılan/kaybedilen toplam coin miktarı
         // Score negatif olabilir (kullanıcı coin kaybedebilir)
         $newScore = $tournamentUser->score + $coinChange;
         $status = $tournamentUser->status;
-        
+
         if (!$isEliminated) {
             // Aktif kullanıcılar için coin kontrolü
             // Eğer toplam coin (başlangıç coin + turnuva coin değişimi) 0 veya negatif olursa eliminated
@@ -706,17 +700,17 @@ class TournamentQuizController extends Controller
         $user->refresh(); // Güncel coin değerini al
         $balanceBefore = $user->coins;
         $newBalance = max(0, $balanceBefore + $coinChange); // Coin negatif olamaz (minimum 0)
-        
+
         $user->update(['coins' => $newBalance]);
-        
+
         // Coin history'ye kayıt ekle
         \App\Models\CoinHistory::create([
             'user_id' => $user->id,
             'coin_amount' => $coinChange,
             'transaction_type' => $isCorrect ? 'tournament_correct_answer' : 'tournament_wrong_answer',
             'status' => 'completed',
-            'description' => $isCorrect 
-                ? "Turnuva doğru cevap: +{$coinChange} coin" 
+            'description' => $isCorrect
+                ? "Turnuva doğru cevap: +{$coinChange} coin"
                 : "Turnuva yanlış cevap: {$coinChange} coin",
             'balance_before' => $balanceBefore,
             'balance_after' => $newBalance,
@@ -727,7 +721,7 @@ class TournamentQuizController extends Controller
                 'coin_value' => $question->coin_value
             ]
         ]);
-        
+
         Log::info('User coins updated', [
             'user_id' => $user->id,
             'tournament_id' => $tournament->id,
@@ -746,32 +740,136 @@ class TournamentQuizController extends Controller
         $this->sendTournamentAnswerWebhook($tournament, $tournamentUser, $question, $isCorrect, $coinChange);
 
         // Turnuva türüne göre sonraki soruya geç
+        // ÖNEMLİ: Aynı turnuvadaki tüm katılımcılar aynı soruyu görmeli
+        // ÖNEMLİ: Cevap verilen soru (mevcut soru) answered_question_ids listesine eklenmeli
         $nextQuestion = null;
-        if ($tournament->tournament_type === 'question_based') {
-            // Soru bazlı turnuva: Tüm sorular bitene kadar devam eder
-            $settings = $tournament->settings ?? [];
-            
-            // Frontend'den gelen question_number varsa onu kullan, yoksa settings'ten al
-            $currentQuestionNumber = $request->input('question_number');
-            if (!$currentQuestionNumber) {
-                $currentQuestionNumber = $settings['current_question_number'] ?? 1;
-            }
+        $settings = $tournament->settings ?? [];
+        $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
+        $currentQuestionId = $settings['current_question_id'] ?? null;
 
-            // Kullanıcının mevcut soru numarasını güncelle
-            $tournamentUser->update(['current_question_number' => $currentQuestionNumber]);
-            
-            Log::info('Question-based tournament: Question number updated', [
+        // ÖNEMLİ: Kullanıcının cevap verdiği soru, turnuva genelindeki mevcut soru ile eşleşmeli
+        // Eğer eşleşmiyorsa, kullanıcı yanlış soruya cevap vermiş demektir
+        if ($currentQuestionId && $question->id != $currentQuestionId) {
+            Log::warning('User answered wrong question', [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
-                'question_number' => $currentQuestionNumber,
-                'from_request' => $request->has('question_number')
+                'answered_question_id' => $question->id,
+                'current_question_id' => $currentQuestionId
             ]);
 
-            // Eğer tüm katılımcılar bu soruyu cevapladıysa sonraki soruya geç
+            // Yanlış soruya cevap verilmişse, mevcut soruyu döndür
+            $nextQuestion = Question::find($currentQuestionId);
+            if ($nextQuestion) {
+                $nextQuestionData = $nextQuestion->toArray();
+                unset($nextQuestionData['correct_answer']);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Yanlış soruya cevap verdiniz. Lütfen mevcut soruya cevap verin.',
+                    'next_question' => $nextQuestionData
+                ], 400);
+            }
+        }
+
+        // Cevap verilen soruyu (mevcut soru) answered_question_ids listesine ekle
+        // Bu sayede bir daha gelmeyecek
+        if (!in_array($question->id, $answeredQuestionIds)) {
+            $answeredQuestionIds[] = $question->id;
+            // Settings'i güncelle
+            $tournament->update([
+                'settings' => array_merge($settings, [
+                    'answered_question_ids' => $answeredQuestionIds
+                ])
+            ]);
+            $settings = $tournament->settings ?? []; // Settings'i yeniden al
+        }
+
+        if ($tournament->tournament_type === 'question_based') {
+            // Soru bazlı turnuva: Her kullanıcı kendi cevap sayısına göre sıradaki soruyu görür
+            // Ama tüm kullanıcılar aynı soru numarasındaki soruyu görür (deterministik)
+
+            // Kullanıcının cevap sayısını al
+            $userAnswerCount = count($answersDetail);
+            $nextQuestionNumber = $userAnswerCount + 1; // Bir sonraki soru numarası
+
+            // Kullanıcının mevcut soru numarasını güncelle
+            $tournamentUser->update(['current_question_number' => $nextQuestionNumber]);
+
+            Log::info('Question-based tournament: Answer submitted', [
+                'tournament_id' => $tournament->id,
+                'user_id' => $user->id,
+                'user_answer_count' => $userAnswerCount,
+                'next_question_number' => $nextQuestionNumber,
+                'question_id' => $question->id
+            ]);
+
+            // Soru sayısına göre kullanıcı bitiş kontrolü
+            if ($nextQuestionNumber > $tournament->question_count) {
+                // Bu kullanıcı tüm soruları bitirdi, kullanıcıyı completed olarak işaretle
+                $tournamentUser->update([
+                    'status' => 'completed',
+                    'finished_at' => now()
+                ]);
+
+                // Tüm aktif kullanıcıların tüm soruları bitirip bitirmediğini kontrol et
+                $activeParticipants = TournamentUser::where('tournament_id', $tournament->id)
+                    ->where('status', 'active')
+                    ->count();
+
+                // Eğer aktif kullanıcı kalmadıysa, turnuvayı bitir
+                if ($activeParticipants === 0) {
+                    $this->finishTournament($tournament);
+                } else {
+                    // Hala aktif kullanıcılar var, turnuvayı bitirme
+                    // Diğer kullanıcılar sorularını cevaplamaya devam edebilir
+                    Log::info('User completed all questions, but tournament continues', [
+                        'tournament_id' => $tournament->id,
+                        'user_id' => $user->id,
+                        'remaining_active_participants' => $activeParticipants
+                    ]);
+                }
+
+                $nextQuestion = null;
+            } else {
+                // Kullanıcının sıradaki soru numarası için soruyu al
+                // Tüm kullanıcılar aynı soru numarasındaki soruyu görür (deterministik)
+                $usedQuestionIds = $answeredQuestionIds; // Güncel liste
+
+                // Yeni soru seç - ilk soru gibi deterministik (soru numarasına göre)
+                // getTournamentQuestionDeterministic metodu kullanılan soruları hariç tutarak deterministik seçim yapar
+                $nextQuestion = $this->getTournamentQuestionDeterministic($tournament, $nextQuestionNumber, $usedQuestionIds);
+
+                if ($nextQuestion) {
+                    // Yeni soruyu kullanılan sorular listesine ekle (eğer yoksa)
+                    if (!in_array($nextQuestion->id, $usedQuestionIds)) {
+                        $usedQuestionIds[] = $nextQuestion->id;
+
+                        // Turnuva settings'ini güncelle (answered_question_ids)
+                        $tournament->update([
+                            'settings' => array_merge($settings, [
+                                'answered_question_ids' => $usedQuestionIds
+                            ])
+                        ]);
+                        $settings = $tournament->settings ?? []; // Settings'i yeniden al
+                    }
+                }
+            }
+        } elseif ($tournament->tournament_type === 'time_based') {
+            // Süre bazlı turnuva: Tüm katılımcılar aynı soruyu görmeli
+            // Tüm katılımcılar cevap verene kadar beklemeli
+            $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+
+            Log::info('Time-based tournament: Answer submitted', [
+                'tournament_id' => $tournament->id,
+                'user_id' => $user->id,
+                'question_id' => $question->id,
+                'current_question_number' => $currentQuestionNumber
+            ]);
+
+            // Bu soruya cevap veren kullanıcı sayısını kontrol et
             // Eliminated kullanıcılar da sayılır (cevap gönderebilirler)
             $answeredCount = TournamentUser::where('tournament_id', $tournament->id)
                 ->whereIn('status', ['active', 'eliminated'])
-                ->where('current_question_number', $currentQuestionNumber)
                 ->whereRaw('JSON_LENGTH(answers_detail) >= ?', [$currentQuestionNumber])
                 ->count();
 
@@ -779,149 +877,48 @@ class TournamentQuizController extends Controller
                 ->whereIn('status', ['active', 'eliminated'])
                 ->count();
 
-            // Tek kişilik turnuva için: her cevaptan sonra sonraki soruya geç
+            // Tüm katılımcılar bu soruyu cevapladıysa sonraki soruya geç
             if ($activeCount === 1 || $answeredCount >= $activeCount) {
                 // Sonraki soruya geç
                 $nextQuestionNumber = $currentQuestionNumber + 1;
-                
-                // Soru sayısına göre turnuva bitiş kontrolü
-                // Eğer mevcut soru son soruysa (currentQuestionNumber == question_count), turnuvayı bitir
-                if ($currentQuestionNumber >= $tournament->question_count || $nextQuestionNumber > $tournament->question_count) {
-                    // Tüm sorular bitti, turnuvayı bitir
-                    $this->finishTournament($tournament);
-                    $nextQuestion = null;
-                } else {
-                    $nextQuestion = $this->getTournamentQuestion($tournament, $nextQuestionNumber);
 
-                    if ($nextQuestion) {
-                        $tournament->update([
-                            'settings' => array_merge($settings, [
-                                'current_question_number' => $nextQuestionNumber,
-                                'current_question_id' => $nextQuestion->id,
-                                'question_start_time' => now()
-                            ])
-                        ]);
+                // Yeni soru seç - ilk soru gibi deterministik (soru numarasına göre)
+                // ÖNEMLİ: Bir kez sorulan soru bir daha kesinlikle gelmemeli
+                // getTournamentQuestionDeterministic metodu kullanılan soruları hariç tutarak deterministik seçim yapar
+                $nextQuestion = $this->getTournamentQuestionDeterministic($tournament, $nextQuestionNumber, $answeredQuestionIds);
 
-                        // Tüm aktif katılımcıların soru numarasını güncelle
-                        TournamentUser::where('tournament_id', $tournament->id)
-                            ->whereIn('status', ['active', 'eliminated'])
-                            ->update(['current_question_number' => $nextQuestionNumber]);
-
-                        // Sonraki soruyu broadcast et
-                        $this->broadcastNextQuestion($tournament, $nextQuestion);
-                    }
-                }
-            }
-        } elseif ($tournament->tournament_type === 'time_based') {
-            // Süre bazlı turnuva: Her cevap verildiğinde yeni soru gösterilir
-            // Aynı soru tekrar gösterilmez
-            $settings = $tournament->settings ?? [];
-            $answeredQuestionIds = $settings['answered_question_ids'] ?? []; // Cevaplanan soru ID'leri
-            
-            // Cevap verilen soruyu (mevcut soru) cevaplanan sorular listesine ekle
-            // Bu önemli: Cevap verilen soru ID'sini direkt ekliyoruz
-            if (!in_array($question->id, $answeredQuestionIds)) {
-                $answeredQuestionIds[] = $question->id;
-                Log::info('Time-based tournament: Question answered and added to list', [
-                    'tournament_id' => $tournament->id,
-                    'question_id' => $question->id,
-                    'answered_question_ids' => $answeredQuestionIds
-                ]);
-            }
-            
-            // Yeni soru seç - cevaplanan soruları hariç tut
-            $nextQuestion = $this->getTournamentQuestionExcluding($tournament, $answeredQuestionIds);
-            
-            if ($nextQuestion) {
-                // Yeni soruyu da cevaplanan sorular listesine ekle (hemen gösterilecek)
-                if (!in_array($nextQuestion->id, $answeredQuestionIds)) {
-                    $answeredQuestionIds[] = $nextQuestion->id;
-                }
-                
-                $currentQuestionNumber = ($settings['current_question_number'] ?? 0) + 1;
-                $tournament->update([
-                    'settings' => array_merge($settings, [
-                        'current_question_number' => $currentQuestionNumber,
-                        'current_question_id' => $nextQuestion->id,
-                        'question_start_time' => now(),
-                        'answered_question_ids' => $answeredQuestionIds
-                    ])
-                ]);
-                
-                Log::info('Time-based tournament: New question selected', [
-                    'tournament_id' => $tournament->id,
-                    'new_question_id' => $nextQuestion->id,
-                    'answered_question_ids' => $answeredQuestionIds
-                ]);
-                
-                // Yeni soruyu broadcast et
-                $this->broadcastNextQuestion($tournament, $nextQuestion);
-            } else {
-                // Tüm sorular cevaplandı, soruları sıfırla ve tekrar başla
-                Log::info('Time-based tournament: All questions answered, resetting list', [
-                    'tournament_id' => $tournament->id
-                ]);
-                
-                $answeredQuestionIds = [];
-                $nextQuestion = $this->getTournamentQuestion($tournament, 1);
-                
                 if ($nextQuestion) {
-                    $answeredQuestionIds[] = $nextQuestion->id;
-                    $currentQuestionNumber = 1;
-                    $tournament->update([
-                        'settings' => array_merge($settings, [
-                            'current_question_number' => $currentQuestionNumber,
-                            'current_question_id' => $nextQuestion->id,
-                            'question_start_time' => now(),
-                            'answered_question_ids' => $answeredQuestionIds
-                        ])
-                    ]);
-                    
-                    $this->broadcastNextQuestion($tournament, $nextQuestion);
-                }
-            }
-            
-            // Süre bazlı turnuva için next_question döndürülür
-            // Frontend'in yeni soruyu alabilmesi için
-            // Eğer nextQuestion hala null ise, rastgele bir soru al (süre dolana kadar devam eder)
-            if (!$nextQuestion) {
-                // Önce cevaplanan soruları hariç tutarak rastgele soru al
-                $nextQuestion = $this->getTournamentQuestionExcluding($tournament, $answeredQuestionIds ?? []);
-                
-                // Eğer hala null ise (tüm sorular cevaplandı), soruları sıfırla ve tekrar başla
-                if (!$nextQuestion) {
-                    $answeredQuestionIds = [];
-                    $nextQuestion = Question::where('is_active', true)->inRandomOrder()->first();
-                    
-                    if ($nextQuestion) {
-                        $answeredQuestionIds[] = $nextQuestion->id;
-                        $currentQuestionNumber = ($settings['current_question_number'] ?? 0) + 1;
-                        $tournament->update([
-                            'settings' => array_merge($settings, [
-                                'current_question_number' => $currentQuestionNumber,
-                                'current_question_id' => $nextQuestion->id,
-                                'question_start_time' => now(),
-                                'answered_question_ids' => $answeredQuestionIds
-                            ])
-                        ]);
-                        $this->broadcastNextQuestion($tournament, $nextQuestion);
-                    }
-                } else {
-                    // Yeni soruyu settings'e kaydet
-                    $answeredQuestionIds = $answeredQuestionIds ?? [];
+                    // Yeni soruyu da turnuva genelinde cevaplanan sorular listesine ekle (hemen gösterilecek)
+                    // Bu sayede bir daha gelmeyecek
                     if (!in_array($nextQuestion->id, $answeredQuestionIds)) {
                         $answeredQuestionIds[] = $nextQuestion->id;
                     }
-                    $currentQuestionNumber = ($settings['current_question_number'] ?? 0) + 1;
+
                     $tournament->update([
                         'settings' => array_merge($settings, [
-                            'current_question_number' => $currentQuestionNumber,
+                            'current_question_number' => $nextQuestionNumber,
                             'current_question_id' => $nextQuestion->id,
                             'question_start_time' => now(),
-                            'answered_question_ids' => $answeredQuestionIds
+                            'answered_question_ids' => $answeredQuestionIds // Güncel liste kaydediliyor
                         ])
                     ]);
+
+                    Log::info('Time-based tournament: New question selected for tournament', [
+                        'tournament_id' => $tournament->id,
+                        'new_question_id' => $nextQuestion->id,
+                        'question_number' => $nextQuestionNumber,
+                        'tournament_answered_question_ids' => $answeredQuestionIds,
+                        'excluded_count' => count($answeredQuestionIds)
+                    ]);
+
+                    // Yeni soruyu broadcast et - tüm katılımcılar aynı soruyu görecek
                     $this->broadcastNextQuestion($tournament, $nextQuestion);
+                }
+            } else {
+                // Henüz tüm katılımcılar cevap vermedi, mevcut soruyu döndür
+                // Tüm katılımcılar aynı soruyu görmeli
+                if ($currentQuestionId) {
+                    $nextQuestion = Question::find($currentQuestionId);
                 }
             }
         }
@@ -930,16 +927,97 @@ class TournamentQuizController extends Controller
         // Çünkü checkTournamentEnd turnuva durumunu kontrol ediyor
         // Eğer önce çağrılırsa, yanlış kontrol yapabilir
         $this->checkTournamentEnd($tournament);
-        
+
         // Turnuva durumunu kontrol et (fresh ile güncel durumu al)
         $tournament->refresh();
         $tournamentFinished = $tournament->status === 'completed';
-        
+
+        // Eğer next_question hala null ise ve turnuva bitmediyse, soru seç
+        if (!$nextQuestion && !$tournamentFinished) {
+            $settings = $tournament->settings ?? [];
+            $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
+
+            if ($tournament->tournament_type === 'question_based') {
+                // Soru bazlı turnuva: Kullanıcının cevap sayısına göre sıradaki soruyu seç
+                $userAnswerCount = count($answersDetail);
+                $nextQuestionNumber = $userAnswerCount + 1;
+
+                if ($nextQuestionNumber <= $tournament->question_count) {
+                    $nextQuestion = $this->getTournamentQuestionDeterministic($tournament, $nextQuestionNumber, $answeredQuestionIds);
+
+                    if ($nextQuestion) {
+                        // Yeni soruyu kullanılan sorular listesine ekle (eğer yoksa)
+                        if (!in_array($nextQuestion->id, $answeredQuestionIds)) {
+                            $answeredQuestionIds[] = $nextQuestion->id;
+                            $tournament->update([
+                                'settings' => array_merge($settings, [
+                                    'answered_question_ids' => $answeredQuestionIds
+                                ])
+                            ]);
+                        }
+                    }
+                }
+            } else {
+                // Süre bazlı turnuva: Mevcut soruyu döndür (tüm kullanıcılar cevap verene kadar)
+                $currentQuestionId = $settings['current_question_id'] ?? null;
+
+                if ($currentQuestionId) {
+                    $nextQuestion = Question::find($currentQuestionId);
+
+                    // Güvenlik: Mevcut soru answered_question_ids listesinde yoksa ekle
+                    if ($currentQuestionId && !in_array($currentQuestionId, $answeredQuestionIds)) {
+                        $answeredQuestionIds[] = $currentQuestionId;
+                        $tournament->update([
+                            'settings' => array_merge($settings, [
+                                'answered_question_ids' => $answeredQuestionIds
+                            ])
+                        ]);
+                    }
+                } else {
+                    // Eğer hiç soru yoksa, ilk soruyu al (deterministik)
+                    $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+                    $nextQuestion = $this->getTournamentQuestionDeterministic($tournament, $currentQuestionNumber, $answeredQuestionIds);
+
+                    if (!$nextQuestion) {
+                        $nextQuestion = $this->getTournamentQuestion($tournament, $currentQuestionNumber);
+                    }
+
+                    if ($nextQuestion) {
+                        // İlk soruyu listeye ekle
+                        if (!in_array($nextQuestion->id, $answeredQuestionIds)) {
+                            $answeredQuestionIds[] = $nextQuestion->id;
+                        }
+
+                        $tournament->update([
+                            'settings' => array_merge($settings, [
+                                'current_question_number' => 1,
+                                'current_question_id' => $nextQuestion->id,
+                                'question_start_time' => now(),
+                                'answered_question_ids' => $answeredQuestionIds
+                            ])
+                        ]);
+                    }
+                }
+            }
+        }
+
         // Süre bazlı turnuvalarda süre kontrolü
         $timeRemaining = null;
         if ($tournament->tournament_type === 'time_based' && !$tournamentFinished) {
             if ($tournament->end_time) {
                 $timeRemaining = max(0, now()->diffInSeconds($tournament->end_time));
+            }
+        }
+
+        // next_question'ı formatla (correct_answer'ı gizle)
+        $nextQuestionData = null;
+        if ($nextQuestion) {
+            $nextQuestionData = $nextQuestion->toArray();
+            // correct_answer'ı gizle
+            unset($nextQuestionData['correct_answer']);
+            // Görsel URL'ini tam URL'e çevir
+            if (!empty($nextQuestionData['image'])) {
+                $nextQuestionData['image'] = $this->formatImageUrl($nextQuestionData['image']);
             }
         }
 
@@ -951,7 +1029,7 @@ class TournamentQuizController extends Controller
             'score' => $newScore, // Score = toplam coin değişimi (turnuvadan kazanılan/kaybedilen)
             'status' => $status,
             'leaderboard' => $this->getLeaderboard($tournament),
-            'next_question' => $nextQuestion,
+            'next_question' => $nextQuestionData,
             'tournament_finished' => $tournamentFinished,
             'time_remaining' => $timeRemaining
         ]);
@@ -1045,12 +1123,38 @@ class TournamentQuizController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
+        $userCanContinue = false;
+        $userEliminated = false;
+        $blockedReason = null;
+
+        if ($userParticipation) {
+            $status = $userParticipation->status;
+            $userEliminated = in_array($status, ['eliminated', 'completed', 'disqualified']);
+            $tournamentFinished = $tournament->status === 'completed';
+
+            if ($userEliminated) {
+                $blockedReason = $userParticipation->elimination_reason ?? 'eliminated';
+            } elseif ($tournamentFinished) {
+                $blockedReason = 'tournament_completed';
+            }
+
+            $userCanContinue = !$userEliminated && !$tournamentFinished && in_array($status, ['waiting', 'active']);
+
+            // Frontend için ek bilgi sütunları
+            $userParticipation->can_continue = $userCanContinue;
+            $userParticipation->is_eliminated = $userEliminated;
+            $userParticipation->blocked_reason = $blockedReason;
+        }
+
         $leaderboard = $this->getLeaderboard($tournament);
 
         return response()->json([
             'success' => true,
             'tournament' => $tournament,
             'user_participation' => $userParticipation,
+            'user_can_continue' => $userCanContinue,
+            'user_is_eliminated' => $userEliminated,
+            'user_blocked_reason' => $blockedReason,
             'leaderboard' => $leaderboard,
             'time_remaining' => $this->getTimeRemaining($tournament)
         ]);
@@ -1100,12 +1204,12 @@ class TournamentQuizController extends Controller
         }
 
         $settings = $tournament->settings ?? [];
-        
+
         // Turnuva türüne göre soru getir
         if ($tournament->tournament_type === 'time_based') {
             // Süre bazlı turnuva: Mevcut aktif soruyu döndür
             $currentQuestionId = $settings['current_question_id'] ?? null;
-            
+
             if (!$currentQuestionId) {
                 // İlk soruyu al
                 $question = $this->getTournamentQuestion($tournament, 1);
@@ -1121,30 +1225,47 @@ class TournamentQuizController extends Controller
             } else {
                 $question = Question::find($currentQuestionId);
             }
-            
+
             if (!$question) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Soru bulunamadı.'
                 ], 404);
             }
-            
+
             // Kalan süreyi hesapla
             $timeRemaining = $this->getTimeRemaining($tournament);
-            
+
+            // Görsel URL'ini formatla
+            $questionData = $question->toArray();
+            if (!empty($questionData['image'])) {
+                $questionData['image'] = $this->formatImageUrl($questionData['image']);
+            }
+
             return response()->json([
                 'success' => true,
                 'tournament' => $tournament,
-                'question' => $question,
+                'question' => $questionData,
                 'question_number' => $settings['current_question_number'] ?? 1,
                 'time_remaining' => $timeRemaining,
                 'question_start_time' => $settings['question_start_time'] ?? now()->toISOString()
             ]);
         } else {
-            // Soru bazlı turnuva: Soru numarasına göre soru getir
+            // Soru bazlı turnuva: Kullanıcının cevap sayısına göre sıradaki soruyu getir
+            $user = Auth::user();
+            $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
+                ->where('user_id', $user->id)
+                ->first();
+
             $questionNumber = $request->input('question_number');
             if (!$questionNumber) {
-                $questionNumber = $settings['current_question_number'] ?? 1;
+                // Kullanıcının cevap sayısına göre sıradaki soru numarasını hesapla
+                if ($tournamentUser) {
+                    $userAnswerCount = count($tournamentUser->answers_detail ?? []);
+                    $questionNumber = $userAnswerCount + 1;
+                } else {
+                    $questionNumber = 1;
+                }
             } else {
                 $questionNumber = (int) $questionNumber;
             }
@@ -1158,8 +1279,13 @@ class TournamentQuizController extends Controller
                 ], 400);
             }
 
-            // Soruyu getir
-            $question = $this->getTournamentQuestion($tournament, $questionNumber);
+            // Soruyu getir - deterministik seçim (tüm kullanıcılar aynı soru numarasındaki soruyu görür)
+            $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
+            $question = $this->getTournamentQuestionDeterministic($tournament, $questionNumber, $answeredQuestionIds);
+
+            if (!$question) {
+                $question = $this->getTournamentQuestion($tournament, $questionNumber);
+            }
 
             if (!$question) {
                 return response()->json([
@@ -1168,10 +1294,16 @@ class TournamentQuizController extends Controller
                 ], 404);
             }
 
+            // Görsel URL'ini formatla
+            $questionData = $question->toArray();
+            if (!empty($questionData['image'])) {
+                $questionData['image'] = $this->formatImageUrl($questionData['image']);
+            }
+
             return response()->json([
                 'success' => true,
                 'tournament' => $tournament,
-                'question' => $question,
+                'question' => $questionData,
                 'question_number' => $questionNumber,
                 'total_questions' => $tournament->question_count
             ]);
@@ -1190,6 +1322,46 @@ class TournamentQuizController extends Controller
     }
 
     /**
+     * Belirli soru ID'lerini hariç tutarak deterministik soru getir (ilk soru gibi)
+     * Soru numarasına göre deterministik seçim yapar
+     */
+    private function getTournamentQuestionDeterministic(Tournament $tournament, int $questionNumber, array $excludedQuestionIds = []): ?Question
+    {
+        // Önce tüm aktif soruları al (sıralı)
+        $allQuestions = Question::where('is_active', true)
+            ->orderBy('id', 'asc')
+            ->pluck('id')
+            ->toArray();
+
+        if (empty($allQuestions)) {
+            return null;
+        }
+
+        // Soru numarasına göre başlangıç index'ini hesapla
+        $startIndex = ($questionNumber - 1) % count($allQuestions);
+
+        // Kullanılan soruları hariç tutarak, başlangıç index'inden itibaren arama yap
+        $attempts = 0;
+        $currentIndex = $startIndex;
+
+        while ($attempts < count($allQuestions)) {
+            $selectedQuestionId = $allQuestions[$currentIndex];
+
+            // Eğer bu soru kullanılmadıysa, onu döndür
+            if (!in_array($selectedQuestionId, $excludedQuestionIds)) {
+                return Question::find($selectedQuestionId);
+            }
+
+            // Bir sonraki soruya geç (döngüsel)
+            $currentIndex = ($currentIndex + 1) % count($allQuestions);
+            $attempts++;
+        }
+
+        // Tüm sorular kullanıldıysa null döndür
+        return null;
+    }
+
+    /**
      * Turnuva sorularını getir - Herkes aynı soruyu görür
      */
     private function getTournamentQuestion(Tournament $tournament, int $questionNumber): ?Question
@@ -1197,18 +1369,18 @@ class TournamentQuizController extends Controller
         // Soru numarasına göre soru seçimi
         // Farklı sorular için farklı kategoriler veya zorluk seviyeleri kullanılabilir
         // Şimdilik basit bir yaklaşım: aktif sorulardan sırayla seç
-        
+
         $questions = Question::where('is_active', true)
             ->orderBy('id', 'asc')
             ->get();
-        
+
         if ($questions->isEmpty()) {
             return null;
         }
-        
+
         // Soru numarasına göre mod al (soru sayısı kadar döngü yap)
         $questionIndex = ($questionNumber - 1) % $questions->count();
-        
+
         return $questions->get($questionIndex);
     }
 
@@ -1232,7 +1404,7 @@ class TournamentQuizController extends Controller
             if ($tournament->end_time && now()->isAfter($tournament->end_time)) {
                 $shouldEnd = true;
                 $endReason = 'time_up';
-                
+
                 Log::info('Time-based tournament: Time is up', [
                     'tournament_id' => $tournament->id,
                     'end_time' => $tournament->end_time,
@@ -1247,19 +1419,30 @@ class TournamentQuizController extends Controller
                 ]);
             }
         } else {
-            // Soru sayısına göre turnuva - tüm sorular bitti mi kontrol et
-            $settings = $tournament->settings ?? [];
-            $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+            // Soru sayısına göre turnuva - tüm aktif kullanıcılar tüm soruları bitirdi mi kontrol et
+            $activeParticipants = TournamentUser::where('tournament_id', $tournament->id)
+                ->where('status', 'active')
+                ->get();
+
+            // Tüm aktif kullanıcıların tüm soruları bitirip bitirmediğini kontrol et
+            $allActiveCompleted = true;
+            foreach ($activeParticipants as $participant) {
+                $userAnswerCount = count($participant->answers_detail ?? []);
+                if ($userAnswerCount < $tournament->question_count) {
+                    $allActiveCompleted = false;
+                    break;
+                }
+            }
 
             Log::info('Tournament question check', [
                 'tournament_id' => $tournament->id,
-                'current_question' => $currentQuestionNumber,
-                'total_questions' => $tournament->question_count,
-                'should_end' => $currentQuestionNumber > $tournament->question_count
+                'active_participants_count' => $activeParticipants->count(),
+                'all_active_completed' => $allActiveCompleted,
+                'total_questions' => $tournament->question_count
             ]);
 
-            // Son soru cevaplandıysa turnuvayı bitir
-            if ($currentQuestionNumber >= $tournament->question_count) {
+            // Tüm aktif kullanıcılar tüm soruları bitirdiyse turnuvayı bitir
+            if ($allActiveCompleted && $activeParticipants->count() > 0) {
                 $shouldEnd = true;
                 $endReason = 'all_questions_answered';
             }
@@ -2005,9 +2188,9 @@ class TournamentQuizController extends Controller
     {
         // Aktif ve beklemede olan turnuvaları getir (upcoming ve active)
         $tournaments = Tournament::whereIn('status', ['upcoming', 'active'])
-            ->where('tournament_type', 'question_based')
+            ->where('tournament_type', 'time_based')
             ->with(['participants' => function($query) {
-                $query->where('status', 'waiting');
+                $query->whereIn('status', ['waiting', 'upcoming']);
             }])
             ->withCount(['participants as current_participants_count' => function($query) {
                 $query->where('status', 'waiting');
@@ -2096,7 +2279,7 @@ class TournamentQuizController extends Controller
                 $query->where('status', 'waiting');
             }])
             ->withCount(['participants as current_participants_count' => function($query) {
-                $query->where('status', 'waiting');
+                $query->whereIn('status', ['waiting', 'upcoming']);
             }]);
 
         if ($status) {
@@ -2161,19 +2344,32 @@ class TournamentQuizController extends Controller
      */
     private function getLeaderboard(Tournament $tournament)
     {
+        // Sadece aktif, eliminated veya completed durumundaki katılımcıları göster
+        // Waiting durumundaki (henüz katılmamış) kullanıcıları gösterme
         return TournamentUser::where('tournament_id', $tournament->id)
-            ->with('user:id,name,avatar')
+            ->whereIn('status', ['active', 'eliminated', 'completed'])
+            ->with('user:id,name,avatar,profile_image')
             ->orderBy('score', 'desc')
             ->orderBy('total_time_seconds', 'asc')
             ->get()
             ->map(function ($participant) {
+                $user = $participant->user;
+
+                // Profil görseli tam URL
+                $profileImageUrl = null;
+                if ($user && !empty($user->profile_image)) {
+                    $profileImageUrl = $this->formatProfileImageUrl($user->profile_image);
+                }
+
                 return [
-                    'user' => $participant->user,
+                    'user' => $user,
+                    'user_id' => $participant->user_id,
                     'score' => $participant->score,
                     'correct_answers' => $participant->correct_answers,
                     'wrong_answers' => $participant->wrong_answers,
                     'status' => $participant->status,
-                    'rank' => $participant->rank
+                    'rank' => $participant->rank,
+                    'profile_image' => $profileImageUrl,
                 ];
             });
     }
@@ -2237,6 +2433,64 @@ class TournamentQuizController extends Controller
     }
 
     /**
+     * Görsel URL'ini tam URL'e çevir
+     */
+    private function formatImageUrl(?string $imagePath): ?string
+    {
+        if (empty($imagePath)) {
+            return null;
+        }
+
+        // Eğer zaten tam URL ise, olduğu gibi döndür
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            return $imagePath;
+        }
+
+        // Eğer storage/questions/ ile başlıyorsa, sadece questions/ kısmını al
+        if (strpos($imagePath, 'storage/questions/') !== false) {
+            $imagePath = str_replace('storage/questions/', 'questions/', $imagePath);
+        }
+
+        // Eğer questions/ ile başlamıyorsa, ekle
+        if (strpos($imagePath, 'questions/') !== 0) {
+            $imagePath = 'questions/' . ltrim($imagePath, '/');
+        }
+
+        // Tam URL oluştur
+        $baseUrl = config('app.url', 'https://bilbakalim.online');
+        return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
+    }
+
+    /**
+     * Profil görseli URL'ini tam URL'e çevir
+     */
+    private function formatProfileImageUrl(?string $imagePath): ?string
+    {
+        if (empty($imagePath)) {
+            return null;
+        }
+
+        // Eğer zaten tam URL ise, olduğu gibi döndür
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            return $imagePath;
+        }
+
+        // Eğer storage/profile_images/ ile başlıyorsa, sadece profile_images/ kısmını al
+        if (strpos($imagePath, 'storage/profile_images/') !== false) {
+            $imagePath = str_replace('storage/profile_images/', 'profile_images/', $imagePath);
+        }
+
+        // Eğer profile_images/ ile başlamıyorsa, ekle
+        if (strpos($imagePath, 'profile_images/') !== 0) {
+            $imagePath = 'profile_images/' . ltrim($imagePath, '/');
+        }
+
+        // Tam URL oluştur
+        $baseUrl = config('app.url', 'https://bilbakalim.online');
+        return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
+    }
+
+    /**
      * Socket'e gönderilecek soru formatı
      */
     private function formatQuestionForSocket(?Question $question): ?array
@@ -2247,13 +2501,18 @@ class TournamentQuizController extends Controller
 
         $question->loadMissing('category');
 
+        $imageUrl = $question->image;
+        if (!empty($imageUrl)) {
+            $imageUrl = $this->formatImageUrl($imageUrl);
+        }
+
         return [
             'id' => $question->id,
             'question' => $question->question,
             'choices' => $question->choices,
             'question_level' => $question->question_level,
             'coin_value' => $question->coin_value,
-            'image' => $question->image,
+            'image' => $imageUrl,
             'category' => $question->category ? [
                 'id' => $question->category->id,
                 'name' => $question->category->name,
