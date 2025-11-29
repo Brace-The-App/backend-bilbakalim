@@ -117,9 +117,9 @@
               </ul>
             </div>
           @endif
-          
+
           <!-- Tab Navigation -->
-          <!-- <ul class="nav nav-tabs" id="createCategoryTabs" role="tablist">
+           <ul class="nav nav-tabs" id="createCategoryTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="tr-tab" data-bs-toggle="tab" data-bs-target="#tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -130,8 +130,8 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul> -->
-          
+          </ul>
+
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="createCategoryTabContent">
             <!-- Turkish Tab -->
@@ -147,7 +147,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- English Tab -->
             <div class="tab-pane fade" id="en-pane" role="tabpanel">
               <div class="row g-3">
@@ -162,7 +162,7 @@
               </div>
             </div>
           </div>
-          
+
           <!-- Other Fields -->
           <div class="row g-3 mt-3">
           <div class="col-md-6">
@@ -285,9 +285,9 @@
               </ul>
             </div>
           @endif
-          
+
           <!-- Tab Navigation -->
-          <!-- <ul class="nav nav-tabs" id="editCategoryTabs" role="tablist">
+           <ul class="nav nav-tabs" id="editCategoryTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="edit-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-tr-pane" type="button" role="tab">
                 🇹🇷 Türkçe
@@ -298,8 +298,8 @@
                 🇬🇧 English
               </button>
             </li>
-          </ul> -->
-          
+          </ul>
+
           <!-- Tab Content -->
           <div class="tab-content mt-3" id="editCategoryTabContent">
             <!-- Turkish Tab -->
@@ -315,7 +315,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- English Tab -->
             <div class="tab-pane fade" id="edit-en-pane" role="tabpanel">
               <div class="row g-3">
@@ -330,7 +330,7 @@
               </div>
             </div>
           </div>
-          
+
           <!-- Other Fields -->
           <div class="row g-3 mt-3">
           <div class="col-md-6">
@@ -365,9 +365,9 @@
 @push('styles')
 <style>
 /* Extra spacing to prevent header overlap on categories page */
-.page-title { 
-    margin-top: 2rem !important; 
-    padding-top: 1rem !important; 
+.page-title {
+    margin-top: 2rem !important;
+    padding-top: 1rem !important;
 }
 </style>
 @endpush
@@ -487,13 +487,13 @@ $(document).ready(function() {
                 // Extract table body and pagination from response
                 var tableBody = $(response).find('#categoriesTableBody').html();
                 var pagination = $(response).find('#categoriesPagination').html();
-                
+
                 // Update table body
                 $('#categoriesTableBody').html(tableBody);
-                
+
                 // Update pagination
                 $('#categoriesPagination').html(pagination);
-                
+
                 // Re-bind edit modal events
                 bindEditModalEvents();
                 // Re-bind show modal events
@@ -518,7 +518,7 @@ $(document).ready(function() {
             var color = button.data('color');
             var sort = button.data('sort');
             var active = button.data('active');
-            
+
             $('#edit-name-tr').val(nameTr || '');
             $('#edit-name-en').val(nameEn || '');
             $('#edit-desc-tr').val(descTr || '');
@@ -544,7 +544,7 @@ $(document).ready(function() {
             var color = button.data('color');
             var sort = button.data('sort');
             var active = button.data('active');
-            
+
             $('#show-name-tr').text(nameTr || '-');
             $('#show-name-en').text(nameEn || '-');
             $('#show-desc-tr').text(descTr || '-');

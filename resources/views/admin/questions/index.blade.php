@@ -177,7 +177,7 @@
                         @endif
 
                         <!-- Tab Navigation -->
-                        <!-- <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
+                         <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
                           <li class="nav-item" role="presentation">
                             <button class="nav-link active" id="q-tr-tab" data-bs-toggle="tab" data-bs-target="#q-tr-pane" type="button" role="tab">
                               🇹🇷 Türkçe
@@ -188,7 +188,7 @@
                               🇬🇧 English
                             </button>
                           </li>
-                        </ul> -->
+                        </ul>
 
                         <!-- Tab Content -->
                         <div class="tab-content mt-3" id="createQuestionTabContent">
@@ -443,7 +443,7 @@
                         @endif
 
                         <!-- Tab Navigation -->
-                        <!-- <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
+                         <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
                           <li class="nav-item" role="presentation">
                             <button class="nav-link active" id="edit-q-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-q-tr-pane" type="button" role="tab">
                               🇹🇷 Türkçe
@@ -454,7 +454,7 @@
                               🇬🇧 English
                             </button>
                           </li>
-                        </ul> -->
+                        </ul>
 
                         <!-- Tab Content -->
                         <div class="tab-content mt-3" id="editQuestionTabContent">
