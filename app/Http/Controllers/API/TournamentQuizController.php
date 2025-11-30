@@ -516,7 +516,7 @@ class TournamentQuizController extends Controller
             'success' => true,
             'message' => 'Turnuva başlatıldı.',
             'tournament' => $tournament,
-            'first_question' => $firstQuestion,
+            'first_question' => $this->formatQuestionMultilingual($firstQuestion),
             'connected_participants' => count($connectedParticipants),
             'disconnected_participants' => count($disconnectedParticipants)
         ]);
