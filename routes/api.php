@@ -62,7 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('cancel', [PaymentController::class, 'cancelPayment']);
     });
 
-    // Coin Package routes
+    // Coin Package routes 
     Route::prefix('coin-packages')->group(function () {
         Route::get('/', [CoinPackageController::class, 'index']);
         Route::get('popular', [CoinPackageController::class, 'popular']);
@@ -79,6 +79,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{coinPurchase}', [CoinPurchaseController::class, 'show']);
         Route::get('stats/total', [CoinPurchaseController::class, 'totalPurchased']);
         Route::get('stats/monthly', [CoinPurchaseController::class, 'monthlyStats']);
+        Route::post('purchase', [CoinPurchaseController::class, 'purchase']);
         Route::post('{coinPurchase}/refund', [CoinPurchaseController::class, 'requestRefund']);
         Route::post('{coinPurchase}/cancel', [CoinPurchaseController::class, 'cancel']);
     });

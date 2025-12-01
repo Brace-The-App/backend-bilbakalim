@@ -501,6 +501,35 @@ class PremiumQuizController extends Controller
                     'message' => 'Turnuva joker hakkınız kalmadı.'
                 ], 400);
             }
+            
+            // Joker tiplerini kontrol et ve gerekirse başlat
+            $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
+            
+            // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
+            if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
+                $totalJokers = $tournamentUser->joker_hakki ?? 3;
+                // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
+                $jokersPerType = floor($totalJokers / 3);
+                $remainingJokers = $totalJokers % 3;
+                
+                $answersDetail['jokers'] = [
+                    'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
+                    'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
+                    'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
+                ];
+                
+                // Başlangıç değerlerini kaydet
+                $tournamentUser->update(['answers_detail' => $answersDetail]);
+                $tournamentUser->refresh();
+            }
+            
+            // Joker tipi kontrolü
+            if (!isset($answersDetail['jokers'][$jokerType]) || $answersDetail['jokers'][$jokerType] <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bu joker tipinden hakkınız kalmadı.'
+                ], 400);
+            }
         } else {
             // Premium quiz için joker kontrolü
             $settings = $game->settings ?? [];
@@ -539,13 +568,28 @@ class PremiumQuizController extends Controller
         
         // Joker hakkını azalt
         if ($isTournament) {
-            // Turnuva için sadece joker_hakki azaltılır (genel joker azaltılmaz)
+            // Turnuva için joker tiplerini ayrı ayrı takip et
+            // answers_detail zaten yukarıda kontrol edildi ve başlatıldı
+            $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
+            
+            // Kullanılan joker tipini azalt (yukarıda kontrol edildi, burada kesinlikle var)
+            $answersDetail['jokers'][$jokerType]--;
+            
+            // Toplam joker hakkını da azalt
             $tournamentUser->decrement('joker_hakki');
+            
+            // Güncellenmiş joker bilgilerini kaydet (mevcut answers_detail verilerini koru)
+            $tournamentUser->update(['answers_detail' => $answersDetail]);
+            
+            // TournamentUser'ı yeniden yükle
+            $tournamentUser->refresh();
+            
+            // Kalan joker tiplerini döndür
             $remainingJokers = [
-                'fifty_fifty' => 0,
-                'double_answer' => 0,
-                'hint' => 0,
-                'tournament_jokers' => $tournamentUser->joker_hakki
+                'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
+                'double_answer' => $answersDetail['jokers']['double_answer'] ?? 0,
+                'hint' => $answersDetail['jokers']['hint'] ?? 0,
+                'tournament_jokers' => $tournamentUser->joker_hakki // Toplam kalan joker hakkı
             ];
         } else {
             // Premium quiz için settings'teki jokerleri azalt
@@ -971,21 +1015,30 @@ class PremiumQuizController extends Controller
      * @OA\Get(
      *     path="/api/quiz/premium/jokers",
      *     summary="Kullanıcı Joker Durumu",
-     *     description="Kullanıcının mevcut joker sayılarını getirir.",
+     *     description="Kullanıcının mevcut joker sayılarını getirir. Eğer tournament_id parametresi gönderilirse, turnuva joker durumunu döndürür.",
      *     tags={"Premium Quiz"},
      *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="tournament_id",
+     *         in="query",
+     *         description="Turnuva ID (opsiyonel - turnuva joker durumu için)",
+     *         required=false,
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
      *     @OA\Response(
      *         response=200,
      *         description="Joker durumu başarıyla getirildi",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="game_type", type="string", example="premium", enum={"premium", "tournament"}),
      *             @OA\Property(property="jokers", type="object",
      *                 @OA\Property(property="fifty_fifty", type="integer", example=5),
      *                 @OA\Property(property="double_answer", type="integer", example=3),
      *                 @OA\Property(property="hint", type="integer", example=2)
      *             ),
      *             @OA\Property(property="total_jokers", type="integer", example=10),
-     *             @OA\Property(property="user_coins", type="integer", example=1500)
+     *             @OA\Property(property="tournament_jokers", type="integer", example=10, description="Turnuva için toplam joker hakkı"),
+     *             @OA\Property(property="user_coins", type="integer", example=1500, description="Premium quiz için kullanıcı coin'i")
      *         )
      *     )
      * )
@@ -994,8 +1047,66 @@ class PremiumQuizController extends Controller
     {
         $user = Auth::user();
         
+        // Eğer tournament_id parametresi gönderilmişse, turnuva joker durumunu döndür
+        if ($request->has('tournament_id') && $request->tournament_id) {
+            $tournament = \App\Models\Tournament::find($request->tournament_id);
+            
+            if (!$tournament) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Turnuva bulunamadı.'
+                ], 404);
+            }
+            
+            $tournamentUser = \App\Models\TournamentUser::where('tournament_id', $tournament->id)
+                ->where('user_id', $user->id)
+                ->first();
+            
+            if (!$tournamentUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bu turnuvaya katılımınız bulunamadı.'
+                ], 404);
+            }
+            
+            // Joker tiplerini kontrol et ve gerekirse başlat
+            $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
+            
+            // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
+            if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
+                $totalJokers = $tournamentUser->joker_hakki ?? 3;
+                // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
+                $jokersPerType = floor($totalJokers / 3);
+                $remainingJokers = $totalJokers % 3;
+                
+                $answersDetail['jokers'] = [
+                    'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
+                    'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
+                    'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
+                ];
+                
+                // Başlangıç değerlerini kaydet
+                $tournamentUser->update(['answers_detail' => $answersDetail]);
+                $tournamentUser->refresh();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'game_type' => 'tournament',
+                'jokers' => [
+                    'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
+                    'double_answer' => $answersDetail['jokers']['double_answer'] ?? 0,
+                    'hint' => $answersDetail['jokers']['hint'] ?? 0
+                ],
+                'total_jokers' => $tournamentUser->joker_hakki ?? 0,
+                'tournament_jokers' => $tournamentUser->joker_hakki ?? 0
+            ]);
+        }
+        
+        // Premium quiz için normal joker durumu
         return response()->json([
             'success' => true,
+            'game_type' => 'premium',
             'jokers' => [
                 'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
                 'double_answer' => $user->double_answer_jokers ?? 0,

@@ -9,6 +9,8 @@ use App\Models\CoinPackage;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @OA\Tag(
@@ -55,7 +57,7 @@ class CoinPurchaseController extends Controller
         $status = $request->get('status');
 
         $query = CoinPurchase::where('user_id', Auth::id())
-            ->with(['coinPackage', 'payment']);
+            ->with(['coinPackage']);
 
         if ($status) {
             $query->where('status', $status);
@@ -111,7 +113,7 @@ class CoinPurchaseController extends Controller
             ], 403);
         }
 
-        $coinPurchase->load(['coinPackage', 'payment']);
+        $coinPurchase->load(['coinPackage']);
 
         return response()->json([
             'success' => true,
@@ -258,5 +260,128 @@ class CoinPurchaseController extends Controller
             'message' => 'Satın alma iptal edildi.',
             'data' => $coinPurchase
         ]);
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/coin-purchases/purchase",
+     *     summary="Jeton Satın Al",
+     *     description="Mobil ödeme yapıldıktan sonra jeton satın alma işlemini tamamlar.",
+     *     tags={"Coin Purchases"},
+     *     security={{"sanctum":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 @OA\Property(property="package_id", type="integer", example=1, description="Paket ID'si"),
+     *                 @OA\Property(property="payment_id", type="string", example="payment_123", description="Mobil ödeme ID'si"),
+     *                 @OA\Property(property="payment_provider", type="string", enum={"google", "apple"}, example="google", description="Ödeme sağlayıcısı")
+     *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="package_id", type="integer", example=1),
+     *             @OA\Property(property="payment_id", type="string", example="payment_123"),
+     *             @OA\Property(property="payment_provider", type="string", enum={"google", "apple"}, example="google")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Jeton başarıyla yüklendi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Jeton başarıyla yüklendi."),
+     *             @OA\Property(property="coin_amount", type="integer", example=100),
+     *             @OA\Property(property="bonus_coins", type="integer", example=10),
+     *             @OA\Property(property="total_coins", type="integer", example=110),
+     *             @OA\Property(property="new_balance", type="integer", example=1110),
+     *             @OA\Property(property="purchase", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Hata",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu paket aktif değil.")
+     *         )
+     *     )
+     * )
+     */
+    public function purchase(Request $request): JsonResponse
+    {
+        $request->validate([
+            'package_id' => 'required|exists:coin_packages,id',
+            'payment_id' => 'required|string',
+            'payment_provider' => 'required|in:google,apple',
+        ]);
+
+        $user = Auth::user();
+        $package = CoinPackage::findOrFail($request->package_id);
+
+        if (!$package->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu paket aktif değil.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            $totalCoins = $package->coin_amount + ($package->bonus_coins ?? 0);
+            
+            // CoinPurchase kaydı oluştur
+            $coinPurchase = CoinPurchase::create([
+                'user_id' => $user->id,
+                'coin_package_id' => $package->id,
+                'payment_id' => $request->payment_id,
+                'coin_amount' => $package->coin_amount,
+                'bonus_coins' => $package->bonus_coins ?? 0,
+                'price' => $package->price,
+                'currency' => $package->currency ?? 'TRY',
+                'status' => 'completed',
+                'completed_at' => now(),
+            ]);
+
+            // Kullanıcının coin bakiyesine ekle
+            $user->increment('coins', $totalCoins);
+            $user->increment('total_coins', $totalCoins);
+
+            Log::info('Coin purchase completed', [
+                'user_id' => $user->id,
+                'package_id' => $package->id,
+                'coin_purchase_id' => $coinPurchase->id,
+                'coin_amount' => $package->coin_amount,
+                'bonus_coins' => $package->bonus_coins ?? 0,
+                'total_coins' => $totalCoins,
+                'payment_id' => $request->payment_id,
+                'payment_provider' => $request->payment_provider,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Jeton başarıyla yüklendi.',
+                'coin_amount' => $package->coin_amount,
+                'bonus_coins' => $package->bonus_coins ?? 0,
+                'total_coins' => $totalCoins,
+                'new_balance' => $user->fresh()->coins,
+                'purchase' => $coinPurchase
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Coin purchase error', [
+                'user_id' => $user->id,
+                'package_id' => $package->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Jeton yüklenirken bir hata oluştu.'
+            ], 500);
+        }
     }
 }

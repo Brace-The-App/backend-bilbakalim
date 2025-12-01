@@ -512,13 +512,56 @@ class TournamentQuizController extends Controller
         // Socket.IO webhook ile turnuva başlatma bildirimi
         $this->sendTournamentStartWebhook($tournament, $firstQuestion);
 
+        // İsteği yapan kullanıcının joker durumunu al
+        $currentUser = Auth::user();
+        $currentUserTournament = TournamentUser::where('tournament_id', $tournament->id)
+            ->where('user_id', $currentUser->id)
+            ->first();
+        
+        $jokers = [
+            'fifty_fifty' => 0,
+            'double_answer' => 0,
+            'hint' => 0,
+            'tournament_jokers' => 0
+        ];
+        
+        if ($currentUserTournament) {
+            $answersDetail = is_array($currentUserTournament->answers_detail) ? $currentUserTournament->answers_detail : [];
+            
+            // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
+            if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
+                $totalJokers = $currentUserTournament->joker_hakki ?? 3;
+                // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
+                $jokersPerType = floor($totalJokers / 3);
+                $remainingJokers = $totalJokers % 3;
+                
+                $answersDetail['jokers'] = [
+                    'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
+                    'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
+                    'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
+                ];
+                
+                // Başlangıç değerlerini kaydet
+                $currentUserTournament->update(['answers_detail' => $answersDetail]);
+                $currentUserTournament->refresh();
+            }
+            
+            $jokers = [
+                'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
+                'double_answer' => $answersDetail['jokers']['double_answer'] ?? 0,
+                'hint' => $answersDetail['jokers']['hint'] ?? 0,
+                'tournament_jokers' => $currentUserTournament->joker_hakki ?? 0
+            ];
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Turnuva başlatıldı.',
             'tournament' => $tournament,
             'first_question' => $this->formatQuestionMultilingual($firstQuestion),
             'connected_participants' => count($connectedParticipants),
-            'disconnected_participants' => count($disconnectedParticipants)
+            'disconnected_participants' => count($disconnectedParticipants),
+            'jokers' => $jokers
         ]);
     }
 
@@ -537,14 +580,18 @@ class TournamentQuizController extends Controller
      *                 @OA\Property(property="tournament_id", type="integer", example=1),
      *                 @OA\Property(property="question_id", type="integer", example=123),
      *                 @OA\Property(property="selected_option", type="string", example="2"),
-     *                 @OA\Property(property="time_spent", type="integer", example=15)
+     *                 @OA\Property(property="time_spent", type="integer", example=15),
+     *                 @OA\Property(property="joker_used", type="string", example="double_answer", enum={"fifty_fifty", "double_answer", "hint"}, nullable=true, description="Kullanılan joker tipi"),
+     *                 @OA\Property(property="second_option", type="string", example="3", enum={"1", "2", "3", "4"}, nullable=true, description="Çift cevap joker için ikinci seçenek")
      *             )
      *         ),
      *         @OA\JsonContent(
      *             @OA\Property(property="tournament_id", type="integer", example=1),
      *             @OA\Property(property="question_id", type="integer", example=123),
      *             @OA\Property(property="selected_option", type="string", example="2"),
-     *             @OA\Property(property="time_spent", type="integer", example=15)
+     *             @OA\Property(property="time_spent", type="integer", example=15),
+     *             @OA\Property(property="joker_used", type="string", example="double_answer", enum={"fifty_fifty", "double_answer", "hint"}, nullable=true),
+     *             @OA\Property(property="second_option", type="string", example="3", enum={"1", "2", "3", "4"}, nullable=true)
      *         )
      *     ),
      *     @OA\Response(
@@ -569,7 +616,9 @@ class TournamentQuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'selected_option' => 'required|in:1,2,3,4,5',
             'time_spent' => 'nullable|integer|min:1',
-            'question_number' => 'nullable|integer|min:1' // Soru bazlı turnuvalar için soru numarası
+            'question_number' => 'nullable|integer|min:1', // Soru bazlı turnuvalar için soru numarası
+            'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint', // Kullanılan joker tipi
+            'second_option' => 'nullable|in:1,2,3,4' // Çift cevap joker için ikinci seçenek
         ]);
 
         $user = Auth::user();
@@ -648,18 +697,163 @@ class TournamentQuizController extends Controller
         }
 
         $question = Question::find($request->question_id);
-        $isCorrect = $question->correct_answer === $request->selected_option;
         $timeSpent = $request->time_spent ?? 30;
-
-        // Cevabı kaydet
-        $answersDetail = $tournamentUser->answers_detail ?? [];
-        $answersDetail[] = [
-            'question_id' => $question->id,
-            'selected_option' => $request->selected_option,
-            'is_correct' => $isCorrect,
-            'time_spent' => $timeSpent,
-            'answered_at' => now()->toISOString()
-        ];
+        
+        // Eğer selected_option 5 ise, kullanıcı cevap vermemiş demektir
+        // Bu durumda yanlış olarak işlenmeli ama normal JSON response dönmeli
+        $answerAlreadySaved = false;
+        if ($request->selected_option == '5' || $request->selected_option === 5) {
+            // Cevap verilmedi, yanlış olarak işle
+            $isCorrect = false;
+            $answersDetail = $tournamentUser->answers_detail ?? [];
+            
+            $answerData = [
+                'question_id' => $question->id,
+                'selected_option' => null, // Cevap verilmedi
+                'is_correct' => false,
+                'time_spent' => $timeSpent,
+                'answered_at' => now()->toISOString()
+            ];
+            
+            $answersDetail[] = $answerData;
+            $answerAlreadySaved = true; // Cevap zaten kaydedildi
+            
+            // Normal akışa devam et (aşağıdaki kod bloğu çalışacak)
+            $jokerUsed = null; // Cevap verilmediği için joker kullanılmamış sayılır
+        } else {
+            // Joker kullanımı kontrolü ve çift cevap joker kontrolü
+            $jokerUsed = $request->joker_used ?? null;
+            $answersDetail = $tournamentUser->answers_detail ?? [];
+        }
+        
+        // Çift cevap joker kullanıldıysa ve ikinci şık henüz gönderilmediyse, kontrol et
+        if ($jokerUsed === 'double_answer' && !$request->has('second_option')) {
+            // İlk şıkkın doğru olup olmadığını kontrol et
+            $firstOptionCorrect = (string) $question->correct_answer === (string) $request->selected_option;
+            
+            // Eğer ilk şık doğruysa, ikinci şıkkı seçmeye gerek yok, direkt doğru cevap olarak kaydet
+            if ($firstOptionCorrect) {
+                // Doğru cevabı direkt kaydet
+                $answerData = [
+                    'question_id' => $question->id,
+                    'selected_option' => $request->selected_option,
+                    'is_correct' => true,
+                    'joker_used' => 'double_answer',
+                    'time_spent' => $timeSpent,
+                    'answered_at' => now()->toISOString()
+                ];
+                
+                $answersDetail[] = $answerData;
+                $isCorrect = true;
+                
+                // Cevap zaten kaydedildi, normal akışa devam etmek için flag set et
+                $answerAlreadySaved = true;
+            } else {
+                // İlk şık yanlışsa, ikinci şıkkı beklemeli
+                $pendingAnswer = [
+                    'question_id' => $question->id,
+                    'selected_option' => $request->selected_option,
+                    'is_pending' => true,
+                    'joker_used' => 'double_answer',
+                    'time_spent' => $timeSpent,
+                    'answered_at' => now()->toISOString()
+                ];
+                
+                $answersDetail[] = $pendingAnswer;
+                $tournamentUser->update(['answers_detail' => $answersDetail]);
+                
+                // İkinci şıkkı beklediğimizi belirten response döndür
+                return response()->json([
+                    'success' => true,
+                    'waiting_for_second_option' => true,
+                    'message' => 'Lütfen ikinci şıkkı seçin.',
+                    'first_option' => $request->selected_option,
+                    'joker_used' => 'double_answer',
+                    'first_option_correct' => false
+                ]);
+            }
+        }
+        
+        // Eğer çift cevap joker kullanıldıysa ve ikinci şık da geldiyse, kontrol et
+        $pendingAnswerIndex = null;
+        $firstOption = $request->selected_option;
+        
+        if ($jokerUsed === 'double_answer' && $request->has('second_option')) {
+            // Geçici olarak saklanan ilk cevabı bul (en son eklenen pending cevap)
+            $pendingAnswerIndex = null;
+            for ($i = count($answersDetail) - 1; $i >= 0; $i--) {
+                if (isset($answersDetail[$i]['is_pending']) && 
+                    $answersDetail[$i]['is_pending'] === true &&
+                    $answersDetail[$i]['question_id'] == $question->id &&
+                    isset($answersDetail[$i]['joker_used']) &&
+                    $answersDetail[$i]['joker_used'] === 'double_answer') {
+                    $pendingAnswerIndex = $i;
+                    $firstOption = $answersDetail[$i]['selected_option'];
+                    $timeSpent = $answersDetail[$i]['time_spent'];
+                    break;
+                }
+            }
+            
+            // Çift cevap joker: iki seçenekten biri doğru olmalı
+            // Tip uyumsuzluğunu önlemek için string'e çevir
+            $correctAnswer = (string) $question->correct_answer;
+            $firstOptionStr = (string) $firstOption;
+            $secondOptionStr = (string) $request->second_option;
+            $isCorrect = ($correctAnswer === $firstOptionStr) || 
+                        ($correctAnswer === $secondOptionStr);
+            
+            // Eğer pending cevap bulunduysa, onu güncelle
+            if ($pendingAnswerIndex !== null) {
+                $answersDetail[$pendingAnswerIndex] = [
+                    'question_id' => $question->id,
+                    'selected_option' => $firstOption,
+                    'second_option' => $request->second_option,
+                    'is_correct' => $isCorrect,
+                    'joker_used' => 'double_answer',
+                    'user_answer' => $firstOption . ',' . $request->second_option,
+                    'time_spent' => $timeSpent,
+                    'answered_at' => $answersDetail[$pendingAnswerIndex]['answered_at']
+                ];
+            } else {
+                // Eğer pending cevap bulunamadıysa, yeni cevap ekle
+                $answerData = [
+                    'question_id' => $question->id,
+                    'selected_option' => $firstOption,
+                    'second_option' => $request->second_option,
+                    'is_correct' => $isCorrect,
+                    'joker_used' => 'double_answer',
+                    'user_answer' => $firstOption . ',' . $request->second_option,
+                    'time_spent' => $timeSpent,
+                    'answered_at' => now()->toISOString()
+                ];
+                $answersDetail[] = $answerData;
+            }
+        } else {
+            // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
+            // Eğer $isCorrect zaten set edilmediyse (ilk şık doğruysa set edilmiş olabilir)
+            if (!isset($isCorrect)) {
+                $isCorrect = (string) $question->correct_answer === (string) $request->selected_option;
+            }
+            
+            // Normal cevabı kaydet (eğer daha önce kaydedilmediyse)
+            // İlk şık doğruysa ve çift cevap joker kullanıldıysa, cevap zaten kaydedildi
+            if (!isset($answerAlreadySaved) || !$answerAlreadySaved) {
+                $answerData = [
+                    'question_id' => $question->id,
+                    'selected_option' => $request->selected_option,
+                    'is_correct' => $isCorrect,
+                    'time_spent' => $timeSpent,
+                    'answered_at' => now()->toISOString()
+                ];
+                
+                // Joker kullanımı bilgisini ekle
+                if ($jokerUsed) {
+                    $answerData['joker_used'] = $jokerUsed;
+                }
+                
+                $answersDetail[] = $answerData;
+            }
+        }
 
         // Coin değişimini hesapla (doğru cevap +coin, yanlış cevap -coin)
         $coinChange = $isCorrect ? $question->coin_value : -$question->coin_value;

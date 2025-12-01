@@ -24,7 +24,7 @@ class CoinPurchase extends Model
     protected $casts = [
         'user_id' => 'integer',
         'coin_package_id' => 'integer',
-        'payment_id' => 'integer',
+        'payment_id' => 'string', // Mobil ödeme ID'si string olarak gelir
         'coin_amount' => 'integer',
         'bonus_coins' => 'integer',
         'price' => 'decimal:2',
@@ -41,11 +41,6 @@ class CoinPurchase extends Model
     public function coinPackage(): BelongsTo
     {
         return $this->belongsTo(CoinPackage::class);
-    }
-
-    public function payment(): BelongsTo
-    {
-        return $this->belongsTo(Payment::class);
     }
 
     // Scopes
