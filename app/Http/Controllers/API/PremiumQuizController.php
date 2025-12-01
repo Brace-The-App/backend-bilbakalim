@@ -226,11 +226,15 @@ class PremiumQuizController extends Controller
             // Çift cevap joker kontrolü
             if ($jokerUsed === 'double_answer' && $request->second_option) {
                 // Çift cevap: iki seçenekten biri doğru olmalı
-                $isCorrect = ($question->correct_answer === $selectedOption) || 
-                            ($question->correct_answer === $request->second_option);
+                // Tip uyumsuzluğunu önlemek için string'e çevir
+                $correctAnswer = (string) $question->correct_answer;
+                $selectedOptionStr = (string) $selectedOption;
+                $secondOptionStr = (string) $request->second_option;
+                $isCorrect = ($correctAnswer === $selectedOptionStr) || 
+                            ($correctAnswer === $secondOptionStr);
             } else {
-                // Normal cevap
-                $isCorrect = $question->correct_answer === $selectedOption;
+                // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
+                $isCorrect = (string) $question->correct_answer === (string) $selectedOption;
             }
         }
         
@@ -569,11 +573,15 @@ class PremiumQuizController extends Controller
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
                 // Çift cevap: iki seçenekten biri doğru olmalı
-                $isCorrect = ($question->correct_answer === $selectedAnswer) || 
-                            ($question->correct_answer === $request->second_option);
+                // Tip uyumsuzluğunu önlemek için string'e çevir
+                $correctAnswer = (string) $question->correct_answer;
+                $selectedAnswerStr = (string) $selectedAnswer;
+                $secondOptionStr = (string) $request->second_option;
+                $isCorrect = ($correctAnswer === $selectedAnswerStr) || 
+                            ($correctAnswer === $secondOptionStr);
             } else {
-                // Normal cevap kontrolü
-                $isCorrect = $question->correct_answer === $selectedAnswer;
+                // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
+                $isCorrect = (string) $question->correct_answer === (string) $selectedAnswer;
             }
         }
         
@@ -834,18 +842,29 @@ class PremiumQuizController extends Controller
     private function useFiftyFiftyJoker(Question $question): array
     {
         $choices = $question->choices;
-        $correctAnswer = $question->correct_answer;
+        $correctAnswer = (string) $question->correct_answer;
+        $allChoiceKeys = ['1', '2', '3', '4'];
         
-        // Doğru cevabı ve bir yanlış cevabı bırak
-        $wrongOptions = array_diff(['1', '2', '3', '4'], [$correctAnswer]);
-        $removeOption = $wrongOptions[array_rand($wrongOptions)];
+        // Doğru cevabı hariç tut, 2 yanlış seçeneği kaldır
+        $wrongOptions = array_filter($allChoiceKeys, function($choice) use ($correctAnswer) {
+            return $choice !== $correctAnswer;
+        });
         
-        $remainingChoices = $choices;
-        unset($remainingChoices[$removeOption]);
+        // 2 yanlış şık seç
+        $removeOptions = array_values(array_slice($wrongOptions, 0, 2));
+        
+        // Kalan şıkları al (doğru cevap + 1 yanlış cevap)
+        $remainingChoices = [];
+        foreach ($allChoiceKeys as $key) {
+            if (!in_array($key, $removeOptions)) {
+                $remainingChoices[$key] = $choices[$key] ?? '';
+            }
+        }
         
         return [
-            'remaining_choices' => $remainingChoices,
-            'removed_option' => $removeOption
+            'type' => 'fifty_fifty',
+            'removed_options' => $removeOptions, // Array olarak 2 şık
+            'remaining_choices' => $remainingChoices
         ];
     }
     

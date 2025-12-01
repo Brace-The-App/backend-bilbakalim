@@ -241,11 +241,15 @@ class QuizController extends Controller
             // Çift cevap joker kontrolü
             if ($jokerUsed === 'double_answer' && $request->second_option) {
                 // Çift cevap: iki seçenekten biri doğru olmalı
-                $isCorrect = ($question->correct_answer === $selectedOption) ||
-                    ($question->correct_answer === $request->second_option);
+                // Tip uyumsuzluğunu önlemek için string'e çevir
+                $correctAnswer = (string) $question->correct_answer;
+                $selectedOptionStr = (string) $selectedOption;
+                $secondOptionStr = (string) $request->second_option;
+                $isCorrect = ($correctAnswer === $selectedOptionStr) ||
+                    ($correctAnswer === $secondOptionStr);
             } else {
-                // Normal cevap
-                $isCorrect = $question->correct_answer === $selectedOption;
+                // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
+                $isCorrect = (string) $question->correct_answer === (string) $selectedOption;
             }
         }
 
@@ -680,11 +684,15 @@ class QuizController extends Controller
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
                 // Çift cevap: iki seçenekten biri doğru olmalı
-                $isCorrect = ($question->correct_answer === $selectedAnswer) || 
-                            ($question->correct_answer === $request->second_option);
+                // Tip uyumsuzluğunu önlemek için string'e çevir
+                $correctAnswer = (string) $question->correct_answer;
+                $selectedAnswerStr = (string) $selectedAnswer;
+                $secondOptionStr = (string) $request->second_option;
+                $isCorrect = ($correctAnswer === $selectedAnswerStr) || 
+                            ($correctAnswer === $secondOptionStr);
             } else {
-                // Normal cevap kontrolü
-                $isCorrect = $question->correct_answer === $selectedAnswer;
+                // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
+                $isCorrect = (string) $question->correct_answer === (string) $selectedAnswer;
             }
         }
 
