@@ -23,6 +23,12 @@ class UserResource extends JsonResource
             $diamondBalance = $diamond ? $diamond->balance : 0;
         }
 
+        // Joker sayılarını al
+        $fiftyFiftyJokers = $this->fifty_fifty_jokers ?? 0;
+        $doubleAnswerJokers = $this->double_answer_jokers ?? 0;
+        $hintJokers = $this->hint_jokers ?? 0;
+        $totalJokers = $fiftyFiftyJokers + $doubleAnswerJokers + $hintJokers;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -36,6 +42,12 @@ class UserResource extends JsonResource
             'created_at' => $this->created_at,
             'profile_image' => 'https://bilbakalim.online/storage/' . $this->profile_image,
             'profile_completed' => ($this->name && $this->email && $this->phone && $this->password) ? true : false,
+            'jokers' => [
+                'fifty_fifty' => $fiftyFiftyJokers,
+                'double_answer' => $doubleAnswerJokers,
+                'hint' => $hintJokers,
+                'total' => $totalJokers
+            ],
         ];
     }
 }

@@ -204,6 +204,8 @@ class PremiumQuizController extends Controller
         
         // Eğer selected_option null veya boş ise (süre doldu), yanlış olarak işaretle
         $selectedOption = $request->selected_option;
+        $answerAlreadySaved = false;
+        
         if (empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
             $isCorrect = false;
             $selectedOption = null;
@@ -223,38 +225,116 @@ class PremiumQuizController extends Controller
                 }
             }
             
-            // Çift cevap joker kontrolü
-            if ($jokerUsed === 'double_answer' && $request->second_option) {
-                // Çift cevap: iki seçenekten biri doğru olmalı
-                // Tip uyumsuzluğunu önlemek için string'e çevir
-                $correctAnswer = (string) $question->correct_answer;
-                $selectedOptionStr = (string) $selectedOption;
-                $secondOptionStr = (string) $request->second_option;
-                $isCorrect = ($correctAnswer === $selectedOptionStr) || 
-                            ($correctAnswer === $secondOptionStr);
+            // Çift cevap joker kullanıldıysa ve ikinci şık henüz gönderilmediyse, kontrol et
+            if ($jokerUsed === 'double_answer' && !$request->has('second_option')) {
+                // İlk şıkkın doğru olup olmadığını kontrol et
+                $firstOptionCorrect = (string) $question->correct_answer === (string) $selectedOption;
+                
+                // Eğer ilk şık doğruysa, ikinci şıkkı seçmeye gerek yok, direkt doğru cevap olarak kaydet
+                if ($firstOptionCorrect) {
+                    // Doğru cevabı direkt kaydet
+                    GameAnswer::create([
+                        'individual_game_id' => $game->id,
+                        'game_session_id' => null,
+                        'user_id' => $user->id,
+                        'question_id' => $question->id,
+                        'selected_option' => $selectedOption,
+                        'is_correct' => true,
+                        'time_spent' => $request->time_spent ?? 30,
+                        'joker_used' => 'double_answer',
+                        'answered_at' => now(),
+                        'user_answer' => $selectedOption
+                    ]);
+                    
+                    $isCorrect = true;
+                    $answerAlreadySaved = true;
+                } else {
+                    // İlk şık yanlışsa, ikinci şıkkı beklemeli
+                    // Pending cevabı settings'te sakla
+                    $settings = $game->settings;
+                    if (!isset($settings['pending_answers'])) {
+                        $settings['pending_answers'] = [];
+                    }
+                    $settings['pending_answers'][$question->id] = [
+                        'selected_option' => $selectedOption,
+                        'time_spent' => $request->time_spent ?? 30,
+                        'answered_at' => now()->toISOString()
+                    ];
+                    $game->update(['settings' => $settings]);
+                    
+                    // İkinci şıkkı beklediğimizi belirten response döndür
+                    return response()->json([
+                        'success' => true,
+                        'waiting_for_second_option' => true,
+                        'message' => 'Lütfen ikinci şıkkı seçin.',
+                        'first_option' => $selectedOption,
+                        'joker_used' => 'double_answer',
+                        'first_option_correct' => false
+                    ]);
+                }
             } else {
-                // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
-                $isCorrect = (string) $question->correct_answer === (string) $selectedOption;
+                // Çift cevap joker kontrolü (ikinci şık da geldiyse)
+                if ($jokerUsed === 'double_answer' && $request->has('second_option')) {
+                    // Pending cevabı kontrol et
+                    $settings = $game->settings;
+                    $firstOption = $selectedOption;
+                    $timeSpent = $request->time_spent ?? 30;
+                    
+                    if (isset($settings['pending_answers'][$question->id])) {
+                        $pendingAnswer = $settings['pending_answers'][$question->id];
+                        $firstOption = $pendingAnswer['selected_option'];
+                        $timeSpent = $pendingAnswer['time_spent'];
+                        // Pending cevabı sil
+                        unset($settings['pending_answers'][$question->id]);
+                        $game->update(['settings' => $settings]);
+                    }
+                    
+                    // Çift cevap: iki seçenekten biri doğru olmalı
+                    $correctAnswer = (string) $question->correct_answer;
+                    $firstOptionStr = (string) $firstOption;
+                    $secondOptionStr = (string) $request->second_option;
+                    $isCorrect = ($correctAnswer === $firstOptionStr) || 
+                                ($correctAnswer === $secondOptionStr);
+                    
+                    // Cevabı kaydet
+                    GameAnswer::create([
+                        'individual_game_id' => $game->id,
+                        'game_session_id' => null,
+                        'user_id' => $user->id,
+                        'question_id' => $question->id,
+                        'selected_option' => $firstOption,
+                        'is_correct' => $isCorrect,
+                        'time_spent' => $timeSpent,
+                        'joker_used' => 'double_answer',
+                        'answered_at' => now(),
+                        'user_answer' => $firstOption . ',' . $request->second_option
+                    ]);
+                    
+                    $answerAlreadySaved = true;
+                } else {
+                    // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
+                    $isCorrect = (string) $question->correct_answer === (string) $selectedOption;
+                }
             }
         }
         
         $timeSpent = $request->time_spent ?? 30;
         
-        // Cevabı kaydet
-        GameAnswer::create([
-            'individual_game_id' => $game->id,
-            'game_session_id' => null, // Premium quiz için null
-            'user_id' => $user->id,
-            'question_id' => $question->id,
-            'selected_option' => $selectedOption,
-            'is_correct' => $isCorrect,
-            'time_spent' => $timeSpent,
-            'joker_used' => $jokerUsed,
-            'answered_at' => now(),
-            'user_answer' => ($jokerUsed === 'double_answer' && $selectedOption && $request->second_option) ? 
-                $selectedOption . ',' . $request->second_option : 
-                ($selectedOption ?? null)
-        ]);
+        // Cevabı kaydet (eğer daha önce kaydedilmediyse)
+        if (!$answerAlreadySaved) {
+            GameAnswer::create([
+                'individual_game_id' => $game->id,
+                'game_session_id' => null, // Premium quiz için null
+                'user_id' => $user->id,
+                'question_id' => $question->id,
+                'selected_option' => $selectedOption,
+                'is_correct' => $isCorrect,
+                'time_spent' => $timeSpent,
+                'joker_used' => $jokerUsed,
+                'answered_at' => now(),
+                'user_answer' => $selectedOption ?? null
+            ]);
+        }
         
         // Oyun istatistiklerini güncelle
         $coinsChange = $isCorrect ? $question->coin_value : -$question->coin_value;
@@ -262,43 +342,56 @@ class PremiumQuizController extends Controller
         $settings = $game->settings;
         $settings['current_question_number']++;
         
-        // Yanlış cevap durumunda oyunu bitir
+        // Yanlış cevap durumunda coin kontrolü yap
         if (!$isCorrect) {
-            $game->update([
-                'correct_answers' => $game->correct_answers,
-                'wrong_answers' => $game->wrong_answers + 1,
-                'coins_earned' => $game->coins_earned + $coinsChange,
-                'total_time_seconds' => $game->total_time_seconds + $timeSpent,
-                'status' => 'completed',
-                'ended_at' => now(),
-                'settings' => $settings
-            ]);
+            // Kullanıcının mevcut coin'ini kontrol et
+            $user->refresh(); // Güncel coin değerini al
+            $userCoins = $user->coins;
+            $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
             
-            // Kullanıcının coin'ini güncelle
-            $user->increment('coins', $coinsChange);
-            
-            // Socket.IO'ya oyun bitiş bildirimi gönder
-            $this->broadcastQuizCompleted($game, $user, [], []);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Yanlış cevap! Oyun bitti.',
-                'is_correct' => false,
-                'earned_coins' => $coinsChange,
-                'game_stats' => [
-                    'total_questions' => $game->question_count,
+            // Eğer kullanıcının coini yeterli değilse oyunu bitir
+            if ($userCoins < $coinDeduction) {
+                // Coin yeterli değil, oyunu bitir
+                $game->update([
                     'correct_answers' => $game->correct_answers,
-                    'wrong_answers' => $game->wrong_answers,
-                    'total_coins' => $game->coins_earned,
-                    'user_coins' => $user->coins
-                ],
-                'game_completed' => true
-            ]);
+                    'wrong_answers' => $game->wrong_answers + 1,
+                    'coins_earned' => $game->coins_earned + $coinsChange,
+                    'total_time_seconds' => $game->total_time_seconds + $timeSpent,
+                    'status' => 'completed',
+                    'ended_at' => now(),
+                    'settings' => $settings
+                ]);
+                
+                // Kullanıcının coin'ini güncelle (kalan coin kadar düş)
+                $finalCoins = max(0, $userCoins - $coinDeduction);
+                $user->update(['coins' => $finalCoins]);
+                
+                // Socket.IO'ya oyun bitiş bildirimi gönder
+                $this->broadcastQuizCompleted($game, $user, [], []);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Yeterli jetonunuz yok! Oyun bitti.',
+                    'is_correct' => false,
+                    'earned_coins' => $coinsChange,
+                    'game_stats' => [
+                        'total_questions' => $game->question_count,
+                        'correct_answers' => $game->correct_answers,
+                        'wrong_answers' => $game->wrong_answers,
+                        'total_coins' => $game->coins_earned,
+                        'user_coins' => $user->coins
+                    ],
+                    'game_completed' => true
+                ]);
+            }
+            
+            // Coin yeterli, oyun devam edecek - normal akışa devam et
+            // (Aşağıdaki kod bloğu çalışacak)
         }
         
         $game->update([
-            'correct_answers' => $game->correct_answers + 1,
-            'wrong_answers' => $game->wrong_answers,
+            'correct_answers' => $isCorrect ? $game->correct_answers + 1 : $game->correct_answers,
+            'wrong_answers' => !$isCorrect ? $game->wrong_answers + 1 : $game->wrong_answers,
             'coins_earned' => $game->coins_earned + $coinsChange,
             'total_time_seconds' => $game->total_time_seconds + $timeSpent,
             'settings' => $settings

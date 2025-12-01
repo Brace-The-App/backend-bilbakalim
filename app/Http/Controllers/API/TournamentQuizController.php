@@ -652,7 +652,7 @@ class TournamentQuizController extends Controller
         if ($tournament->status === 'completed') {
             // Kullanıcının durumunu kontrol et
             $userStatus = $tournamentUser->status;
-            $userAnswerCount = count($tournamentUser->answers_detail ?? []);
+            $userAnswerCount = $this->getCompletedAnswerCount($tournamentUser->answers_detail ?? []);
 
             // Eğer kullanıcı hala aktifse ve soruları bitirmemişse, cevap gönderebilmeli
             if ($userStatus === 'active' && $userAnswerCount < $tournament->question_count) {
@@ -982,8 +982,8 @@ class TournamentQuizController extends Controller
             // Soru bazlı turnuva: Her kullanıcı kendi cevap sayısına göre sıradaki soruyu görür
             // Ama tüm kullanıcılar aynı soru numarasındaki soruyu görür (deterministik)
 
-            // Kullanıcının cevap sayısını al
-            $userAnswerCount = count($answersDetail);
+            // Kullanıcının cevap sayısını al (pending cevapları hariç)
+            $userAnswerCount = $this->getCompletedAnswerCount($answersDetail);
             $nextQuestionNumber = $userAnswerCount + 1; // Bir sonraki soru numarası
 
             // Kullanıcının mevcut soru numarasını güncelle
@@ -1132,8 +1132,8 @@ class TournamentQuizController extends Controller
             $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
 
             if ($tournament->tournament_type === 'question_based') {
-                // Soru bazlı turnuva: Kullanıcının cevap sayısına göre sıradaki soruyu seç
-                $userAnswerCount = count($answersDetail);
+                // Soru bazlı turnuva: Kullanıcının cevap sayısına göre sıradaki soruyu seç (pending cevapları hariç)
+                $userAnswerCount = $this->getCompletedAnswerCount($answersDetail);
                 $nextQuestionNumber = $userAnswerCount + 1;
 
                 if ($nextQuestionNumber <= $tournament->question_count) {
@@ -1444,9 +1444,9 @@ class TournamentQuizController extends Controller
 
             $questionNumber = $request->input('question_number');
             if (!$questionNumber) {
-                // Kullanıcının cevap sayısına göre sıradaki soru numarasını hesapla
+                // Kullanıcının cevap sayısına göre sıradaki soru numarasını hesapla (pending cevapları hariç)
                 if ($tournamentUser) {
-                    $userAnswerCount = count($tournamentUser->answers_detail ?? []);
+                    $userAnswerCount = $this->getCompletedAnswerCount($tournamentUser->answers_detail ?? []);
                     $questionNumber = $userAnswerCount + 1;
                 } else {
                     $questionNumber = 1;
@@ -1638,6 +1638,19 @@ class TournamentQuizController extends Controller
     }
 
     /**
+     * Pending olmayan cevapların sayısını döndürür
+     * Double answer joker kullanıldığında, ilk seçenek pending olarak işaretlenir
+     * Bu pending cevaplar, gerçek cevap sayısına dahil edilmemelidir
+     */
+    private function getCompletedAnswerCount(array $answersDetail): int
+    {
+        return count(array_filter($answersDetail, function($answer) {
+            // is_pending true olan cevapları filtrele
+            return !isset($answer['is_pending']) || $answer['is_pending'] !== true;
+        }));
+    }
+
+    /**
      * Turnuva bitiş kontrolü
      */
     private function checkTournamentEnd(Tournament $tournament): void
@@ -1677,10 +1690,10 @@ class TournamentQuizController extends Controller
                 ->where('status', 'active')
                 ->get();
 
-            // Tüm aktif kullanıcıların tüm soruları bitirip bitirmediğini kontrol et
+            // Tüm aktif kullanıcıların tüm soruları bitirip bitirmediğini kontrol et (pending cevapları hariç)
             $allActiveCompleted = true;
             foreach ($activeParticipants as $participant) {
-                $userAnswerCount = count($participant->answers_detail ?? []);
+                $userAnswerCount = $this->getCompletedAnswerCount($participant->answers_detail ?? []);
                 if ($userAnswerCount < $tournament->question_count) {
                     $allActiveCompleted = false;
                     break;
