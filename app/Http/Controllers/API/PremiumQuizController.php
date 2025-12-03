@@ -51,7 +51,7 @@ class PremiumQuizController extends Controller
     public function startPremiumQuiz(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Premium kullanıcı kontrolü
         if (!$user->is_premium) {
             return response()->json([
@@ -59,13 +59,13 @@ class PremiumQuizController extends Controller
                 'message' => 'Bu özellik sadece premium kullanıcılar için.'
             ], 403);
         }
-        
+
         // Aktif oyun var mı kontrol et
         $activeGame = IndividualGame::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'premium')
             ->first();
-            
+
         if ($activeGame) {
             return response()->json([
                 'success' => false,
@@ -73,14 +73,14 @@ class PremiumQuizController extends Controller
                 'active_game' => $activeGame
             ], 400);
         }
-        
+
         // Kullanıcının mevcut joker sayılarını al, yoksa başlangıç jokerlerini ver
         $userJokers = [
             'fifty_fifty' => $user->fifty_fifty_jokers ?? config('app.joker_fifty_fifty_count', 1),
             'double_answer' => $user->double_answer_jokers ?? config('app.joker_double_answer_count', 1),
             'hint' => $user->hint_jokers ?? config('app.joker_hint_count', 1)
         ];
-        
+
         // Eğer kullanıcının jokerleri yoksa, başlangıç jokerlerini ver
         if (is_null($user->fifty_fifty_jokers)) {
             $user->update([
@@ -89,7 +89,7 @@ class PremiumQuizController extends Controller
                 'hint_jokers' => config('app.joker_hint_count', 1)
             ]);
         }
-        
+
         // Yeni premium oyun oluştur
         $game = IndividualGame::create([
             'user_id' => $user->id,
@@ -111,16 +111,16 @@ class PremiumQuizController extends Controller
                 'current_question_number' => 1
             ]
         ]);
-        
+
         // İlk soruyu getir
         $question = $this->getNextPremiumQuestion($game);
-        
+
         // Socket.IO'ya quiz başlatma bildirimi gönder
         $this->broadcastQuizStarted($game, $question);
-        
+
         // Soruyu çoklu dil formatında formatla
         $questionData = $question ? $this->formatQuestionMultilingual($question) : null;
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Premium quiz başlatıldı.',
@@ -129,7 +129,7 @@ class PremiumQuizController extends Controller
             'jokers' => $game->settings['jokers']
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/premium/answer",
@@ -185,27 +185,27 @@ class PremiumQuizController extends Controller
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint',
             'second_option' => 'nullable|in:1,2,3,4' // Çift cevap için ikinci seçenek
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'premium')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif premium oyun bulunamadı.'
             ], 404);
         }
-        
+
         $question = Question::find($request->question_id);
-        
+
         // Eğer selected_option null veya boş ise (süre doldu), yanlış olarak işaretle
         $selectedOption = $request->selected_option;
         $answerAlreadySaved = false;
-        
+
         if (empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
             $isCorrect = false;
             $selectedOption = null;
@@ -219,17 +219,17 @@ class PremiumQuizController extends Controller
                     $settings['jokers'][$request->joker_used]--;
                     $jokerUsed = $request->joker_used;
                     $game->update(['settings' => $settings]);
-                    
+
                     // Kullanıcının genel joker sayısını da azalt
                     $this->decrementUserJoker($user, $request->joker_used);
                 }
             }
-            
+
             // Çift cevap joker kullanıldıysa ve ikinci şık henüz gönderilmediyse, kontrol et
             if ($jokerUsed === 'double_answer' && !$request->has('second_option')) {
                 // İlk şıkkın doğru olup olmadığını kontrol et
                 $firstOptionCorrect = (string) $question->correct_answer === (string) $selectedOption;
-                
+
                 // Eğer ilk şık doğruysa, ikinci şıkkı seçmeye gerek yok, direkt doğru cevap olarak kaydet
                 if ($firstOptionCorrect) {
                     // Doğru cevabı direkt kaydet
@@ -245,7 +245,7 @@ class PremiumQuizController extends Controller
                         'answered_at' => now(),
                         'user_answer' => $selectedOption
                     ]);
-                    
+
                     $isCorrect = true;
                     $answerAlreadySaved = true;
                 } else {
@@ -261,7 +261,7 @@ class PremiumQuizController extends Controller
                         'answered_at' => now()->toISOString()
                     ];
                     $game->update(['settings' => $settings]);
-                    
+
                     // İkinci şıkkı beklediğimizi belirten response döndür
                     return response()->json([
                         'success' => true,
@@ -279,7 +279,7 @@ class PremiumQuizController extends Controller
                     $settings = $game->settings;
                     $firstOption = $selectedOption;
                     $timeSpent = $request->time_spent ?? 30;
-                    
+
                     if (isset($settings['pending_answers'][$question->id])) {
                         $pendingAnswer = $settings['pending_answers'][$question->id];
                         $firstOption = $pendingAnswer['selected_option'];
@@ -288,14 +288,14 @@ class PremiumQuizController extends Controller
                         unset($settings['pending_answers'][$question->id]);
                         $game->update(['settings' => $settings]);
                     }
-                    
+
                     // Çift cevap: iki seçenekten biri doğru olmalı
                     $correctAnswer = (string) $question->correct_answer;
                     $firstOptionStr = (string) $firstOption;
                     $secondOptionStr = (string) $request->second_option;
-                    $isCorrect = ($correctAnswer === $firstOptionStr) || 
+                    $isCorrect = ($correctAnswer === $firstOptionStr) ||
                                 ($correctAnswer === $secondOptionStr);
-                    
+
                     // Cevabı kaydet
                     GameAnswer::create([
                         'individual_game_id' => $game->id,
@@ -309,7 +309,7 @@ class PremiumQuizController extends Controller
                         'answered_at' => now(),
                         'user_answer' => $firstOption . ',' . $request->second_option
                     ]);
-                    
+
                     $answerAlreadySaved = true;
                 } else {
                     // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
@@ -317,9 +317,9 @@ class PremiumQuizController extends Controller
                 }
             }
         }
-        
+
         $timeSpent = $request->time_spent ?? 30;
-        
+
         // Cevabı kaydet (eğer daha önce kaydedilmediyse)
         if (!$answerAlreadySaved) {
             GameAnswer::create([
@@ -335,20 +335,20 @@ class PremiumQuizController extends Controller
                 'user_answer' => $selectedOption ?? null
             ]);
         }
-        
+
         // Oyun istatistiklerini güncelle
         $coinsChange = $isCorrect ? $question->coin_value : -$question->coin_value;
-        
+
         $settings = $game->settings;
         $settings['current_question_number']++;
-        
+
         // Yanlış cevap durumunda coin kontrolü yap
         if (!$isCorrect) {
             // Kullanıcının mevcut coin'ini kontrol et
             $user->refresh(); // Güncel coin değerini al
             $userCoins = $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
-            
+
             // Eğer kullanıcının coini yeterli değilse oyunu bitir
             if ($userCoins < $coinDeduction) {
                 // Coin yeterli değil, oyunu bitir
@@ -361,14 +361,14 @@ class PremiumQuizController extends Controller
                     'ended_at' => now(),
                     'settings' => $settings
                 ]);
-                
+
                 // Kullanıcının coin'ini güncelle (kalan coin kadar düş)
                 $finalCoins = max(0, $userCoins - $coinDeduction);
                 $user->update(['coins' => $finalCoins]);
-                
+
                 // Socket.IO'ya oyun bitiş bildirimi gönder
                 $this->broadcastQuizCompleted($game, $user, [], []);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Yeterli jetonunuz yok! Oyun bitti.',
@@ -384,11 +384,11 @@ class PremiumQuizController extends Controller
                     'game_completed' => true
                 ]);
             }
-            
+
             // Coin yeterli, oyun devam edecek - normal akışa devam et
             // (Aşağıdaki kod bloğu çalışacak)
         }
-        
+
         $game->update([
             'correct_answers' => $isCorrect ? $game->correct_answers + 1 : $game->correct_answers,
             'wrong_answers' => !$isCorrect ? $game->wrong_answers + 1 : $game->wrong_answers,
@@ -396,24 +396,24 @@ class PremiumQuizController extends Controller
             'total_time_seconds' => $game->total_time_seconds + $timeSpent,
             'settings' => $settings
         ]);
-        
+
         // Kullanıcının jetonunu güncelle
         $user->increment('coins', $coinsChange);
-        
+
         // Socket.IO'ya cevap bildirimi gönder
         $this->broadcastQuizAnswer($game, $user, $question, $isCorrect, $coinsChange, $jokerUsed);
-        
+
         // Oyun bitti mi kontrol et
         $maxQuestions = config('app.quiz_premium_question_count', 15);
         if ($settings['current_question_number'] > $maxQuestions) {
             $game->update(['status' => 'completed', 'completed_at' => now()]);
-            
+
             // Kullanıcının tüm cevaplarını getir
             $answers = GameAnswer::where('individual_game_id', $game->id)
                 ->with('question')
                 ->orderBy('answered_at', 'asc')
                 ->get();
-            
+
             $answerDetails = $answers->map(function ($answer) {
                 return [
                     'question_id' => $answer->question_id,
@@ -430,13 +430,13 @@ class PremiumQuizController extends Controller
                     'answered_at' => $answer->answered_at
                 ];
             });
-            
+
             // Ödül kontrolü
             $reward = $this->calculateReward($game);
-            
+
             // Socket.IO'ya quiz tamamlanma bildirimi gönder
             $this->broadcastQuizCompleted($game, $user, $answerDetails->toArray(), $reward);
-            
+
             return response()->json([
                 'success' => true,
                 'is_correct' => $isCorrect,
@@ -454,13 +454,13 @@ class PremiumQuizController extends Controller
                 'reward' => $reward
             ]);
         }
-        
+
         // Sonraki soruyu getir
         $nextQuestion = $this->getNextPremiumQuestion($game);
-        
+
         // Soruyu çoklu dil formatında formatla
         $nextQuestionData = $nextQuestion ? $this->formatQuestionMultilingual($nextQuestion) : null;
-        
+
         return response()->json([
             'success' => true,
             'is_correct' => $isCorrect,
@@ -478,7 +478,7 @@ class PremiumQuizController extends Controller
             'next_question' => $nextQuestionData
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/premium/joker",
@@ -525,14 +525,14 @@ class PremiumQuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
         ];
-        
+
         // selected_answer sadece null değilse ve boş string değilse validation'a ekle
         if ($request->has('selected_answer') && $request->selected_answer !== null && $request->selected_answer !== '') {
-            $rules['selected_answer'] = 'required|in:1,2,3,4';
+            $rules['selected_answer'] = 'required|in:1,2,3,4,5';
         }
-        
+
         $request->validate($rules);
-        
+
         $user = Auth::user();
         $gameId = $request->game_id;
         $jokerType = $request->joker_type;
@@ -540,26 +540,26 @@ class PremiumQuizController extends Controller
         $game = null;
         $tournament = null;
         $tournamentUser = null;
-        
+
         // Önce premium quiz olarak kontrol et
         $game = IndividualGame::where('id', $gameId)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'premium')
             ->first();
-        
+
         // Eğer premium quiz değilse, turnuva olarak kontrol et
         if (!$game) {
             $tournament = Tournament::where('id', $gameId)
                 ->where('status', 'active')
                 ->first();
-            
+
             if ($tournament) {
                 $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
                     ->where('user_id', $user->id)
                     ->whereIn('status', ['active', 'waiting'])
                     ->first();
-                
+
                 if ($tournamentUser) {
                     $isTournament = true;
                 } else {
@@ -575,16 +575,16 @@ class PremiumQuizController extends Controller
                 ], 404);
             }
         }
-        
+
         $question = Question::find($request->question_id);
-        
+
         if (!$question) {
             return response()->json([
                 'success' => false,
                 'message' => 'Soru bulunamadı.'
             ], 404);
         }
-        
+
         // Turnuva için joker kontrolü
         if ($isTournament) {
             // Turnuva joker hakkı kontrolü (joker_hakki alanı)
@@ -594,28 +594,28 @@ class PremiumQuizController extends Controller
                     'message' => 'Turnuva joker hakkınız kalmadı.'
                 ], 400);
             }
-            
+
             // Joker tiplerini kontrol et ve gerekirse başlat
             $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
-            
+
             // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
             if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
                 $totalJokers = $tournamentUser->joker_hakki ?? 3;
                 // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
                 $jokersPerType = floor($totalJokers / 3);
                 $remainingJokers = $totalJokers % 3;
-                
+
                 $answersDetail['jokers'] = [
                     'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
                     'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
                     'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
                 ];
-                
+
                 // Başlangıç değerlerini kaydet
                 $tournamentUser->update(['answers_detail' => $answersDetail]);
                 $tournamentUser->refresh();
             }
-            
+
             // Joker tipi kontrolü
             if (!isset($answersDetail['jokers'][$jokerType]) || $answersDetail['jokers'][$jokerType] <= 0) {
                 return response()->json([
@@ -626,7 +626,7 @@ class PremiumQuizController extends Controller
         } else {
             // Premium quiz için joker kontrolü
             $settings = $game->settings ?? [];
-            
+
             // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
             if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
                 $settings['jokers'] = [
@@ -635,7 +635,7 @@ class PremiumQuizController extends Controller
                     'hint' => $user->hint_jokers ?? 0
                 ];
             }
-            
+
             // Joker tipi kontrolü
             if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
                 return response()->json([
@@ -644,9 +644,9 @@ class PremiumQuizController extends Controller
                 ], 400);
             }
         }
-        
+
         $result = [];
-        
+
         switch ($jokerType) {
             case 'fifty_fifty':
                 $result = $this->useFiftyFiftyJoker($question);
@@ -658,25 +658,25 @@ class PremiumQuizController extends Controller
                 $result = $this->useHintJoker($question);
                 break;
         }
-        
+
         // Joker hakkını azalt
         if ($isTournament) {
             // Turnuva için joker tiplerini ayrı ayrı takip et
             // answers_detail zaten yukarıda kontrol edildi ve başlatıldı
             $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
-            
+
             // Kullanılan joker tipini azalt (yukarıda kontrol edildi, burada kesinlikle var)
             $answersDetail['jokers'][$jokerType]--;
-            
+
             // Toplam joker hakkını da azalt
             $tournamentUser->decrement('joker_hakki');
-            
+
             // Güncellenmiş joker bilgilerini kaydet (mevcut answers_detail verilerini koru)
             $tournamentUser->update(['answers_detail' => $answersDetail]);
-            
+
             // TournamentUser'ı yeniden yükle
             $tournamentUser->refresh();
-            
+
             // Kalan joker tiplerini döndür
             $remainingJokers = [
                 'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
@@ -688,24 +688,24 @@ class PremiumQuizController extends Controller
             // Premium quiz için settings'teki jokerleri azalt
             $settings['jokers'][$jokerType]--;
             $game->update(['settings' => $settings]);
-            
+
             // Kullanıcının genel joker sayısını da azalt
             $this->decrementUserJoker($user, $jokerType);
-            
+
             $remainingJokers = $settings['jokers'];
         }
-        
+
         // Socket.IO'ya joker kullanım bildirimi gönder
         if ($isTournament) {
             $this->broadcastTournamentJokerUsed($tournament, $user, $jokerType, $result);
         } else {
             $this->broadcastJokerUsed($game, $user, $jokerType, $result);
         }
-        
+
         // Seçilen cevabın doğruluğunu kontrol et
         $selectedAnswer = $request->selected_answer;
         $isCorrect = null;
-        
+
         if ($selectedAnswer !== null) {
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
@@ -714,14 +714,14 @@ class PremiumQuizController extends Controller
                 $correctAnswer = (string) $question->correct_answer;
                 $selectedAnswerStr = (string) $selectedAnswer;
                 $secondOptionStr = (string) $request->second_option;
-                $isCorrect = ($correctAnswer === $selectedAnswerStr) || 
+                $isCorrect = ($correctAnswer === $selectedAnswerStr) ||
                             ($correctAnswer === $secondOptionStr);
             } else {
                 // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
                 $isCorrect = (string) $question->correct_answer === (string) $selectedAnswer;
             }
         }
-        
+
         $response = [
             'success' => true,
             'joker_type' => $jokerType,
@@ -729,16 +729,16 @@ class PremiumQuizController extends Controller
             'remaining_jokers' => $remainingJokers,
             'game_type' => $isTournament ? 'tournament' : 'premium'
         ];
-        
+
         // Eğer seçilen cevap gönderildiyse, response'a ekle
         if ($selectedAnswer !== null) {
             $response['selected_answer'] = $selectedAnswer;
             $response['is_correct'] = $isCorrect;
         }
-        
+
         return response()->json($response);
     }
-    
+
     /**
      * Premium Quiz - Oyunu bitir
      */
@@ -747,32 +747,32 @@ class PremiumQuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id'
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->where('game_type', 'premium')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aktif premium oyun bulunamadı.'
             ], 404);
         }
-        
+
         $game->update([
             'status' => 'completed',
             'completed_at' => now()
         ]);
-        
+
         // Kullanıcının cevaplarını getir
         $answers = GameAnswer::where('individual_game_id', $game->id)
             ->with('question')
             ->orderBy('answered_at', 'asc')
             ->get();
-        
+
         $answerDetails = $answers->map(function ($answer) {
             return [
                 'question_id' => $answer->question_id,
@@ -789,13 +789,13 @@ class PremiumQuizController extends Controller
                 'answered_at' => $answer->answered_at
             ];
         });
-        
+
         // Ödül hesapla
         $reward = $this->calculateReward($game);
-        
+
         // Socket.IO'ya quiz tamamlanma bildirimi gönder
         $this->broadcastQuizCompleted($game, $user, $answerDetails->toArray(), $reward);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Premium oyun tamamlandı.',
@@ -811,7 +811,7 @@ class PremiumQuizController extends Controller
             'reward' => $reward
         ]);
     }
-    
+
     /**
      * Sonraki premium soruyu getir
      * Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
@@ -820,11 +820,11 @@ class PremiumQuizController extends Controller
     {
         $settings = $game->settings;
         $currentQuestionNumber = $settings['current_question_number'] ?? 1;
-        
+
         // Reklam sorusu kontrolü
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
         $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-        
+
         // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
         // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
         if ($adAppearanceFrequency > 0 && $currentQuestionNumber % $adAppearanceFrequency === 0) {
@@ -845,7 +845,7 @@ class PremiumQuizController extends Controller
                     ->where('category_id', $adCategory->id)
                     ->inRandomOrder()
                     ->first();
-                    
+
                 // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
                 if ($adQuestion) {
                     return $adQuestion;
@@ -853,33 +853,33 @@ class PremiumQuizController extends Controller
             }
             // Eğer reklam kategorisi yoksa veya reklam sorusu yoksa, normal soru seçimine geç (aşağıdaki kod devam eder)
         }
-        
+
         // Normal soru seçimi
         $mediumRemaining = $settings['medium_questions_remaining'] ?? 7;
         $hardRemaining = $settings['hard_questions_remaining'] ?? 8;
-        
+
         // Önce orta, sonra zor sorular
         if ($mediumRemaining > 0) {
             $question = Question::active()
                 ->byLevel('medium')
                 ->inRandomOrder()
                 ->first();
-                
+
             $settings['medium_questions_remaining'] = $mediumRemaining - 1;
         } else {
             $question = Question::active()
                 ->byLevel('hard')
                 ->inRandomOrder()
                 ->first();
-                
+
             $settings['hard_questions_remaining'] = $hardRemaining - 1;
         }
-        
+
         $game->update(['settings' => $settings]);
-        
+
         return $question;
     }
-    
+
     /**
      * Soruyu çoklu dil formatında formatla
      */
@@ -899,14 +899,14 @@ class PremiumQuizController extends Controller
         // Çoklu dil desteği - tr ve en
         $questionTr = $question->getTranslation('question', 'tr');
         $questionEn = $question->getTranslation('question', 'en');
-        
+
         $choicesTr = [
             '1' => $question->getTranslation('one_choice', 'tr'),
             '2' => $question->getTranslation('two_choice', 'tr'),
             '3' => $question->getTranslation('three_choice', 'tr'),
             '4' => $question->getTranslation('four_choice', 'tr'),
         ];
-        
+
         $choicesEn = [
             '1' => $question->getTranslation('one_choice', 'en'),
             '2' => $question->getTranslation('two_choice', 'en'),
@@ -943,7 +943,7 @@ class PremiumQuizController extends Controller
             ] : null,
         ];
     }
-    
+
     /**
      * Görsel URL'ini tam URL'e çevir
      */
@@ -972,7 +972,7 @@ class PremiumQuizController extends Controller
         $baseUrl = config('app.url', 'https://bilbakalim.online');
         return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
     }
-    
+
     /**
      * %50 Joker
      */
@@ -981,15 +981,15 @@ class PremiumQuizController extends Controller
         $choices = $question->choices;
         $correctAnswer = (string) $question->correct_answer;
         $allChoiceKeys = ['1', '2', '3', '4'];
-        
+
         // Doğru cevabı hariç tut, 2 yanlış seçeneği kaldır
         $wrongOptions = array_filter($allChoiceKeys, function($choice) use ($correctAnswer) {
             return $choice !== $correctAnswer;
         });
-        
+
         // 2 yanlış şık seç
         $removeOptions = array_values(array_slice($wrongOptions, 0, 2));
-        
+
         // Kalan şıkları al (doğru cevap + 1 yanlış cevap)
         $remainingChoices = [];
         foreach ($allChoiceKeys as $key) {
@@ -997,14 +997,14 @@ class PremiumQuizController extends Controller
                 $remainingChoices[$key] = $choices[$key] ?? '';
             }
         }
-        
+
         return [
             'type' => 'fifty_fifty',
             'removed_options' => $removeOptions, // Array olarak 2 şık
             'remaining_choices' => $remainingChoices
         ];
     }
-    
+
     /**
      * Çift Cevap Joker
      */
@@ -1015,7 +1015,7 @@ class PremiumQuizController extends Controller
             'allow_multiple' => true
         ];
     }
-    
+
     /**
      * Sen Söyle (İpucu) Joker
      */
@@ -1024,24 +1024,24 @@ class PremiumQuizController extends Controller
         // Şık numarasını harfe çevir (1 -> A, 2 -> B, 3 -> C, 4 -> D)
         $answerMap = ['1' => 'A', '2' => 'B', '3' => 'C', '4' => 'D'];
         $answerLetter = $answerMap[$question->correct_answer] ?? $question->correct_answer;
-        
+
         $hints = [
             'Doğru cevap ' . $answerLetter . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
         ];
-        
+
         return [
             'hint' => $hints[array_rand($hints)]
         ];
     }
-    
+
     /**
      * Ödül hesapla
      */
     private function calculateReward(IndividualGame $game): array
     {
         $accuracyRate = $game->accuracy_rate;
-        
+
         // %100 doğru cevap özel ödül sistemi
         if ($accuracyRate == 100) {
             $user = $game->user;
@@ -1049,14 +1049,14 @@ class PremiumQuizController extends Controller
             $fiftyFiftyReward = config('app.reward_perfect_score_fifty_fifty', 10);
             $doubleAnswerReward = config('app.reward_perfect_score_double_answer', 10);
             $hintReward = config('app.reward_perfect_score_hint', 10);
-            
+
             $user->increment('coins', $coinsReward);
-            
+
             // Joker ödülleri ekle
             $user->increment('fifty_fifty_jokers', $fiftyFiftyReward);
             $user->increment('double_answer_jokers', $doubleAnswerReward);
             $user->increment('hint_jokers', $hintReward);
-            
+
             return [
                 'type' => 'perfect_score',
                 'coins' => $coinsReward,
@@ -1068,7 +1068,7 @@ class PremiumQuizController extends Controller
                 'message' => "Mükemmel! %100 doğru cevap ile özel ödülü kazandınız!"
             ];
         }
-        
+
         // %80+ başarı ödülü
         if ($accuracyRate >= 80) {
             $user = $game->user;
@@ -1076,14 +1076,14 @@ class PremiumQuizController extends Controller
             $fiftyFiftyReward = config('app.reward_high_accuracy_fifty_fifty', 3);
             $doubleAnswerReward = config('app.reward_high_accuracy_double_answer', 3);
             $hintReward = config('app.reward_high_accuracy_hint', 3);
-            
+
             $user->increment('coins', $coinsReward);
-            
+
             // Joker ödülleri ekle
             $user->increment('fifty_fifty_jokers', $fiftyFiftyReward);
             $user->increment('double_answer_jokers', $doubleAnswerReward);
             $user->increment('hint_jokers', $hintReward);
-            
+
             return [
                 'type' => 'high_accuracy',
                 'coins' => $coinsReward,
@@ -1097,13 +1097,13 @@ class PremiumQuizController extends Controller
         }
 
         $minAccuracyRate = config('app.reward_min_accuracy_rate', 80);
-        
+
         return [
             'type' => 'none',
             'message' => "Ödül kazanmak için %{$minAccuracyRate} ve üzeri başarı gerekli. Mevcut başarınız: %{$accuracyRate}"
         ];
     }
-    
+
     /**
      * @OA\Get(
      *     path="/api/quiz/premium/jokers",
@@ -1139,50 +1139,50 @@ class PremiumQuizController extends Controller
     public function getUserJokers(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Eğer tournament_id parametresi gönderilmişse, turnuva joker durumunu döndür
         if ($request->has('tournament_id') && $request->tournament_id) {
             $tournament = \App\Models\Tournament::find($request->tournament_id);
-            
+
             if (!$tournament) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Turnuva bulunamadı.'
                 ], 404);
             }
-            
+
             $tournamentUser = \App\Models\TournamentUser::where('tournament_id', $tournament->id)
                 ->where('user_id', $user->id)
                 ->first();
-            
+
             if (!$tournamentUser) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Bu turnuvaya katılımınız bulunamadı.'
                 ], 404);
             }
-            
+
             // Joker tiplerini kontrol et ve gerekirse başlat
             $answersDetail = is_array($tournamentUser->answers_detail) ? $tournamentUser->answers_detail : [];
-            
+
             // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
             if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
                 $totalJokers = $tournamentUser->joker_hakki ?? 3;
                 // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
                 $jokersPerType = floor($totalJokers / 3);
                 $remainingJokers = $totalJokers % 3;
-                
+
                 $answersDetail['jokers'] = [
                     'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
                     'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
                     'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
                 ];
-                
+
                 // Başlangıç değerlerini kaydet
                 $tournamentUser->update(['answers_detail' => $answersDetail]);
                 $tournamentUser->refresh();
             }
-            
+
             return response()->json([
                 'success' => true,
                 'game_type' => 'tournament',
@@ -1195,7 +1195,7 @@ class PremiumQuizController extends Controller
                 'tournament_jokers' => $tournamentUser->joker_hakki ?? 0
             ]);
         }
-        
+
         // Premium quiz için normal joker durumu
         return response()->json([
             'success' => true,
@@ -1209,7 +1209,7 @@ class PremiumQuizController extends Controller
             'user_coins' => $user->coins
         ]);
     }
-    
+
     /**
      * @OA\Post(
      *     path="/api/quiz/premium/buy-joker",
@@ -1262,20 +1262,20 @@ class PremiumQuizController extends Controller
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
             'quantity' => 'required|integer|min:1|max:10'
         ]);
-        
+
         $user = Auth::user();
         $jokerType = $request->joker_type;
         $quantity = $request->quantity;
-        
+
         // Joker fiyatları (config'den alınabilir)
         $jokerPrices = [
             'fifty_fifty' => config('app.joker_fifty_fifty_price', 100),
             'double_answer' => config('app.joker_double_answer_price', 200),
             'hint' => config('app.joker_hint_price', 150)
         ];
-        
+
         $totalCost = $jokerPrices[$jokerType] * $quantity;
-        
+
         if ($user->coins < $totalCost) {
             return response()->json([
                 'success' => false,
@@ -1284,11 +1284,11 @@ class PremiumQuizController extends Controller
                 'user_coins' => $user->coins
             ], 400);
         }
-        
+
         // Jetonu düş ve joker ekle
         $user->decrement('coins', $totalCost);
         $user->increment($jokerType . '_jokers', $quantity);
-        
+
         return response()->json([
             'success' => true,
             'message' => "{$quantity} adet " . $this->getJokerDisplayName($jokerType) . " satın alındı.",
@@ -1299,7 +1299,7 @@ class PremiumQuizController extends Controller
             'new_joker_count' => $user->{$jokerType . '_jokers'}
         ]);
     }
-    
+
     /**
      * Joker türü için görüntüleme adı
      */
@@ -1310,10 +1310,10 @@ class PremiumQuizController extends Controller
             'double_answer' => 'Çift Cevap Joker',
             'hint' => 'İpucu Joker'
         ];
-        
+
         return $names[$jokerType] ?? $jokerType;
     }
-    
+
     /**
      * Premium Quiz - Oyun detayları (cevaplar dahil)
      */
@@ -1322,27 +1322,27 @@ class PremiumQuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id'
         ]);
-        
+
         $user = Auth::user();
         $game = IndividualGame::where('id', $request->game_id)
             ->where('user_id', $user->id)
             ->where('game_type', 'premium')
             ->where('status', 'completed')
             ->first();
-            
+
         if (!$game) {
             return response()->json([
                 'success' => false,
                 'message' => 'Premium oyun bulunamadı.'
             ], 404);
         }
-        
+
         // Kullanıcının cevaplarını getir
         $answers = GameAnswer::where('individual_game_id', $game->id)
             ->with('question')
             ->orderBy('answered_at', 'asc')
             ->get();
-        
+
         $answerDetails = $answers->map(function ($answer) {
             return [
                 'question_id' => $answer->question_id,
@@ -1359,14 +1359,14 @@ class PremiumQuizController extends Controller
                 'answered_at' => $answer->answered_at
             ];
         });
-        
+
         return response()->json([
             'success' => true,
             'game' => $game,
             'answer_details' => $answerDetails
         ]);
     }
-    
+
     /**
      * Socket.IO'ya quiz başlatma bildirimi gönder
      */
@@ -1374,7 +1374,7 @@ class PremiumQuizController extends Controller
     {
         try {
             $socketUrl = config('app.socket_url', 'http://localhost:3000');
-            
+
             Http::post("{$socketUrl}/webhook/quiz-started", [
                 'game_id' => $game->id,
                 'user_id' => $game->user_id,
@@ -1383,12 +1383,12 @@ class PremiumQuizController extends Controller
                 'jokers' => $game->settings['jokers'],
                 'timestamp' => now()->toISOString()
             ]);
-            
+
             Log::info('Premium quiz started broadcast sent', [
                 'game_id' => $game->id,
                 'user_id' => $game->user_id
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to broadcast premium quiz started', [
                 'game_id' => $game->id,
@@ -1396,7 +1396,7 @@ class PremiumQuizController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Socket.IO'ya quiz cevap bildirimi gönder
      */
@@ -1404,7 +1404,7 @@ class PremiumQuizController extends Controller
     {
         try {
             $socketUrl = config('app.socket_url', 'http://localhost:3000');
-            
+
             Http::post("{$socketUrl}/webhook/quiz-answer-submitted", [
                 'game_id' => $game->id,
                 'user_id' => $user->id,
@@ -1424,14 +1424,14 @@ class PremiumQuizController extends Controller
                 'jokers' => $game->settings['jokers'],
                 'timestamp' => now()->toISOString()
             ]);
-            
+
             Log::info('Premium quiz answer broadcast sent', [
                 'game_id' => $game->id,
                 'user_id' => $user->id,
                 'is_correct' => $isCorrect,
                 'joker_used' => $jokerUsed
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to broadcast premium quiz answer', [
                 'game_id' => $game->id,
@@ -1439,7 +1439,7 @@ class PremiumQuizController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Socket.IO'ya joker kullanım bildirimi gönder
      */
@@ -1447,7 +1447,7 @@ class PremiumQuizController extends Controller
     {
         try {
             $socketUrl = config('app.socket_url', 'http://localhost:3000');
-            
+
             Http::post("{$socketUrl}/webhook/quiz-joker-used", [
                 'game_id' => $game->id,
                 'user_id' => $user->id,
@@ -1456,13 +1456,13 @@ class PremiumQuizController extends Controller
                 'remaining_jokers' => $game->settings['jokers'],
                 'timestamp' => now()->toISOString()
             ]);
-            
+
             Log::info('Premium quiz joker used broadcast sent', [
                 'game_id' => $game->id,
                 'user_id' => $user->id,
                 'joker_type' => $jokerType
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to broadcast premium quiz joker used', [
                 'game_id' => $game->id,
@@ -1470,7 +1470,7 @@ class PremiumQuizController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Socket.IO'ya turnuva joker kullanım bildirimi gönder
      */
@@ -1481,7 +1481,7 @@ class PremiumQuizController extends Controller
             $tournamentUser = TournamentUser::where('tournament_id', $tournament->id)
                 ->where('user_id', $user->id)
                 ->first();
-            
+
             $webhookService->sendWebhook('/socket-webhooks/webhook/tournament-joker-used', [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
@@ -1490,13 +1490,13 @@ class PremiumQuizController extends Controller
                 'remaining_jokers' => $tournamentUser ? $tournamentUser->joker_hakki : 0,
                 'timestamp' => now()->toISOString()
             ]);
-            
+
             Log::info('Tournament joker used broadcast sent', [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
                 'joker_type' => $jokerType
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to broadcast tournament joker used', [
                 'tournament_id' => $tournament->id,
@@ -1504,7 +1504,7 @@ class PremiumQuizController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Kullanıcının joker sayısını azalt
      * Her joker kullanımında 1 azaltır
@@ -1523,7 +1523,7 @@ class PremiumQuizController extends Controller
                 break;
         }
     }
-    
+
     /**
      * Socket.IO'ya quiz tamamlanma bildirimi gönder
      */
@@ -1531,7 +1531,7 @@ class PremiumQuizController extends Controller
     {
         try {
             $socketUrl = config('app.socket_url', 'http://localhost:3000');
-            
+
             Http::post("{$socketUrl}/webhook/quiz-completed", [
                 'game_id' => $game->id,
                 'user_id' => $user->id,
@@ -1549,12 +1549,12 @@ class PremiumQuizController extends Controller
                 'user_coins' => $user->coins,
                 'timestamp' => now()->toISOString()
             ]);
-            
+
             Log::info('Premium quiz completed broadcast sent', [
                 'game_id' => $game->id,
                 'user_id' => $user->id
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to broadcast premium quiz completed', [
                 'game_id' => $game->id,
@@ -1595,7 +1595,7 @@ class PremiumQuizController extends Controller
     public function startMobilePremiumQuiz(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Premium kontrolü
         if (!$user->is_premium) {
             return response()->json([
@@ -1629,7 +1629,7 @@ class PremiumQuizController extends Controller
         // Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
         $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-        
+
         // Reklam kategorisini bul
         $adCategory = \App\Models\Category::where('is_active', true)
             ->get()
@@ -1642,7 +1642,7 @@ class PremiumQuizController extends Controller
 
         $allQuestions = collect();
         $adQuestionIndex = 0;
-        
+
         // Soru dağılımı: Reklam sorusu mantığıyla birlikte
         // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
         for ($i = 1; $i <= $questionCount; $i++) {
@@ -1652,7 +1652,7 @@ class PremiumQuizController extends Controller
                     ->where('category_id', $adCategory->id)
                     ->inRandomOrder()
                     ->get();
-                    
+
                 if ($adQuestions->isNotEmpty()) {
                     $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
                     $allQuestions->push($adQuestion);
@@ -1660,7 +1660,7 @@ class PremiumQuizController extends Controller
                     continue;
                 }
             }
-            
+
             // Normal soru seçimi: İlk 7 orta, sonraki 8 zor
             if ($allQuestions->where('question_level', 'medium')->count() < 7) {
                 $question = Question::where('question_level', 'medium')
@@ -1675,7 +1675,7 @@ class PremiumQuizController extends Controller
                     ->inRandomOrder()
                     ->first();
             }
-            
+
             if ($question) {
                 $allQuestions->push($question);
             }
@@ -1714,7 +1714,7 @@ class PremiumQuizController extends Controller
             'game_type' => 'premium',
             'question_count' => $questionCount
         ]);
-        
+
         $this->broadcastQuizStarted($game, $allQuestions->first());
 
         return response()->json([
@@ -1903,7 +1903,7 @@ class PremiumQuizController extends Controller
 
             // Ödül hesapla
             $accuracyRate = count($answers) > 0 ? ($correctAnswers / count($answers)) * 100 : 0;
-            
+
             // Game objesini güncelle (accuracy_rate için)
             $game->accuracy_rate = $accuracyRate;
             $reward = $this->calculateReward($game);
@@ -1968,13 +1968,13 @@ class PremiumQuizController extends Controller
     private function processJokerUsage($user, $jokerType, $question, $selectedOption)
     {
         $isCorrect = false;
-        
+
         switch ($jokerType) {
             case 'fifty_fifty':
                 // 50-50 joker: 2 yanlış seçenek kaldırılır, kullanıcı doğru cevabı seçerse doğru
                 $isCorrect = $selectedOption == $question->correct_answer;
                 break;
-                
+
             case 'double_answer':
                 // Çift cevap joker: Kullanıcı 2 seçenek seçebilir, doğru cevap varsa doğru
                 if (is_string($selectedOption) && strpos($selectedOption, ',') !== false) {
@@ -1984,16 +1984,16 @@ class PremiumQuizController extends Controller
                     $isCorrect = $selectedOption == $question->correct_answer;
                 }
                 break;
-                
+
             case 'hint':
                 // İpucu joker: Sadece ipucu verir, cevap doğruluğu normal şekilde kontrol edilir
                 $isCorrect = $selectedOption == $question->correct_answer;
                 break;
-                
+
             default:
                 $isCorrect = $selectedOption == $question->correct_answer;
         }
-        
+
         return [
             'is_correct' => $isCorrect,
             'joker_type' => $jokerType

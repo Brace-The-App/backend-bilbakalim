@@ -517,35 +517,35 @@ class TournamentQuizController extends Controller
         $currentUserTournament = TournamentUser::where('tournament_id', $tournament->id)
             ->where('user_id', $currentUser->id)
             ->first();
-        
+
         $jokers = [
             'fifty_fifty' => 0,
             'double_answer' => 0,
             'hint' => 0,
             'tournament_jokers' => 0
         ];
-        
+
         if ($currentUserTournament) {
             $answersDetail = is_array($currentUserTournament->answers_detail) ? $currentUserTournament->answers_detail : [];
-            
+
             // Eğer jokers anahtarı yoksa, başlangıç değerlerini ayarla
             if (!isset($answersDetail['jokers']) || !is_array($answersDetail['jokers'])) {
                 $totalJokers = $currentUserTournament->joker_hakki ?? 3;
                 // Her joker tipine eşit dağıt (kalan varsa sırayla ekle)
                 $jokersPerType = floor($totalJokers / 3);
                 $remainingJokers = $totalJokers % 3;
-                
+
                 $answersDetail['jokers'] = [
                     'fifty_fifty' => $jokersPerType + ($remainingJokers > 0 ? 1 : 0),
                     'double_answer' => $jokersPerType + ($remainingJokers > 1 ? 1 : 0),
                     'hint' => $jokersPerType + ($remainingJokers > 2 ? 1 : 0),
                 ];
-                
+
                 // Başlangıç değerlerini kaydet
                 $currentUserTournament->update(['answers_detail' => $answersDetail]);
                 $currentUserTournament->refresh();
             }
-            
+
             $jokers = [
                 'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
                 'double_answer' => $answersDetail['jokers']['double_answer'] ?? 0,
@@ -618,7 +618,7 @@ class TournamentQuizController extends Controller
             'time_spent' => 'nullable|integer|min:1',
             'question_number' => 'nullable|integer|min:1', // Soru bazlı turnuvalar için soru numarası
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint', // Kullanılan joker tipi
-            'second_option' => 'nullable|in:1,2,3,4' // Çift cevap joker için ikinci seçenek
+            'second_option' => 'nullable|in:1,2,3,4,5' // Çift cevap joker için ikinci seçenek
         ]);
 
         $user = Auth::user();
@@ -698,7 +698,7 @@ class TournamentQuizController extends Controller
 
         $question = Question::find($request->question_id);
         $timeSpent = $request->time_spent ?? 30;
-        
+
         // Eğer selected_option 5 ise, kullanıcı cevap vermemiş demektir
         // Bu durumda yanlış olarak işlenmeli ama normal JSON response dönmeli
         $answerAlreadySaved = false;
@@ -706,7 +706,7 @@ class TournamentQuizController extends Controller
             // Cevap verilmedi, yanlış olarak işle
             $isCorrect = false;
             $answersDetail = $tournamentUser->answers_detail ?? [];
-            
+
             $answerData = [
                 'question_id' => $question->id,
                 'selected_option' => null, // Cevap verilmedi
@@ -714,10 +714,10 @@ class TournamentQuizController extends Controller
                 'time_spent' => $timeSpent,
                 'answered_at' => now()->toISOString()
             ];
-            
+
             $answersDetail[] = $answerData;
             $answerAlreadySaved = true; // Cevap zaten kaydedildi
-            
+
             // Normal akışa devam et (aşağıdaki kod bloğu çalışacak)
             $jokerUsed = null; // Cevap verilmediği için joker kullanılmamış sayılır
         } else {
@@ -725,12 +725,12 @@ class TournamentQuizController extends Controller
             $jokerUsed = $request->joker_used ?? null;
             $answersDetail = $tournamentUser->answers_detail ?? [];
         }
-        
+
         // Çift cevap joker kullanıldıysa ve ikinci şık henüz gönderilmediyse, kontrol et
         if ($jokerUsed === 'double_answer' && !$request->has('second_option')) {
             // İlk şıkkın doğru olup olmadığını kontrol et
             $firstOptionCorrect = (string) $question->correct_answer === (string) $request->selected_option;
-            
+
             // Eğer ilk şık doğruysa, ikinci şıkkı seçmeye gerek yok, direkt doğru cevap olarak kaydet
             if ($firstOptionCorrect) {
                 // Doğru cevabı direkt kaydet
@@ -742,10 +742,10 @@ class TournamentQuizController extends Controller
                     'time_spent' => $timeSpent,
                     'answered_at' => now()->toISOString()
                 ];
-                
+
                 $answersDetail[] = $answerData;
                 $isCorrect = true;
-                
+
                 // Cevap zaten kaydedildi, normal akışa devam etmek için flag set et
                 $answerAlreadySaved = true;
             } else {
@@ -758,10 +758,10 @@ class TournamentQuizController extends Controller
                     'time_spent' => $timeSpent,
                     'answered_at' => now()->toISOString()
                 ];
-                
+
                 $answersDetail[] = $pendingAnswer;
                 $tournamentUser->update(['answers_detail' => $answersDetail]);
-                
+
                 // İkinci şıkkı beklediğimizi belirten response döndür
                 return response()->json([
                     'success' => true,
@@ -773,16 +773,16 @@ class TournamentQuizController extends Controller
                 ]);
             }
         }
-        
+
         // Eğer çift cevap joker kullanıldıysa ve ikinci şık da geldiyse, kontrol et
         $pendingAnswerIndex = null;
         $firstOption = $request->selected_option;
-        
+
         if ($jokerUsed === 'double_answer' && $request->has('second_option')) {
             // Geçici olarak saklanan ilk cevabı bul (en son eklenen pending cevap)
             $pendingAnswerIndex = null;
             for ($i = count($answersDetail) - 1; $i >= 0; $i--) {
-                if (isset($answersDetail[$i]['is_pending']) && 
+                if (isset($answersDetail[$i]['is_pending']) &&
                     $answersDetail[$i]['is_pending'] === true &&
                     $answersDetail[$i]['question_id'] == $question->id &&
                     isset($answersDetail[$i]['joker_used']) &&
@@ -793,15 +793,15 @@ class TournamentQuizController extends Controller
                     break;
                 }
             }
-            
+
             // Çift cevap joker: iki seçenekten biri doğru olmalı
             // Tip uyumsuzluğunu önlemek için string'e çevir
             $correctAnswer = (string) $question->correct_answer;
             $firstOptionStr = (string) $firstOption;
             $secondOptionStr = (string) $request->second_option;
-            $isCorrect = ($correctAnswer === $firstOptionStr) || 
+            $isCorrect = ($correctAnswer === $firstOptionStr) ||
                         ($correctAnswer === $secondOptionStr);
-            
+
             // Eğer pending cevap bulunduysa, onu güncelle
             if ($pendingAnswerIndex !== null) {
                 $answersDetail[$pendingAnswerIndex] = [
@@ -834,7 +834,7 @@ class TournamentQuizController extends Controller
             if (!isset($isCorrect)) {
                 $isCorrect = (string) $question->correct_answer === (string) $request->selected_option;
             }
-            
+
             // Normal cevabı kaydet (eğer daha önce kaydedilmediyse)
             // İlk şık doğruysa ve çift cevap joker kullanıldıysa, cevap zaten kaydedildi
             if (!isset($answerAlreadySaved) || !$answerAlreadySaved) {
@@ -845,12 +845,12 @@ class TournamentQuizController extends Controller
                     'time_spent' => $timeSpent,
                     'answered_at' => now()->toISOString()
                 ];
-                
+
                 // Joker kullanımı bilgisini ekle
                 if ($jokerUsed) {
                     $answerData['joker_used'] = $jokerUsed;
                 }
-                
+
                 $answersDetail[] = $answerData;
             }
         }
@@ -1513,7 +1513,7 @@ class TournamentQuizController extends Controller
         // Reklam sorusu kontrolü
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
         $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-        
+
         // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
         // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
         if ($adAppearanceFrequency > 0 && $questionNumber % $adAppearanceFrequency === 0) {
@@ -1590,7 +1590,7 @@ class TournamentQuizController extends Controller
         // Reklam sorusu kontrolü
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
         $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-        
+
         // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
         // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
         if ($adAppearanceFrequency > 0 && $questionNumber % $adAppearanceFrequency === 0) {
@@ -2775,14 +2775,14 @@ class TournamentQuizController extends Controller
         // Çoklu dil desteği - tr ve en
         $questionTr = $question->getTranslation('question', 'tr');
         $questionEn = $question->getTranslation('question', 'en');
-        
+
         $choicesTr = [
             '1' => $question->getTranslation('one_choice', 'tr'),
             '2' => $question->getTranslation('two_choice', 'tr'),
             '3' => $question->getTranslation('three_choice', 'tr'),
             '4' => $question->getTranslation('four_choice', 'tr'),
         ];
-        
+
         $choicesEn = [
             '1' => $question->getTranslation('one_choice', 'en'),
             '2' => $question->getTranslation('two_choice', 'en'),
