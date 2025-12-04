@@ -70,7 +70,8 @@ class PremiumQuizController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Zaten aktif bir premium oyununuz var.',
-                'active_game' => $activeGame
+                'active_game' => $activeGame,
+                'answer_time_limit' => config('app.quiz_answer_time_limit', 15) // Cevap süresi (saniye)
             ], 400);
         }
 
@@ -126,7 +127,8 @@ class PremiumQuizController extends Controller
             'message' => 'Premium quiz başlatıldı.',
             'game' => $game,
             'question' => $questionData,
-            'jokers' => $game->settings['jokers']
+            'jokers' => $game->settings['jokers'],
+            'answer_time_limit' => config('app.quiz_answer_time_limit', 15) // Cevap süresi (saniye)
         ]);
     }
 
@@ -338,9 +340,17 @@ class PremiumQuizController extends Controller
 
         // Oyun istatistiklerini güncelle
         $coinsChange = $isCorrect ? $question->coin_value : -$question->coin_value;
-
+        
         $settings = $game->settings;
         $settings['current_question_number']++;
+        
+        // Cevaplanan soru ID'sini listeye ekle (tekrar sorulmasını önlemek için)
+        if (!isset($settings['answered_question_ids'])) {
+            $settings['answered_question_ids'] = [];
+        }
+        if (!in_array($question->id, $settings['answered_question_ids'])) {
+            $settings['answered_question_ids'][] = $question->id;
+        }
 
         // Yanlış cevap durumunda coin kontrolü yap
         if (!$isCorrect) {
@@ -348,45 +358,61 @@ class PremiumQuizController extends Controller
             $user->refresh(); // Güncel coin değerini al
             $userCoins = $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
-
-            // Eğer kullanıcının coini yeterli değilse oyunu bitir
-            if ($userCoins < $coinDeduction) {
-                // Coin yeterli değil, oyunu bitir
-                $game->update([
-                    'correct_answers' => $game->correct_answers,
-                    'wrong_answers' => $game->wrong_answers + 1,
-                    'coins_earned' => $game->coins_earned + $coinsChange,
-                    'total_time_seconds' => $game->total_time_seconds + $timeSpent,
-                    'status' => 'completed',
-                    'ended_at' => now(),
-                    'settings' => $settings
-                ]);
-
-                // Kullanıcının coin'ini güncelle (kalan coin kadar düş)
-                $finalCoins = max(0, $userCoins - $coinDeduction);
-                $user->update(['coins' => $finalCoins]);
-
-                // Socket.IO'ya oyun bitiş bildirimi gönder
-                $this->broadcastQuizCompleted($game, $user, [], []);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Yeterli jetonunuz yok! Oyun bitti.',
-                    'is_correct' => false,
-                    'earned_coins' => $coinsChange,
-                    'game_stats' => [
-                        'total_questions' => $game->question_count,
+            
+            // Eğer kullanıcının coini yeterli değilse veya 5 coin ve altındaysa, reklam/coin satın alma seçeneği sun
+            if ($userCoins < $coinDeduction || $userCoins <= 5) {
+                // Sonraki soruyu getir (kontrol için)
+                $nextQuestion = $this->getNextPremiumQuestion($game);
+                $nextQuestionCoinValue = $nextQuestion ? $nextQuestion->coin_value : 0;
+                
+                // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
+                if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
+                    // Coin yeterli değil, reklam/coin satın alma seçeneği sun
+                    $game->update([
                         'correct_answers' => $game->correct_answers,
-                        'wrong_answers' => $game->wrong_answers,
-                        'total_coins' => $game->coins_earned,
-                        'user_coins' => $user->coins
-                    ],
-                    'game_completed' => true
-                ]);
+                        'wrong_answers' => $game->wrong_answers + 1,
+                        'coins_earned' => $game->coins_earned + $coinsChange,
+                        'total_time_seconds' => $game->total_time_seconds + $timeSpent,
+                        'status' => 'completed',
+                        'ended_at' => now(),
+                        'settings' => $settings
+                    ]);
+                    
+                    // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
+                    $finalCoins = max(0, $userCoins - $coinDeduction);
+                    $user->update(['coins' => $finalCoins]);
+                    
+                    // Socket.IO'ya oyun bitiş bildirimi gönder
+                    $this->broadcastQuizCompleted($game, $user, [], []);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Yeterli jetonunuz yok. Reklam izleyerek veya jeton satın alarak devam edebilirsiniz.',
+                        'is_correct' => false,
+                        'earned_coins' => $coinsChange,
+                        'requires_coin_purchase' => true,
+                        'requires_ad_watch' => true,
+                        'user_coins' => $finalCoins,
+                        'required_coins' => $coinDeduction,
+                        'next_question_coin_value' => $nextQuestionCoinValue,
+                        'game_stats' => [
+                            'total_questions' => $game->question_count,
+                            'correct_answers' => $game->correct_answers,
+                            'wrong_answers' => $game->wrong_answers,
+                            'total_coins' => $game->coins_earned,
+                            'user_coins' => $finalCoins
+                        ],
+                        'game_completed' => true
+                    ]);
+                }
             }
-
-            // Coin yeterli, oyun devam edecek - normal akışa devam et
-            // (Aşağıdaki kod bloğu çalışacak)
+            
+            // Coin yeterli ama eksiye gitmemesi için kontrol et
+            $finalCoins = max(0, $userCoins + $coinsChange);
+            $user->update(['coins' => $finalCoins]);
+        } else {
+            // Doğru cevap - coin ekle
+            $user->increment('coins', $coinsChange);
         }
 
         $game->update([
@@ -396,9 +422,6 @@ class PremiumQuizController extends Controller
             'total_time_seconds' => $game->total_time_seconds + $timeSpent,
             'settings' => $settings
         ]);
-
-        // Kullanıcının jetonunu güncelle
-        $user->increment('coins', $coinsChange);
 
         // Socket.IO'ya cevap bildirimi gönder
         $this->broadcastQuizAnswer($game, $user, $question, $isCorrect, $coinsChange, $jokerUsed);
@@ -820,6 +843,7 @@ class PremiumQuizController extends Controller
     {
         $settings = $game->settings;
         $currentQuestionNumber = $settings['current_question_number'] ?? 1;
+        $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
 
         // Reklam sorusu kontrolü
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
@@ -840,9 +864,10 @@ class PremiumQuizController extends Controller
 
             // Eğer reklam kategorisi bulunduysa ve soru varsa, reklam sorusu seç
             if ($adCategory) {
-                // Reklam kategorisinden soru seç
+                // Reklam kategorisinden soru seç (cevaplanan soruları hariç tut)
                 $adQuestion = Question::where('is_active', true)
                     ->where('category_id', $adCategory->id)
+                    ->whereNotIn('id', $answeredQuestionIds)
                     ->inRandomOrder()
                     ->first();
 
@@ -854,7 +879,7 @@ class PremiumQuizController extends Controller
             // Eğer reklam kategorisi yoksa veya reklam sorusu yoksa, normal soru seçimine geç (aşağıdaki kod devam eder)
         }
 
-        // Normal soru seçimi
+        // Normal soru seçimi (cevaplanan soruları hariç tut)
         $mediumRemaining = $settings['medium_questions_remaining'] ?? 7;
         $hardRemaining = $settings['hard_questions_remaining'] ?? 8;
 
@@ -862,6 +887,7 @@ class PremiumQuizController extends Controller
         if ($mediumRemaining > 0) {
             $question = Question::active()
                 ->byLevel('medium')
+                ->whereNotIn('id', $answeredQuestionIds)
                 ->inRandomOrder()
                 ->first();
 
@@ -869,6 +895,7 @@ class PremiumQuizController extends Controller
         } else {
             $question = Question::active()
                 ->byLevel('hard')
+                ->whereNotIn('id', $answeredQuestionIds)
                 ->inRandomOrder()
                 ->first();
 
@@ -1619,7 +1646,8 @@ class PremiumQuizController extends Controller
                     'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
                     'double_answer' => $user->double_answer_jokers ?? 0,
                     'hint' => $user->hint_jokers ?? 0
-                ]
+                ],
+                'answer_time_limit' => config('app.quiz_answer_time_limit', 15) // Cevap süresi (saniye)
             ], 400);
         }
 
@@ -1728,7 +1756,8 @@ class PremiumQuizController extends Controller
                 'fifty_fifty' => $user->fifty_fifty_jokers ?? 0,
                 'double_answer' => $user->double_answer_jokers ?? 0,
                 'hint' => $user->hint_jokers ?? 0
-            ]
+            ],
+            'answer_time_limit' => config('app.quiz_answer_time_limit', 15) // Cevap süresi (saniye)
         ]);
     }
 
