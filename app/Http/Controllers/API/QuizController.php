@@ -132,7 +132,7 @@ class QuizController extends Controller
             'game_type' => 'normal'
         ]);
         $this->broadcastQuizStarted($game, $question);
-        
+
         // Soruyu çoklu dil formatında formatla
         $questionData = $question ? $this->formatQuestionMultilingual($question) : null;
 
@@ -190,8 +190,8 @@ class QuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id',
             'question_id' => 'required|exists:questions,id',
-            'selected_option' => 'nullable|in:1,2,3,4',
-            'time_spent' => 'nullable|integer|min:1',
+            'selected_option' => 'nullable|in:1,2,3,4,5', // 5 = süre bitti, cevap verilmedi
+            'time_spent' => 'nullable|integer|min:0',
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint',
             'second_option' => 'nullable|in:1,2,3,4' // Çift cevap için ikinci seçenek
         ]);
@@ -213,17 +213,17 @@ class QuizController extends Controller
 
         $question = Question::find($request->question_id);
 
-        // Eğer selected_option null veya boş ise (süre doldu), yanlış olarak işaretle
+        // Eğer selected_option 5 ise veya null/boş ise (süre doldu), yanlış olarak işaretle
         $selectedOption = $request->selected_option;
-        if (empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
+        if ($request->selected_option == '5' || $request->selected_option === 5 || empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
             $isCorrect = false;
-            $selectedOption = null;
+            $selectedOption = null; // 5 geldiğinde null olarak kaydet
         } else {
             // Joker kullanımı kontrolü
             $jokerUsed = null;
             if ($request->joker_used) {
                 $settings = $game->settings ?? [];
-                
+
                 // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
                 if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
                     $settings['jokers'] = [
@@ -232,7 +232,7 @@ class QuizController extends Controller
                         'hint' => $user->hint_jokers ?? 0
                     ];
                 }
-                
+
                 if (isset($settings['jokers'][$request->joker_used]) && $settings['jokers'][$request->joker_used] > 0) {
                     $settings['jokers'][$request->joker_used]--;
                     $jokerUsed = $request->joker_used;
@@ -280,7 +280,7 @@ class QuizController extends Controller
 
         $settings = $game->settings ?? [];
         $settings['total_questions_answered'] = ($settings['total_questions_answered'] ?? 0) + 1;
-        
+
         // Cevaplanan soru ID'sini listeye ekle (tekrar sorulmasını önlemek için)
         if (!isset($settings['answered_question_ids'])) {
             $settings['answered_question_ids'] = [];
@@ -295,13 +295,13 @@ class QuizController extends Controller
             $user->refresh(); // Güncel coin değerini al
             $userCoins = $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
-            
+
             // Eğer kullanıcının coini yeterli değilse veya 5 coin ve altındaysa, reklam/coin satın alma seçeneği sun
             if ($userCoins < $coinDeduction || $userCoins <= 5) {
                 // Sonraki soruyu getir (kontrol için)
                 $nextQuestion = $this->getNextQuestion($game);
                 $nextQuestionCoinValue = $nextQuestion ? $nextQuestion->coin_value : 0;
-                
+
                 // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
                 if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
                     // Coin yeterli değil, reklam/coin satın alma seçeneği sun
@@ -313,11 +313,11 @@ class QuizController extends Controller
                         'total_time_seconds' => $game->total_time_seconds + $timeSpent,
                         'settings' => $settings
                     ]);
-                    
+
                     // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
                     $finalCoins = max(0, $userCoins - $coinDeduction);
                     $user->update(['coins' => $finalCoins]);
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Yeterli jetonunuz yok. Reklam izleyerek veya jeton satın alarak devam edebilirsiniz.',
@@ -338,7 +338,7 @@ class QuizController extends Controller
                     ]);
                 }
             }
-            
+
             // Coin yeterli ama eksiye gitmemesi için kontrol et
             $finalCoins = max(0, $userCoins + $coinsChange);
             $user->update(['coins' => $finalCoins]);
@@ -674,12 +674,12 @@ class QuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
         ];
-        
+
         // selected_answer sadece null değilse ve boş string değilse validation'a ekle
         if ($request->has('selected_answer') && $request->selected_answer !== null && $request->selected_answer !== '') {
             $rules['selected_answer'] = 'required|in:1,2,3,4';
         }
-        
+
         $request->validate($rules);
 
         $user = Auth::user();
@@ -701,7 +701,7 @@ class QuizController extends Controller
 
         // Joker hakkı kontrolü
         $settings = $game->settings ?? [];
-        
+
         // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
         if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
             $user = Auth::user();
@@ -711,7 +711,7 @@ class QuizController extends Controller
                 'hint' => $user->hint_jokers ?? 0
             ];
         }
-        
+
         // Joker tipi kontrolü
         if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
             return response()->json([
@@ -744,7 +744,7 @@ class QuizController extends Controller
         // Seçilen cevabın doğruluğunu kontrol et
         $selectedAnswer = $request->selected_answer;
         $isCorrect = null;
-        
+
         if ($selectedAnswer !== null) {
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
@@ -753,7 +753,7 @@ class QuizController extends Controller
                 $correctAnswer = (string) $question->correct_answer;
                 $selectedAnswerStr = (string) $selectedAnswer;
                 $secondOptionStr = (string) $request->second_option;
-                $isCorrect = ($correctAnswer === $selectedAnswerStr) || 
+                $isCorrect = ($correctAnswer === $selectedAnswerStr) ||
                             ($correctAnswer === $secondOptionStr);
             } else {
                 // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
@@ -818,7 +818,7 @@ class QuizController extends Controller
         // Şık numarasını harfe çevir (1 -> A, 2 -> B, 3 -> C, 4 -> D)
         $answerMap = ['1' => 'A', '2' => 'B', '3' => 'C', '4' => 'D'];
         $answerLetter = $answerMap[$question->correct_answer] ?? $question->correct_answer;
-        
+
         $hints = [
             'Doğru cevap ' . $answerLetter . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
@@ -955,7 +955,7 @@ class QuizController extends Controller
         // Reklam sorusu kontrolü
         $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
         $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-        
+
         // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
         // Eğer soru numarası ad_appearance_frequency'e bölünüyorsa, reklam sorusu seç
         if ($adAppearanceFrequency > 0 && $currentQuestionNumber % $adAppearanceFrequency === 0) {
@@ -977,7 +977,7 @@ class QuizController extends Controller
                     ->whereNotIn('id', $answeredQuestionIds)
                     ->inRandomOrder()
                     ->first();
-                    
+
                 // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
                 if ($adQuestion) {
                     return $adQuestion;
@@ -1013,7 +1013,7 @@ class QuizController extends Controller
 
         return $question;
     }
-    
+
     /**
      * Soruyu çoklu dil formatında formatla
      */
@@ -1033,14 +1033,14 @@ class QuizController extends Controller
         // Çoklu dil desteği - tr ve en
         $questionTr = $question->getTranslation('question', 'tr');
         $questionEn = $question->getTranslation('question', 'en');
-        
+
         $choicesTr = [
             '1' => $question->getTranslation('one_choice', 'tr'),
             '2' => $question->getTranslation('two_choice', 'tr'),
             '3' => $question->getTranslation('three_choice', 'tr'),
             '4' => $question->getTranslation('four_choice', 'tr'),
         ];
-        
+
         $choicesEn = [
             '1' => $question->getTranslation('one_choice', 'en'),
             '2' => $question->getTranslation('two_choice', 'en'),
@@ -1077,7 +1077,7 @@ class QuizController extends Controller
             ] : null,
         ];
     }
-    
+
     /**
      * Görsel URL'ini tam URL'e çevir
      */
@@ -1256,7 +1256,7 @@ class QuizController extends Controller
             // Reklam sorusu mantığı: ad_appearance_frequency'e göre kaç soruda bir reklam sorusu gösterilir
             $adAppearanceFrequencySetting = \App\Models\GeneralSetting::where('key', 'ad_appearance_frequency')->first();
             $adAppearanceFrequency = $adAppearanceFrequencySetting ? (int) $adAppearanceFrequencySetting->value : 0;
-            
+
             // Reklam kategorisini bul
             $adCategory = \App\Models\Category::where('is_active', true)
                 ->get()
@@ -1269,7 +1269,7 @@ class QuizController extends Controller
 
             $allQuestions = collect();
             $adQuestionIndex = 0;
-            
+
             // Soru seçimi: Reklam sorusu mantığıyla birlikte
             // Eğer setting yoksa veya frequency 0 ise, reklam sorusu gösterilmez
             for ($i = 1; $i <= $questionCount; $i++) {
@@ -1279,7 +1279,7 @@ class QuizController extends Controller
                         ->where('category_id', $adCategory->id)
                         ->inRandomOrder()
                         ->get();
-                        
+
                     if ($adQuestions->isNotEmpty()) {
                         $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
                         $allQuestions->push($adQuestion);
@@ -1287,7 +1287,7 @@ class QuizController extends Controller
                         continue;
                     }
                 }
-                
+
                 // Normal soru seçimi: İlk 10 kolay, sonrakiler rastgele
                 if ($allQuestions->where('question_level', 'easy')->count() < 10) {
                     $question = Question::where('question_level', 'easy')
@@ -1298,14 +1298,14 @@ class QuizController extends Controller
                 } else {
                     $difficulties = ['easy', 'medium', 'hard'];
                     $randomDifficulty = $difficulties[array_rand($difficulties)];
-                    
+
                     $question = Question::where('question_level', $randomDifficulty)
                         ->where('is_active', true)
                         ->whereNotIn('id', $allQuestions->pluck('id'))
                         ->inRandomOrder()
                         ->first();
                 }
-                
+
                 if ($question) {
                     $allQuestions->push($question);
                 }
@@ -1457,7 +1457,7 @@ class QuizController extends Controller
         $wrongAnswers = 0;
         $answerDetails = collect();
         $settings = $game->settings ?? [];
-        
+
         // Cevaplanan soru ID'lerini topla
         $answeredQuestionIds = $settings['answered_question_ids'] ?? [];
 
@@ -1483,7 +1483,7 @@ class QuizController extends Controller
                     'coins_earned' => $coinsEarned,
                     'answered_at' => now()
                 ]);
-                
+
                 // Cevaplanan soru ID'sini listeye ekle
                 if (!in_array($question->id, $answeredQuestionIds)) {
                     $answeredQuestionIds[] = $question->id;

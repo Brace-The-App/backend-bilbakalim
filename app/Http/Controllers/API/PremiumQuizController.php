@@ -182,8 +182,8 @@ class PremiumQuizController extends Controller
         $request->validate([
             'game_id' => 'required|exists:individual_games,id',
             'question_id' => 'required|exists:questions,id',
-            'selected_option' => 'nullable|in:1,2,3,4',
-            'time_spent' => 'nullable|integer|min:1',
+            'selected_option' => 'nullable|in:1,2,3,4,5', // 5 = süre bitti, cevap verilmedi
+            'time_spent' => 'nullable|integer|min:0',
             'joker_used' => 'nullable|in:fifty_fifty,double_answer,hint',
             'second_option' => 'nullable|in:1,2,3,4' // Çift cevap için ikinci seçenek
         ]);
@@ -204,13 +204,13 @@ class PremiumQuizController extends Controller
 
         $question = Question::find($request->question_id);
 
-        // Eğer selected_option null veya boş ise (süre doldu), yanlış olarak işaretle
+        // Eğer selected_option 5 ise veya null/boş ise (süre doldu), yanlış olarak işaretle
         $selectedOption = $request->selected_option;
         $answerAlreadySaved = false;
 
-        if (empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
+        if ($request->selected_option == '5' || $request->selected_option === 5 || empty($selectedOption) || $selectedOption === null || $selectedOption === '') {
             $isCorrect = false;
-            $selectedOption = null;
+            $selectedOption = null; // 5 geldiğinde null olarak kaydet
             $jokerUsed = null;
         } else {
             // Joker kullanımı kontrolü
@@ -340,10 +340,10 @@ class PremiumQuizController extends Controller
 
         // Oyun istatistiklerini güncelle
         $coinsChange = $isCorrect ? $question->coin_value : -$question->coin_value;
-        
+
         $settings = $game->settings;
         $settings['current_question_number']++;
-        
+
         // Cevaplanan soru ID'sini listeye ekle (tekrar sorulmasını önlemek için)
         if (!isset($settings['answered_question_ids'])) {
             $settings['answered_question_ids'] = [];
@@ -358,13 +358,13 @@ class PremiumQuizController extends Controller
             $user->refresh(); // Güncel coin değerini al
             $userCoins = $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
-            
+
             // Eğer kullanıcının coini yeterli değilse veya 5 coin ve altındaysa, reklam/coin satın alma seçeneği sun
             if ($userCoins < $coinDeduction || $userCoins <= 5) {
                 // Sonraki soruyu getir (kontrol için)
                 $nextQuestion = $this->getNextPremiumQuestion($game);
                 $nextQuestionCoinValue = $nextQuestion ? $nextQuestion->coin_value : 0;
-                
+
                 // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
                 if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
                     // Coin yeterli değil, reklam/coin satın alma seçeneği sun
@@ -377,14 +377,14 @@ class PremiumQuizController extends Controller
                         'ended_at' => now(),
                         'settings' => $settings
                     ]);
-                    
+
                     // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
                     $finalCoins = max(0, $userCoins - $coinDeduction);
                     $user->update(['coins' => $finalCoins]);
-                    
+
                     // Socket.IO'ya oyun bitiş bildirimi gönder
                     $this->broadcastQuizCompleted($game, $user, [], []);
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Yeterli jetonunuz yok. Reklam izleyerek veya jeton satın alarak devam edebilirsiniz.',
@@ -406,7 +406,7 @@ class PremiumQuizController extends Controller
                     ]);
                 }
             }
-            
+
             // Coin yeterli ama eksiye gitmemesi için kontrol et
             $finalCoins = max(0, $userCoins + $coinsChange);
             $user->update(['coins' => $finalCoins]);
