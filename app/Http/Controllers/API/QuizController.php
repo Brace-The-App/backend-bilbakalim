@@ -223,7 +223,7 @@ class QuizController extends Controller
             $jokerUsed = null;
             if ($request->joker_used) {
                 $settings = $game->settings ?? [];
-
+                
                 // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
                 if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
                     $settings['jokers'] = [
@@ -232,7 +232,7 @@ class QuizController extends Controller
                         'hint' => $user->hint_jokers ?? 0
                     ];
                 }
-
+                
                 if (isset($settings['jokers'][$request->joker_used]) && $settings['jokers'][$request->joker_used] > 0) {
                     $settings['jokers'][$request->joker_used]--;
                     $jokerUsed = $request->joker_used;
@@ -305,14 +305,14 @@ class QuizController extends Controller
                 // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
                 if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
                     // Coin yeterli değil, reklam/coin satın alma seçeneği sun
-                    $game->update([
-                        'question_count' => $game->question_count + 1,
+        $game->update([
+            'question_count' => $game->question_count + 1,
                         'correct_answers' => $game->correct_answers,
                         'wrong_answers' => $game->wrong_answers + 1,
-                        'coins_earned' => $game->coins_earned + $coinsChange,
-                        'total_time_seconds' => $game->total_time_seconds + $timeSpent,
-                        'settings' => $settings
-                    ]);
+            'coins_earned' => $game->coins_earned + $coinsChange,
+            'total_time_seconds' => $game->total_time_seconds + $timeSpent,
+            'settings' => $settings
+        ]);
 
                     // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
                     $finalCoins = max(0, $userCoins - $coinDeduction);
@@ -344,7 +344,7 @@ class QuizController extends Controller
             $user->update(['coins' => $finalCoins]);
         } else {
             // Doğru cevap - coin ekle
-            $user->increment('coins', $coinsChange);
+        $user->increment('coins', $coinsChange);
         }
 
         $game->update([
@@ -674,12 +674,12 @@ class QuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
         ];
-
+        
         // selected_answer sadece null değilse ve boş string değilse validation'a ekle
         if ($request->has('selected_answer') && $request->selected_answer !== null && $request->selected_answer !== '') {
             $rules['selected_answer'] = 'required|in:1,2,3,4';
         }
-
+        
         $request->validate($rules);
 
         $user = Auth::user();
@@ -701,7 +701,7 @@ class QuizController extends Controller
 
         // Joker hakkı kontrolü
         $settings = $game->settings ?? [];
-
+        
         // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
         if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
             $user = Auth::user();
@@ -711,7 +711,7 @@ class QuizController extends Controller
                 'hint' => $user->hint_jokers ?? 0
             ];
         }
-
+        
         // Joker tipi kontrolü
         if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
             return response()->json([
@@ -744,7 +744,7 @@ class QuizController extends Controller
         // Seçilen cevabın doğruluğunu kontrol et
         $selectedAnswer = $request->selected_answer;
         $isCorrect = null;
-
+        
         if ($selectedAnswer !== null) {
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
@@ -818,7 +818,7 @@ class QuizController extends Controller
         // Şık numarasını harfe çevir (1 -> A, 2 -> B, 3 -> C, 4 -> D)
         $answerMap = ['1' => 'A', '2' => 'B', '3' => 'C', '4' => 'D'];
         $answerLetter = $answerMap[$question->correct_answer] ?? $question->correct_answer;
-
+        
         $hints = [
             'Doğru cevap ' . $answerLetter . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
@@ -978,8 +978,14 @@ class QuizController extends Controller
                     ->inRandomOrder()
                     ->first();
 
-                // Eğer reklam sorusu bulunduysa döndür, yoksa normal soru seçimine geç
+                // Eğer reklam sorusu bulunduysa, answered_question_ids listesine ekle ve döndür
                 if ($adQuestion) {
+                    // ÖNEMLİ: Soru seçildiği anda answered_question_ids listesine ekle
+                    if (!in_array($adQuestion->id, $answeredQuestionIds)) {
+                        $answeredQuestionIds[] = $adQuestion->id;
+                        $settings['answered_question_ids'] = $answeredQuestionIds;
+                        $game->update(['settings' => $settings]);
+                    }
                     return $adQuestion;
                 }
             }
@@ -1007,6 +1013,13 @@ class QuizController extends Controller
                 ->first();
 
             $settings['current_difficulty'] = $randomDifficulty;
+        }
+
+        // ÖNEMLİ: Soru seçildiği anda answered_question_ids listesine ekle
+        // Bu sayede aynı soru bir daha kesinlikle seçilemez
+        if ($question && !in_array($question->id, $answeredQuestionIds)) {
+            $answeredQuestionIds[] = $question->id;
+            $settings['answered_question_ids'] = $answeredQuestionIds;
         }
 
         $game->update(['settings' => $settings]);
@@ -1277,8 +1290,8 @@ class QuizController extends Controller
                 if ($adAppearanceFrequency > 0 && $i % $adAppearanceFrequency === 0 && $adCategory) {
                     $adQuestions = Question::where('is_active', true)
                         ->where('category_id', $adCategory->id)
-                        ->inRandomOrder()
-                        ->get();
+                ->inRandomOrder()
+                ->get();
 
                     if ($adQuestions->isNotEmpty()) {
                         $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
@@ -1293,7 +1306,7 @@ class QuizController extends Controller
                     $question = Question::where('question_level', 'easy')
                         ->where('is_active', true)
                         ->whereNotIn('id', $allQuestions->pluck('id'))
-                        ->inRandomOrder()
+                    ->inRandomOrder()
                         ->first();
                 } else {
                     $difficulties = ['easy', 'medium', 'hard'];

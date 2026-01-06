@@ -48,6 +48,8 @@ class UserResource extends JsonResource
                 'hint' => $hintJokers,
                 'total' => $totalJokers
             ],
+            'referral_code' => $this->referral_code,
+            'has_used_referral' => $this->has_used_referral ?? false,
         ];
     }
 }

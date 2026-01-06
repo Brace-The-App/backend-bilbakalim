@@ -1,0 +1,69 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Http\Controllers\Controller;
+use App\Models\GiftCardStore;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class GiftCardStoreController extends Controller
+{
+    /**
+     * @OA\Get(
+     *     path="/api/gift-card-stores",
+     *     summary="Hediye kartı geçen mağaza ve market logolarını listele",
+     *     tags={"Gift Card Stores"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="type",
+     *         in="query",
+     *         description="Tip filtresi: market veya mağaza",
+     *         required=false,
+     *         @OA\Schema(type="string", enum={"market", "mağaza"})
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Başarılı",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="type", type="string", example="market"),
+     *                     @OA\Property(property="image_url", type="string", example="https://example.com/storage/gift-card-stores/store1.jpg"),
+     *                     @OA\Property(property="is_active", type="boolean", example=true),
+     *                     @OA\Property(property="sort_order", type="integer", example=0)
+     *                 )
+     *             )
+     *         )
+     *     )
+     * )
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = GiftCardStore::active()->ordered();
+
+        // Type filtresi
+        if ($request->has('type') && in_array($request->type, ['market', 'mağaza'])) {
+            $query->byType($request->type);
+        }
+
+        $stores = $query->get()->map(function ($store) {
+            return [
+                'id' => $store->id,
+                'type' => $store->type,
+                'image_url' => $store->image_url,
+                'is_active' => $store->is_active,
+                'sort_order' => $store->sort_order
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $stores
+        ]);
+    }
+}

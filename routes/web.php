@@ -73,6 +73,17 @@ Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->gro
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
 
+    // Avatars management
+    Route::resource('avatars', \App\Http\Controllers\Admin\AvatarController::class);
+
+    // Gift Card Stores management
+    Route::resource('gift-card-stores', \App\Http\Controllers\Admin\GiftCardStoreController::class);
+
+    // Reward Requests management
+    Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');
+    Route::post('reward-requests/{rewardRequest}/approve', [\App\Http\Controllers\Admin\RewardRequestController::class, 'approve'])->name('reward-requests.approve');
+    Route::post('reward-requests/{rewardRequest}/reject', [\App\Http\Controllers\Admin\RewardRequestController::class, 'reject'])->name('reward-requests.reject');
+
     // Landing - üst grup
     Route::prefix('landing')->name('landing.')->group(function () {
         Route::resource('about', LandingAboutController::class)->parameters(['about' => 'about']);

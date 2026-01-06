@@ -15,11 +15,25 @@ use App\Http\Controllers\API\TournamentQuizController;
 use App\Http\Controllers\API\LandingController;
 use App\Http\Controllers\API\DuelController;
 use App\Http\Controllers\API\DiamondController;
+use App\Http\Controllers\API\AvatarController;
+use App\Http\Controllers\API\AdWatchController;
+use App\Http\Controllers\API\CoinHistoryController;
+use App\Http\Controllers\API\GiftCardStoreController;
+use App\Http\Controllers\API\LeaderboardController;
+use App\Http\Controllers\API\RewardController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+});
+
+// Referral routes (auth required)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::prefix('referral')->group(function () {
+        Route::get('my-code', [AuthController::class, 'getMyReferralCode']);
+        Route::get('can-use', [AuthController::class, 'canUseReferralCode']);
+    });
 });
 
 // Password Reset routes (no middleware)
@@ -161,6 +175,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('packages', [DiamondController::class, 'getPackages']);
         Route::post('purchase', [DiamondController::class, 'purchase']);
         Route::post('transfer-to-card', [DiamondController::class, 'transferToCard']);
+    });
+
+    // Avatar routes
+    Route::get('avatars', [AvatarController::class, 'index']);
+
+    // Ad Watch routes
+    Route::prefix('ad-watch')->group(function () {
+        Route::post('reward', [AdWatchController::class, 'reward']);
+    });
+
+    // Coin History routes
+    Route::get('coin-history', [CoinHistoryController::class, 'index']);
+
+    // Gift Card Stores routes
+    Route::get('gift-card-stores', [GiftCardStoreController::class, 'index']);
+
+    // Leaderboard routes
+    Route::prefix('leaderboard')->group(function () {
+        Route::get('/', [LeaderboardController::class, 'all']);
+        Route::get('daily', [LeaderboardController::class, 'daily']);
+        Route::get('weekly', [LeaderboardController::class, 'weekly']);
+    });
+
+    // Reward routes
+    Route::prefix('reward')->group(function () {
+        Route::get('check-eligibility', [RewardController::class, 'checkEligibility']);
+        Route::post('claim', [RewardController::class, 'claim']);
     });
 });
 

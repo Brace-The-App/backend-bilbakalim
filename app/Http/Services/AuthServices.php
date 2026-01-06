@@ -7,6 +7,7 @@ use App\Http\Requests\LoginRequest;
 use App\Http\Requests\UserUpdateRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Models\Avatar;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -70,15 +71,17 @@ class AuthServices
             $input['profile_image'] = $path;
         }
 
+        if ($request->filled('avatar_id')) {
+            $avatar = Avatar::find($request->avatar_id);
+            if ($avatar && $avatar->image_path) {
+                $input['profile_image'] = $avatar->image_path;
+            }
+        }
 
-        // Sadece dolu input varsa güncelle
         if (!empty($input)) {
             $user->update($input);
         }
 
         return $user->fresh();
     }
-
-
-
 }

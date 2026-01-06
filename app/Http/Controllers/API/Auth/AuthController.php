@@ -167,19 +167,21 @@ class AuthController extends Controller
      *                 @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
      *                 @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
      *                 @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
-     *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
-     *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
-     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
-     *             )
-     *         ),
-     *         @OA\JsonContent(
-     *             @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
-     *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
-     *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
-     *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
-     *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
-     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
-     *         )
+                *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+                *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+                *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
+                *                 @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
+                *             )
+                *         ),
+                *         @OA\JsonContent(
+                *             @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
+                *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+                *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+                *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+                *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+                *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
+                *             @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
+                *         )
      *     ),
      *     @OA\Response(
      *         response=200,
@@ -213,6 +215,10 @@ class AuthController extends Controller
         $user->account_status = 'active';
         $user->coins = 1000;
         
+        // Unique referral kodu oluştur
+        $user->referral_code = User::generateReferralCode();
+        $user->has_used_referral = false;
+        
         // Optional alanları ekle
         if ($request->has('name') && $request->name) {
             $user->name = $request->name;
@@ -231,6 +237,59 @@ class AuthController extends Controller
         }
         
         $user->save();
+
+        // Referral kod kontrolü ve coin ekleme
+        if ($request->has('referral_code') && $request->referral_code) {
+            $referrer = User::where('referral_code', $request->referral_code)->first();
+            
+            if ($referrer && $referrer->id !== $user->id) {
+                $referralReward = 50;
+                
+                // Yeni kullanıcıya coin ekle
+                $user->increment('coins', $referralReward);
+                $user->has_used_referral = true;
+                $user->save();
+                
+                // Referans veren kullanıcıya coin ekle
+                $referrer->increment('coins', $referralReward);
+                
+                // Coin history kayıtları
+                // Kullanıcı zaten 1000 coin ile kaydedildi, sonra 50 eklendi
+                $userBalanceBefore = $user->coins - $referralReward;
+                $userBalanceAfter = $user->coins;
+                
+                \App\Models\CoinHistory::create([
+                    'user_id' => $user->id,
+                    'coin_amount' => $referralReward,
+                    'transaction_type' => 'bonus',
+                    'status' => 'completed',
+                    'description' => 'Referans kodu kullanımı',
+                    'metadata' => [
+                        'referrer_id' => $referrer->id,
+                        'referral_code' => $request->referral_code
+                    ],
+                    'balance_before' => $userBalanceBefore,
+                    'balance_after' => $userBalanceAfter
+                ]);
+                
+                $referrerBalanceBefore = $referrer->coins - $referralReward;
+                $referrerBalanceAfter = $referrer->coins;
+                
+                \App\Models\CoinHistory::create([
+                    'user_id' => $referrer->id,
+                    'coin_amount' => $referralReward,
+                    'transaction_type' => 'bonus',
+                    'status' => 'completed',
+                    'description' => 'Referans kodu ile yeni kullanıcı kazandırma',
+                    'metadata' => [
+                        'referred_user_id' => $user->id,
+                        'referral_code' => $request->referral_code
+                    ],
+                    'balance_before' => $referrerBalanceBefore,
+                    'balance_after' => $referrerBalanceAfter
+                ]);
+            }
+        }
 
         // Assign default role
         $user->assignRole('uye');
@@ -261,6 +320,7 @@ class AuthController extends Controller
      *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
      *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
      *                 @OA\Property(property="profile_image", type="string", format="binary", description="Profil resmi (opsiyonel, max: 2MB). Dosya olarak gönderilebilir veya base64 string formatında gönderilebilir (data:image/png;base64,...)", example=""),
+     *                 @OA\Property(property="avatar_id", type="integer", description="Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır", example=1),
      *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *             )
      *         ),
@@ -273,6 +333,7 @@ class AuthController extends Controller
      *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
      *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
      *                 @OA\Property(property="profile_image", type="string", description="Profil resmi base64 string formatında (opsiyonel, max: 2MB). Format: data:image/png;base64,... veya sadece base64 string", example="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."),
+     *                 @OA\Property(property="avatar_id", type="integer", description="Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır", example=1),
      *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *             )
      *         ),
@@ -282,6 +343,7 @@ class AuthController extends Controller
      *             @OA\Property(property="phone", type="string", description="Telefon numarası (opsiyonel)", example="+905551234567"),
      *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="newpassword123"),
      *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="newpassword123"),
+     *             @OA\Property(property="avatar_id", type="integer", description="Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır", example=1),
      *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345")
      *         )
      *     ),
@@ -433,5 +495,90 @@ class AuthController extends Controller
         return redirect()->back()
             ->withInput($request->only('email'))
             ->with('error', 'Email adresi veya şifre hatalı.');
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/referral/my-code",
+     *     summary="Kullanıcının kendi referral kodunu getir",
+     *     description="Kullanıcının kendi unique referral kodunu döndürür",
+     *     tags={"Referral"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Başarılı",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="referral_code", type="string", example="ABC12345")
+     *             )
+     *         )
+     *     )
+     * )
+     */
+    public function getMyReferralCode(): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kullanıcı bulunamadı.'
+            ], 401);
+        }
+
+        // Eğer referral kodu yoksa oluştur
+        if (!$user->referral_code) {
+            $user->referral_code = User::generateReferralCode();
+            $user->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'referral_code' => $user->referral_code
+            ]
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/referral/can-use",
+     *     summary="Referral kod kullanabilir mi kontrolü",
+     *     description="Kullanıcının daha önce referral kod kullanıp kullanmadığını kontrol eder. Eğer false dönerse, referral kod girişi gösterilmez.",
+     *     tags={"Referral"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Başarılı",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="can_use", type="boolean", example=false, description="false ise referral kod girişi gösterilmez")
+     *             )
+     *         )
+     *     )
+     * )
+     */
+    public function canUseReferralCode(): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kullanıcı bulunamadı.'
+            ], 401);
+        }
+
+        // has_used_referral false ise referral kod kullanabilir
+        $canUse = !$user->has_used_referral;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'can_use' => $canUse
+            ]
+        ]);
     }
 }

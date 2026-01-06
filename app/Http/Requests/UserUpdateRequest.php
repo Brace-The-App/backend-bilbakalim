@@ -45,6 +45,10 @@ class UserUpdateRequest extends BaseRequest
         if ($this->has('device_id') && $this->device_id === '') {
             $this->merge(['device_id' => null]);
         }
+        
+        if ($this->has('avatar_id') && $this->avatar_id === '') {
+            $this->merge(['avatar_id' => null]);
+        }
     }
 
     /**
@@ -65,6 +69,7 @@ class UserUpdateRequest extends BaseRequest
             // profile_image hem dosya hem de base64 string olarak kabul edilebilir
             'profile_image' => 'nullable',
             'device_id' => 'nullable|string|max:255',
+            'avatar_id' => 'nullable|integer|exists:avatars,id',
         ];
     }
     

@@ -43,6 +43,10 @@ class RegisterRequest extends BaseRequest
         if ($this->has('device_id') && $this->device_id === '') {
             $this->merge(['device_id' => null]);
         }
+
+        if ($this->has('referral_code') && $this->referral_code === '') {
+            $this->merge(['referral_code' => null]);
+        }
     }
 
     /**
@@ -68,6 +72,7 @@ class RegisterRequest extends BaseRequest
             ],
             'password_confirmation' => 'nullable|required_with:password|same:password',
             'device_id' => 'nullable|string|max:255',
+            'referral_code' => 'nullable|string|size:8|exists:users,referral_code',
         ];
     }
 

@@ -17,17 +17,17 @@
                         <a href="{{ route('admin.dashboard') }}"><img class="img-fluid" src="{{ asset('assets/images/logo/logo-icon.png') }}" alt="BilBakalim"></a>
                         <div class="mobile-back text-end"><span>Geri</span><i class="fa fa-angle-right ps-2" aria-hidden="true"></i></div>
                     </li>
-                    
+
                     <li class="sidebar-main-title">
                         <div>
-                          
+
                         </div>
                     </li>
-                    
-                    
+
+
                     <li class="sidebar-list">
     <i class="fa fa-thumb-tack"></i>
-    <a class="sidebar-link sidebar-title  {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" 
+    <a class="sidebar-link sidebar-title  {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"
        href="{{ route('admin.dashboard') }}">
         <i data-feather="home"></i>
         <span class="lan-3">Dashboards</span>
@@ -38,7 +38,7 @@
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.users.*') ? 'active' : '' }}"
                            href="{{ route('admin.users.index') }}">
                             <i data-feather="users"></i>
                             <span>Kullanıcılar</span>
@@ -50,7 +50,7 @@
                     @can('view categories')
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.categories.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.categories.*') ? 'active' : '' }}"
                            href="{{ route('admin.categories.index') }}">
                             <i data-feather="folder"></i>
                             <span>Kategoriler</span>
@@ -62,7 +62,7 @@
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.questions.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.questions.*') ? 'active' : '' }}"
                            href="{{ route('admin.questions.index') }}">
                            <i data-feather="book"></i>
                             <span>Sorular</span>
@@ -75,7 +75,7 @@
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.tournaments.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.tournaments.*') ? 'active' : '' }}"
                            href="{{ route('admin.tournaments.index') }}">
                             <i data-feather="award"></i>
                             <span>Turnuvalar</span>
@@ -83,23 +83,56 @@
                     </li>
                     @endif
                     @endcan
-                    
-              
-                   
-            
+
+
+
+
 
                     @can('view notifications')
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}"
                            href="{{ route('admin.notifications.index') }}">
                             <i data-feather="bell"></i>
                             <span>Bildirimler</span>
                         </a>
                     </li>
                     @endcan
-  
-         
+
+                    @can('view avatars')
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.avatars.*') ? 'active' : '' }}"
+                           href="{{ route('admin.avatars.index') }}">
+                            <i data-feather="user"></i>
+                            <span>Avatarlar</span>
+                        </a>
+                    </li>
+                    @endcan
+
+                    @can('view gift card stores')
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.gift-card-stores.*') ? 'active' : '' }}"
+                           href="{{ route('admin.gift-card-stores.index') }}">
+                            <i data-feather="shopping-bag"></i>
+                            <span>Hediye Kartı Mağazaları</span>
+                        </a>
+                    </li>
+                    @endcan
+
+                    @can('view reward requests')
+                        <li class="sidebar-list">
+                            <i class="fa fa-thumb-tack"></i>
+                            <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.reward-requests.*') ? 'active' : '' }}"
+                               href="{{ route('admin.reward-requests.index') }}">
+                                <i data-feather="award"></i>
+                                <span>Ödül Talepleri</span>
+                            </a>
+                        </li>
+                    @endcan
+
+
                     @can('view general settings')
                     @if(auth()->user()->hasRole('admin'))
                     <li class="sidebar-main-title">
@@ -129,7 +162,7 @@
                     </li>
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.general-settings.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.general-settings.*') ? 'active' : '' }}"
                            href="{{ route('admin.general-settings.index') }}">
                             <i data-feather="settings"></i>
                             <span>Genel Ayarlar</span>
@@ -137,12 +170,12 @@
                     </li>
                     @endif
                     @endcan
-                    
+
                     @can('view permissions')
                     @if(auth()->user()->hasRole('admin'))
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.permissions.*') ? 'active' : '' }}" 
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.permissions.*') ? 'active' : '' }}"
                            href="{{ route('admin.permissions.index') }}">
                             <i data-feather="shield"></i>
                             <span>Yetki Yönetimi</span>

@@ -52,7 +52,9 @@ class User extends Authenticatable
         'fifty_fifty_jokers',
         'double_answer_jokers',
         'hint_jokers',
-        'avatar'
+        'avatar',
+        'referral_code',
+        'has_used_referral'
     ];
 
     /**
@@ -86,7 +88,8 @@ class User extends Authenticatable
         'is_premium' => 'boolean',
         'fifty_fifty_jokers' => 'integer',
         'double_answer_jokers' => 'integer',
-        'hint_jokers' => 'integer'
+        'hint_jokers' => 'integer',
+        'has_used_referral' => 'boolean'
     ];
 
     // Account relationship kaldırıldı
@@ -139,6 +142,11 @@ class User extends Authenticatable
         return $this->hasMany(Duel::class, 'opponent_id');
     }
 
+    public function avatarModel()
+    {
+        return $this->belongsTo(Avatar::class, 'avatar');
+    }
+
     // Scopes
     public function scopeActive($query)
     {
@@ -148,6 +156,23 @@ class User extends Authenticatable
     public function scopeWithPackage($query)
     {
         return $query->whereNotNull('package_id');
+    }
+
+    /**
+     * Unique referral kodu oluştur
+     */
+    public static function generateReferralCode(): string
+    {
+        do {
+            // 8 haneli sayı-harf karışık kod oluştur
+            $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            $code = '';
+            for ($i = 0; $i < 8; $i++) {
+                $code .= $characters[rand(0, strlen($characters) - 1)];
+            }
+        } while (self::where('referral_code', $code)->exists());
+
+        return $code;
     }
 
     // Accessors
