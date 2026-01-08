@@ -65,6 +65,7 @@ class RewardController extends Controller
         $rank = null;
         $coinsEarned = 0;
         $rewardDate = null;
+        $foundTournamentId = null;
 
         if ($type === 'daily') {
             $today = Carbon::today();
@@ -141,74 +142,187 @@ class RewardController extends Controller
         } elseif ($type === 'tournament') {
             $tournamentId = $request->input('tournament_id');
 
-            if (!$tournamentId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Turnuva ID gerekli.'
-                ], 400);
-            }
+            // Turnuva ID opsiyonel, 0 veya null gelebilir
+            if ($tournamentId && $tournamentId != 0) {
+                $tournament = Tournament::find($tournamentId);
+                if (!$tournament) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Turnuva bulunamadı.'
+                    ], 404);
+                }
 
-            $tournament = Tournament::find($tournamentId);
-            if (!$tournament) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Turnuva bulunamadı.'
-                ], 404);
-            }
+                // Belirli bir turnuva için kontrol
+                $tournamentUsers = TournamentUser::where('tournament_id', $tournamentId)
+                    ->where('status', 'completed')
+                    ->orderBy('score', 'desc')
+                    ->orderBy('correct_answers', 'desc')
+                    ->orderBy('total_time_seconds', 'asc')
+                    ->get();
 
-            // Turnuva sonuçlarına göre sıralama
-            $tournamentUsers = TournamentUser::where('tournament_id', $tournamentId)
-                ->where('status', 'completed')
-                ->orderBy('score', 'desc')
-                ->orderBy('correct_answers', 'desc')
-                ->orderBy('total_time_seconds', 'asc')
-                ->get();
+                $userRank = $tournamentUsers->search(function ($item) use ($user) {
+                    return $item->user_id === $user->id;
+                });
 
-            $userRank = $tournamentUsers->search(function ($item) use ($user) {
-                return $item->user_id === $user->id;
-            });
+                if ($userRank !== false) {
+                    $rank = $userRank + 1;
+                    $tournamentUser = $tournamentUsers[$userRank];
+                    $coinsEarned = $tournamentUser->score ?? 0;
+                    $rewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+                    $foundTournamentId = $tournamentId;
 
-            if ($userRank !== false) {
-                $rank = $userRank + 1;
-                $tournamentUser = $tournamentUsers[$userRank];
-                $coinsEarned = $tournamentUser->score ?? 0;
-                $rewardDate = $tournament->finished_at ? Carbon::parse($tournament->finished_at)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+                    // 1. sırada mı kontrol et
+                    if ($rank === 1) {
+                        // Bu turnuva için daha önce ödül talebinde bulunmuş mu kontrol et
+                        $existingRequest = RewardRequest::where('user_id', $user->id)
+                            ->where('reward_type', 'tournament')
+                            ->where('reward_date', $rewardDate)
+                            ->get()
+                            ->filter(function ($request) use ($tournamentId) {
+                                return isset($request->metadata['tournament_id']) &&
+                                    $request->metadata['tournament_id'] == $tournamentId;
+                            })
+                            ->first();
 
-                // 1. sırada mı kontrol et
-                if ($rank === 1) {
-                    // Bu turnuva için daha önce ödül talebinde bulunmuş mu kontrol et
-                    $existingRequest = RewardRequest::where('user_id', $user->id)
-                        ->where('reward_type', 'tournament')
-                        ->where('reward_date', $rewardDate)
-                        ->get()
-                        ->filter(function ($request) use ($tournamentId) {
-                            return isset($request->metadata['tournament_id']) && 
-                                   $request->metadata['tournament_id'] == $tournamentId;
-                        })
-                        ->first();
+                        if (!$existingRequest) {
+                            $eligible = true;
+                        }
+                    }
+                }
+            } else {
+                // Turnuva ID 0 veya null ise, dinamik olarak son 1 günde/son 1 haftada bitmiş turnuvaları bul
+                // Son 1 günde bitmiş turnuvaları kontrol et
+                $oneDayAgo = Carbon::now()->subDay();
+                $recentTournaments = Tournament::where('status', 'completed')
+                    ->where('end_date', '>=', $oneDayAgo)
+                    ->orderBy('end_date', 'desc')
+                    ->get();
 
-                    if (!$existingRequest) {
-                        $eligible = true;
+                $foundEligibleTournament = false;
+                $foundTournamentId = null;
+                $foundCoinsEarned = 0;
+                $foundRewardDate = null;
+
+                foreach ($recentTournaments as $tournament) {
+                    $tournamentUsers = TournamentUser::where('tournament_id', $tournament->id)
+                        ->where('status', 'completed')
+                        ->orderBy('score', 'desc')
+                        ->orderBy('correct_answers', 'desc')
+                        ->orderBy('total_time_seconds', 'asc')
+                        ->get();
+
+                    $userRank = $tournamentUsers->search(function ($item) use ($user) {
+                        return $item->user_id === $user->id;
+                    });
+
+                    if ($userRank !== false && $userRank === 0) {
+                        // Kullanıcı 1. sırada
+                        $tournamentUser = $tournamentUsers[$userRank];
+                        $tempCoinsEarned = $tournamentUser->score ?? 0;
+                        $tempRewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+
+                        // Bu turnuva için daha önce ödül talebinde bulunmuş mu kontrol et
+                        $existingRequest = RewardRequest::where('user_id', $user->id)
+                            ->where('reward_type', 'tournament')
+                            ->where('reward_date', $tempRewardDate)
+                            ->get()
+                            ->filter(function ($request) use ($tournament) {
+                                return isset($request->metadata['tournament_id']) &&
+                                    $request->metadata['tournament_id'] == $tournament->id;
+                            })
+                            ->first();
+
+                        if (!$existingRequest) {
+                            $foundEligibleTournament = true;
+                            $foundTournamentId = $tournament->id;
+                            $foundCoinsEarned = $tempCoinsEarned;
+                            $foundRewardDate = $tempRewardDate;
+                            $rank = 1;
+                            $coinsEarned = $foundCoinsEarned;
+                            $rewardDate = $foundRewardDate;
+                            $eligible = true;
+                            break; // İlk uygun turnuvayı bulduk, döngüden çık
+                        }
+                    }
+                }
+
+                if (!$foundEligibleTournament) {
+                    // Son 1 haftada bitmiş turnuvaları kontrol et
+                    $oneWeekAgo = Carbon::now()->subWeek();
+                    $weeklyTournaments = Tournament::where('status', 'completed')
+                        ->where('end_date', '>=', $oneWeekAgo)
+                        ->where('end_date', '<', $oneDayAgo)
+                        ->orderBy('end_date', 'desc')
+                        ->get();
+
+                    foreach ($weeklyTournaments as $tournament) {
+                        $tournamentUsers = TournamentUser::where('tournament_id', $tournament->id)
+                            ->where('status', 'completed')
+                            ->orderBy('score', 'desc')
+                            ->orderBy('correct_answers', 'desc')
+                            ->orderBy('total_time_seconds', 'asc')
+                            ->get();
+
+                        $userRank = $tournamentUsers->search(function ($item) use ($user) {
+                            return $item->user_id === $user->id;
+                        });
+
+                        if ($userRank !== false && $userRank === 0) {
+                            // Kullanıcı 1. sırada
+                            $tournamentUser = $tournamentUsers[$userRank];
+                            $tempCoinsEarned = $tournamentUser->score ?? 0;
+                            $tempRewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+
+                            // Bu turnuva için daha önce ödül talebinde bulunmuş mu kontrol et
+                            $existingRequest = RewardRequest::where('user_id', $user->id)
+                                ->where('reward_type', 'tournament')
+                                ->where('reward_date', $tempRewardDate)
+                                ->get()
+                                ->filter(function ($request) use ($tournament) {
+                                    return isset($request->metadata['tournament_id']) &&
+                                        $request->metadata['tournament_id'] == $tournament->id;
+                                })
+                                ->first();
+
+                            if (!$existingRequest) {
+                                $foundEligibleTournament = true;
+                                $foundTournamentId = $tournament->id;
+                                $foundCoinsEarned = $tempCoinsEarned;
+                                $foundRewardDate = $tempRewardDate;
+                                $rank = 1;
+                                $coinsEarned = $foundCoinsEarned;
+                                $rewardDate = $foundRewardDate;
+                                $eligible = true;
+                                break; // İlk uygun turnuvayı bulduk, döngüden çık
+                            }
+                        }
                     }
                 }
             }
         }
 
-        $message = $eligible 
-            ? 'Ödül talebinde bulunabilirsiniz.' 
-            : ($rank === 1 
-                ? 'Bu ödül için daha önce talepte bulunmuşsunuz.' 
-                : ($rank !== null 
-                    ? "Sıralamanız: {$rank}. Sadece 1. sıradaki kullanıcılar ödül talebinde bulunabilir." 
+        $message = $eligible
+            ? 'Ödül talebinde bulunabilirsiniz.'
+            : ($rank === 1
+                ? 'Bu ödül için daha önce talepte bulunmuşsunuz.'
+                : ($rank !== null
+                    ? "Sıralamanız: {$rank}. Sadece 1. sıradaki kullanıcılar ödül talebinde bulunabilir."
                     : 'Bu ödül için uygun değilsiniz.'));
 
-        return response()->json([
+        $response = [
             'success' => true,
             'eligible' => $eligible,
             'rank' => $rank,
             'coins_earned' => $coinsEarned,
             'message' => $message
-        ]);
+        ];
+
+        // Turnuva tipi için tournament_id ekle
+        if ($type === 'tournament' && $foundTournamentId) {
+            $response['tournament_id'] = $foundTournamentId;
+        }
+
+        return response()->json($response);
     }
 
     /**
@@ -248,17 +362,27 @@ class RewardController extends Controller
         }
 
         // Önce eligibility kontrolü yap
-        $eligibilityResponse = $this->checkEligibility($request);
-        $eligibilityData = json_decode($eligibilityResponse->getContent(), true);
+//        $eligibilityResponse = $this->checkEligibility($request);
+//        $eligibilityData = json_decode($eligibilityResponse->getContent(), true);
+//
+//        // Önce success kontrolü yap
+//        if (!isset($eligibilityData['success']) || !$eligibilityData['success']) {
+//            return response()->json([
+//                'success' => false,
+//                'message' => $eligibilityData['message'] ?? 'Ödül uygunluk kontrolü başarısız oldu.'
+//            ], 400);
+//        }
+//
+//        // Sonra eligible kontrolü yap
+//        if (!isset($eligibilityData['eligible']) || !$eligibilityData['eligible']) {
+//            return response()->json([
+//                'success' => false,
+//                'message' => $eligibilityData['message'] ?? 'Bu ödül için uygun değilsiniz.'
+//            ], 400);
+//        }
 
-        if (!$eligibilityData['eligible']) {
-            return response()->json([
-                'success' => false,
-                'message' => $eligibilityData['message']
-            ], 400);
-        }
-
-        $coinsEarned = $eligibilityData['coins_earned'];
+//        $coinsEarned = $eligibilityData['coins_earned'] ?? 0;
+        $coinsEarned = 0;
         $rewardDate = null;
         $metadata = [];
 
@@ -268,17 +392,23 @@ class RewardController extends Controller
             $rewardDate = Carbon::now()->startOfWeek()->format('Y-m-d');
         } elseif ($type === 'tournament') {
             $tournamentId = $request->input('tournament_id');
-            if (!$tournamentId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Turnuva ID gerekli.'
-                ], 400);
+
+//            // Eğer eligibility response'da tournament_id varsa (dinamik bulunan), onu kullan
+//            if (isset($eligibilityData['tournament_id'])) {
+//                $tournamentId = $eligibilityData['tournament_id'];
+//            }
+
+            if ($tournamentId && $tournamentId != 0) {
+                $tournament = Tournament::find($tournamentId);
+                if ($tournament) {
+                    $rewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+                    $metadata['tournament_id'] = $tournamentId;
+                } else {
+                    $rewardDate = Carbon::today()->format('Y-m-d');
+                }
+            } else {
+                $rewardDate = Carbon::today()->format('Y-m-d');
             }
-            $tournament = Tournament::find($tournamentId);
-            $rewardDate = $tournament && $tournament->finished_at 
-                ? Carbon::parse($tournament->finished_at)->format('Y-m-d') 
-                : Carbon::today()->format('Y-m-d');
-            $metadata = ['tournament_id' => (int) $tournamentId];
         }
 
         // Ödül talebini oluştur

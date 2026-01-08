@@ -58,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('me/update', [AuthController::class, 'edit']);
     Route::get('auth/me', [AuthController::class, 'detail']);
     Route::post('logout', [AuthController::class, 'logout']);
+    Route::delete('auth/delete-account', [AuthController::class, 'deleteAccount']);
 
 
     // Notification routes
@@ -190,7 +191,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Gift Card Stores routes
     Route::get('gift-card-stores', [GiftCardStoreController::class, 'index']);
-
+    
     // Leaderboard routes
     Route::prefix('leaderboard')->group(function () {
         Route::get('/', [LeaderboardController::class, 'all']);

@@ -214,50 +214,50 @@ class AuthController extends Controller
         $user->role_id = 3;
         $user->account_status = 'active';
         $user->coins = 1000;
-        
+
         // Unique referral kodu oluştur
         $user->referral_code = User::generateReferralCode();
         $user->has_used_referral = false;
-        
+
         // Optional alanları ekle
         if ($request->has('name') && $request->name) {
             $user->name = $request->name;
         }
-        
+
         if ($request->has('email') && $request->email) {
             $user->email = $request->email;
         }
-        
+
         if ($request->has('password') && $request->password) {
             $user->password = bcrypt($request->password);
         }
-        
+
         if ($request->has('device_id') && $request->device_id) {
             $user->device_id = $request->device_id;
         }
-        
+
         $user->save();
 
         // Referral kod kontrolü ve coin ekleme
         if ($request->has('referral_code') && $request->referral_code) {
             $referrer = User::where('referral_code', $request->referral_code)->first();
-            
+
             if ($referrer && $referrer->id !== $user->id) {
                 $referralReward = 50;
-                
+
                 // Yeni kullanıcıya coin ekle
                 $user->increment('coins', $referralReward);
                 $user->has_used_referral = true;
                 $user->save();
-                
+
                 // Referans veren kullanıcıya coin ekle
                 $referrer->increment('coins', $referralReward);
-                
+
                 // Coin history kayıtları
                 // Kullanıcı zaten 1000 coin ile kaydedildi, sonra 50 eklendi
                 $userBalanceBefore = $user->coins - $referralReward;
                 $userBalanceAfter = $user->coins;
-                
+
                 \App\Models\CoinHistory::create([
                     'user_id' => $user->id,
                     'coin_amount' => $referralReward,
@@ -271,10 +271,10 @@ class AuthController extends Controller
                     'balance_before' => $userBalanceBefore,
                     'balance_after' => $userBalanceAfter
                 ]);
-                
+
                 $referrerBalanceBefore = $referrer->coins - $referralReward;
                 $referrerBalanceAfter = $referrer->coins;
-                
+
                 \App\Models\CoinHistory::create([
                     'user_id' => $referrer->id,
                     'coin_amount' => $referralReward,
@@ -579,6 +579,78 @@ class AuthController extends Controller
             'data' => [
                 'can_use' => $canUse
             ]
+        ]);
+    }
+
+    /**
+     * @OA\Delete(
+     *     path="/api/auth/delete-account",
+     *     summary="Hesap Silme",
+     *     description="Kullanıcının hesabını kalıcı olarak siler. Tüm token'lar iptal edilir ve kullanıcı verileri silinir.",
+     *     operationId="deleteAccount",
+     *     tags={"Auth"},
+     *     security={{"sanctum":{}}},
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="password", type="string", format="password", description="Şifre doğrulama (opsiyonel)", example="password123")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Hesap başarıyla silindi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Hesabınız başarıyla silindi."),
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Unauthenticated",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Şifre yanlış",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Şifre yanlış.")
+     *         )
+     *     )
+     * )
+     */
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kullanıcı bulunamadı.'
+            ], 401);
+        }
+
+        // Şifre doğrulama (opsiyonel ama önerilir)
+        if ($request->has('password')) {
+            if (!Hash::check($request->password, $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Şifre yanlış.'
+                ], 400);
+            }
+        }
+
+        // Kullanıcının tüm token'larını sil
+        $user->tokens()->delete();
+
+        // Kullanıcıyı sil
+        $user->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Hesabınız başarıyla silindi.',
         ]);
     }
 }
