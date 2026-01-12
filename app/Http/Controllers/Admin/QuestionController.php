@@ -24,18 +24,42 @@ class QuestionController extends Controller
     {
         $query = Question::with('category');
 
-        // Filtering
+        // Filtering - Status
         if ($request->filled('status')) {
-            $query->where('is_active', $request->status);
+            $status = $request->status;
+            if ($status === '1' || $status === 1 || $status === 'true') {
+                $query->where('is_active', true);
+            } elseif ($status === '0' || $status === 0 || $status === 'false') {
+                $query->where('is_active', false);
+            }
         }
 
+        // Filtering - Level
         if ($request->filled('level')) {
             $query->where('question_level', $request->level);
         }
 
+        // Filtering - Search (translatable field için JSON arama)
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where('question', 'like', "%{$search}%");
+            $query->where(function($q) use ($search) {
+                $q->whereRaw("JSON_EXTRACT(question, '$.tr') LIKE ?", ["%{$search}%"])
+                  ->orWhereRaw("JSON_EXTRACT(question, '$.en') LIKE ?", ["%{$search}%"]);
+            });
+        }
+
+        // Filtering - Language (dil filtresi - birden fazla seçilebilir)
+        if ($request->filled('languages')) {
+            $languages = is_array($request->languages) ? $request->languages : [$request->languages];
+            $query->where(function($q) use ($languages) {
+                foreach ($languages as $lang) {
+                    if ($lang === 'tr') {
+                        $q->orWhereRaw("JSON_EXTRACT(question, '$.tr') IS NOT NULL AND JSON_EXTRACT(question, '$.tr') != ''");
+                    } elseif ($lang === 'en') {
+                        $q->orWhereRaw("JSON_EXTRACT(question, '$.en') IS NOT NULL AND JSON_EXTRACT(question, '$.en') != ''");
+                    }
+                }
+            });
         }
 
         $questions = $query->latest()->paginate(10);

@@ -27,15 +27,15 @@
                     @endcan
                 </div>
                 <div class="card-body">
-                    <form method="GET" class="row g-2 align-items-end mb-3">
-                        <div class="col-md-4 col-lg-3">
+                    <form method="GET" action="{{ route('admin.questions.index') }}" class="row g-2 align-items-end mb-3" id="filterForm">
+                        <div class="col-md-3 col-lg-3">
                             <label class="form-label small text-muted">Soru Ara</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-white"><i data-feather="search"></i></span>
                                 <input type="text" name="search" class="form-control" placeholder="Ara..." value="{{ request('search') }}">
                             </div>
                         </div>
-                        <div class="col-md-4 col-lg-3">
+                        <div class="col-md-3 col-lg-2">
                             <label class="form-label small text-muted">Zorluk</label>
                             <select name="level" class="form-select">
                                 <option value="">Zorluk Seviyesi</option>
@@ -44,7 +44,7 @@
                                 <option value="easy" {{ request('level') == 'easy' ? 'selected' : '' }}>Kolay</option>
                             </select>
                         </div>
-                        <div class="col-md-4 col-lg-3">
+                        <div class="col-md-3 col-lg-2">
                             <label class="form-label small text-muted">Durum</label>
                             <select name="status" class="form-select">
                                 <option value="">Tüm Durumlar</option>
@@ -52,9 +52,22 @@
                                 <option value="0" {{ request('status') == '0' ? 'selected' : '' }}>Pasif</option>
                             </select>
                         </div>
+                        <div class="col-md-2 col-lg-2">
+                            <label class="form-label small text-muted">Dil</label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="languages[]" value="tr" id="lang-tr" {{ in_array('tr', (array)request('languages', [])) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="lang-tr">TR</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="languages[]" value="en" id="lang-en" {{ in_array('en', (array)request('languages', [])) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="lang-en" style="color: #28a745;">EN</label>
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-md-12 col-lg-3 text-md-start text-lg-end">
                             <button type="submit" class="btn btn-primary me-2"><i data-feather="filter" class="me-1"></i>Filtrele</button>
-                            <a href="{{ route('admin.questions.index') }}" class="btn btn-outline-secondary">Temizle</a>
+                            <button type="button" id="clearFiltersBtn" class="btn btn-outline-secondary">Temizle</button>
                         </div>
                     </form>
                     <div class="table-responsive">
@@ -63,6 +76,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Soru</th>
+                                <th>Dil</th>
                                 <th>Resim</th>
                                 <th>Kategori</th>
                                 <th>Seviye</th>
@@ -76,6 +90,22 @@
                                 <tr>
                                     <td>{{ $question->id }}</td>
                                     <td>{{ Str::limit($question->getTranslation('question', 'tr'), 60) }}</td>
+                                    <td>
+                                        @php
+                                            // Raw JSON verisini kontrol et (Spatie Translatable kullanıldığı için)
+                                            $rawQuestion = $question->getRawOriginal('question');
+                                            $questionData = is_string($rawQuestion) ? json_decode($rawQuestion, true) : ($rawQuestion ?? []);
+
+                                            // JSON'da gerçekten var mı kontrol et
+                                            $hasTr = isset($questionData['tr']) && !empty(trim($questionData['tr']));
+                                            $hasEn = isset($questionData['en']) && !empty(trim($questionData['en']));
+
+                                            $langs = [];
+                                            if ($hasTr) $langs[] = '<span class="badge bg-secondary">TR</span>';
+                                            if ($hasEn) $langs[] = '<span class="badge bg-success">EN</span>';
+                                        @endphp
+                                        {!! !empty($langs) ? implode(' ', $langs) : '<span class="text-muted">-</span>' !!}
+                                    </td>
                                     <td>
                                         @if($question->image)
                                             <img src="{{ asset('storage/' . $question->image) }}" alt="Soru Resmi" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
@@ -121,18 +151,40 @@
                                                 data-category="{{ $question->category_id }}"
                                                 data-image="{{ $question->image }}">Görüntüle</button>
                                         @can('edit questions')
+                                            @php
+                                                // EN çevirilerini kontrol et - raw JSON'dan kontrol et
+                                                $rawQuestion = $question->getRawOriginal('question');
+                                                $questionData = is_string($rawQuestion) ? json_decode($rawQuestion, true) : ($rawQuestion ?? []);
+                                                $hasEn = isset($questionData['en']) && $questionData['en'] !== null && $questionData['en'] !== '';
+
+                                                $rawOneChoice = $question->getRawOriginal('one_choice');
+                                                $oneChoiceData = is_string($rawOneChoice) ? json_decode($rawOneChoice, true) : ($rawOneChoice ?? []);
+                                                $hasA1En = isset($oneChoiceData['en']) && $oneChoiceData['en'] !== null && $oneChoiceData['en'] !== '';
+
+                                                $rawTwoChoice = $question->getRawOriginal('two_choice');
+                                                $twoChoiceData = is_string($rawTwoChoice) ? json_decode($rawTwoChoice, true) : ($rawTwoChoice ?? []);
+                                                $hasA2En = isset($twoChoiceData['en']) && $twoChoiceData['en'] !== null && $twoChoiceData['en'] !== '';
+
+                                                $rawThreeChoice = $question->getRawOriginal('three_choice');
+                                                $threeChoiceData = is_string($rawThreeChoice) ? json_decode($rawThreeChoice, true) : ($rawThreeChoice ?? []);
+                                                $hasA3En = isset($threeChoiceData['en']) && $threeChoiceData['en'] !== null && $threeChoiceData['en'] !== '';
+
+                                                $rawFourChoice = $question->getRawOriginal('four_choice');
+                                                $fourChoiceData = is_string($rawFourChoice) ? json_decode($rawFourChoice, true) : ($rawFourChoice ?? []);
+                                                $hasA4En = isset($fourChoiceData['en']) && $fourChoiceData['en'] !== null && $fourChoiceData['en'] !== '';
+                                            @endphp
                                             <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#questionEditModal"
                                                     data-id="{{ $question->id }}"
                                                     data-question-tr="{{ $question->getTranslation('question', 'tr') }}"
-                                                    data-question-en="{{ $question->getTranslation('question', 'en') }}"
+                                                    data-question-en="{{ $hasEn ? ($questionData['en'] ?? '') : '' }}"
                                                     data-a1-tr="{{ $question->getTranslation('one_choice', 'tr') }}"
-                                                    data-a1-en="{{ $question->getTranslation('one_choice', 'en') }}"
+                                                    data-a1-en="{{ $hasA1En ? ($oneChoiceData['en'] ?? '') : '' }}"
                                                     data-a2-tr="{{ $question->getTranslation('two_choice', 'tr') }}"
-                                                    data-a2-en="{{ $question->getTranslation('two_choice', 'en') }}"
+                                                    data-a2-en="{{ $hasA2En ? ($twoChoiceData['en'] ?? '') : '' }}"
                                                     data-a3-tr="{{ $question->getTranslation('three_choice', 'tr') }}"
-                                                    data-a3-en="{{ $question->getTranslation('three_choice', 'en') }}"
+                                                    data-a3-en="{{ $hasA3En ? ($threeChoiceData['en'] ?? '') : '' }}"
                                                     data-a4-tr="{{ $question->getTranslation('four_choice', 'tr') }}"
-                                                    data-a4-en="{{ $question->getTranslation('four_choice', 'en') }}"
+                                                    data-a4-en="{{ $hasA4En ? ($fourChoiceData['en'] ?? '') : '' }}"
                                                     data-right="{{ $question->correct_answer }}"
                                                     data-level="{{ $question->question_level }}"
                                                     data-coin="{{ $question->coin_value }}"
@@ -177,17 +229,17 @@
                         @endif
 
                         <!-- Tab Navigation -->
-                         <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
-                          <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="q-tr-tab" data-bs-toggle="tab" data-bs-target="#q-tr-pane" type="button" role="tab">
-                              🇹🇷 Türkçe
-                            </button>
-                          </li>
-                          <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="q-en-tab" data-bs-toggle="tab" data-bs-target="#q-en-pane" type="button" role="tab">
-                              🇬🇧 English
-                            </button>
-                          </li>
+                        <ul class="nav nav-tabs" id="createQuestionTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="q-tr-tab" data-bs-toggle="tab" data-bs-target="#q-tr-pane" type="button" role="tab">
+                                    🇹🇷 Türkçe
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="q-en-tab" data-bs-toggle="tab" data-bs-target="#q-en-pane" type="button" role="tab">
+                                    🇬🇧 English
+                                </button>
+                            </li>
                         </ul>
 
                         <!-- Tab Content -->
@@ -443,17 +495,17 @@
                         @endif
 
                         <!-- Tab Navigation -->
-                         <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
-                          <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="edit-q-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-q-tr-pane" type="button" role="tab">
-                              🇹🇷 Türkçe
-                            </button>
-                          </li>
-                          <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="edit-q-en-tab" data-bs-toggle="tab" data-bs-target="#edit-q-en-pane" type="button" role="tab">
-                              🇬🇧 English
-                            </button>
-                          </li>
+                        <ul class="nav nav-tabs" id="editQuestionTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="edit-q-tr-tab" data-bs-toggle="tab" data-bs-target="#edit-q-tr-pane" type="button" role="tab">
+                                    🇹🇷 Türkçe
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="edit-q-en-tab" data-bs-toggle="tab" data-bs-target="#edit-q-en-pane" type="button" role="tab">
+                                    🇬🇧 English
+                                </button>
+                            </li>
                         </ul>
 
                         <!-- Tab Content -->
@@ -697,10 +749,19 @@
 
             // Load Questions Function
             function loadQuestions(page = 1) {
+                // Form verilerini al
+                var formData = $('#filterForm').serialize();
+                if (page > 1) {
+                    formData += '&page=' + page;
+                }
+
+                // Form action'dan URL'yi al
+                var formUrl = $('#filterForm').attr('action') || '/private/lesley/admin/questions';
+
                 $.ajax({
-                    url: '/private/lesley/admin/questions',
+                    url: formUrl,
                     type: 'GET',
-                    data: { page: page },
+                    data: formData,
                     success: function(response) {
                         // Extract table body and pagination from response
                         var tableBody = $(response).find('#questionsTableBody').html();
@@ -723,38 +784,76 @@
                 });
             }
 
+            // Form submit handler - sayfa yenileme yerine AJAX kullan
+            $('#filterForm').on('submit', function(e) {
+                e.preventDefault();
+                // URL'yi güncelle (query string ile)
+                var formUrl = $('#filterForm').attr('action') || window.location.pathname;
+                var formData = $('#filterForm').serialize();
+                var newUrl = formUrl + (formData ? '?' + formData : '');
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({}, '', newUrl);
+                }
+                loadQuestions(1);
+            });
+
+            // Temizle butonu - formu temizle ve AJAX ile yükle
+            $('#clearFiltersBtn').on('click', function(e) {
+                e.preventDefault();
+                // Form alanlarını temizle
+                $('#filterForm')[0].reset();
+                // Checkbox'ları temizle
+                $('#lang-tr').prop('checked', false);
+                $('#lang-en').prop('checked', false);
+                // URL'yi temizle (query string'i kaldır)
+                var formUrl = $('#filterForm').attr('action') || window.location.pathname;
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({}, '', formUrl);
+                }
+                // AJAX ile temizlenmiş halini yükle
+                loadQuestions(1);
+            });
+
+            // HTML entity decode helper function
+            function decodeHtmlEntities(text) {
+                if (!text) return '';
+                var textarea = document.createElement('textarea');
+                textarea.innerHTML = text;
+                return textarea.value;
+            }
+
             // Bind Question Edit Modal Events
             function bindQuestionEditModalEvents() {
                 $('#questionEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
                     var button = $(event.relatedTarget);
-                    var id = button.data('id');
-                    var questionTr = button.data('question-tr');
-                    var questionEn = button.data('question-en');
-                    var a1Tr = button.data('a1-tr');
-                    var a1En = button.data('a1-en');
-                    var a2Tr = button.data('a2-tr');
-                    var a2En = button.data('a2-en');
-                    var a3Tr = button.data('a3-tr');
-                    var a3En = button.data('a3-en');
-                    var a4Tr = button.data('a4-tr');
-                    var a4En = button.data('a4-en');
-                    var right = button.data('right');
-                    var level = button.data('level');
-                    var coin = button.data('coin');
-                    var active = button.data('active');
-                    var category = button.data('category');
-                    var image = button.data('image');
+                    var id = button.attr('data-id');
+                    var questionTr = decodeHtmlEntities(button.attr('data-question-tr') || '');
+                    var questionEn = decodeHtmlEntities(button.attr('data-question-en') || '');
+                    var a1Tr = decodeHtmlEntities(button.attr('data-a1-tr') || '');
+                    var a1En = decodeHtmlEntities(button.attr('data-a1-en') || '');
+                    var a2Tr = decodeHtmlEntities(button.attr('data-a2-tr') || '');
+                    var a2En = decodeHtmlEntities(button.attr('data-a2-en') || '');
+                    var a3Tr = decodeHtmlEntities(button.attr('data-a3-tr') || '');
+                    var a3En = decodeHtmlEntities(button.attr('data-a3-en') || '');
+                    var a4Tr = decodeHtmlEntities(button.attr('data-a4-tr') || '');
+                    var a4En = decodeHtmlEntities(button.attr('data-a4-en') || '');
+                    var right = button.attr('data-right');
+                    var level = button.attr('data-level');
+                    var coin = button.attr('data-coin');
+                    var active = button.attr('data-active');
+                    var category = button.attr('data-category');
+                    var image = button.attr('data-image');
 
-                    $('#edit-q').val(questionTr || '');
-                    $('#edit-q-en').val(questionEn || '');
-                    $('#edit-a1').val(a1Tr || '');
-                    $('#edit-a1-en').val(a1En || '');
-                    $('#edit-a2').val(a2Tr || '');
-                    $('#edit-a2-en').val(a2En || '');
-                    $('#edit-a3').val(a3Tr || '');
-                    $('#edit-a3-en').val(a3En || '');
-                    $('#edit-a4').val(a4Tr || '');
-                    $('#edit-a4-en').val(a4En || '');
+                    $('#edit-q').val(questionTr);
+                    $('#edit-q-en').val(questionEn);
+                    $('#edit-a1').val(a1Tr);
+                    $('#edit-a1-en').val(a1En);
+                    $('#edit-a2').val(a2Tr);
+                    $('#edit-a2-en').val(a2En);
+                    $('#edit-a3').val(a3Tr);
+                    $('#edit-a3-en').val(a3En);
+                    $('#edit-a4').val(a4Tr);
+                    $('#edit-a4-en').val(a4En);
                     $('#edit-right').val(right);
                     $('#edit-level').val(level);
                     $('#edit-coin').val(coin);
@@ -777,23 +876,23 @@
             function bindQuestionShowModalEvents() {
                 $('#questionShowModal').off('show.bs.modal').on('show.bs.modal', function (event) {
                     var button = $(event.relatedTarget);
-                    var id = button.data('id');
-                    var questionTr = button.data('question-tr');
-                    var questionEn = button.data('question-en');
-                    var a1Tr = button.data('a1-tr');
-                    var a1En = button.data('a1-en');
-                    var a2Tr = button.data('a2-tr');
-                    var a2En = button.data('a2-en');
-                    var a3Tr = button.data('a3-tr');
-                    var a3En = button.data('a3-en');
-                    var a4Tr = button.data('a4-tr');
-                    var a4En = button.data('a4-en');
-                    var right = button.data('right');
-                    var level = button.data('level');
-                    var coin = button.data('coin');
-                    var active = button.data('active');
-                    var category = button.data('category');
-                    var image = button.data('image');
+                    var id = button.attr('data-id');
+                    var questionTr = decodeHtmlEntities(button.attr('data-question-tr') || '');
+                    var questionEn = decodeHtmlEntities(button.attr('data-question-en') || '');
+                    var a1Tr = decodeHtmlEntities(button.attr('data-a1-tr') || '');
+                    var a1En = decodeHtmlEntities(button.attr('data-a1-en') || '');
+                    var a2Tr = decodeHtmlEntities(button.attr('data-a2-tr') || '');
+                    var a2En = decodeHtmlEntities(button.attr('data-a2-en') || '');
+                    var a3Tr = decodeHtmlEntities(button.attr('data-a3-tr') || '');
+                    var a3En = decodeHtmlEntities(button.attr('data-a3-en') || '');
+                    var a4Tr = decodeHtmlEntities(button.attr('data-a4-tr') || '');
+                    var a4En = decodeHtmlEntities(button.attr('data-a4-en') || '');
+                    var right = button.attr('data-right');
+                    var level = button.attr('data-level');
+                    var coin = button.attr('data-coin');
+                    var active = button.attr('data-active');
+                    var category = button.attr('data-category');
+                    var image = button.attr('data-image');
 
                     $('#show-question-tr').text(questionTr || '-');
                     $('#show-question-en').text(questionEn || '-');
@@ -917,8 +1016,8 @@
                 });
             }
 
-            // Sayfa yüklendiğinde soru listesini yükle
-            loadQuestions();
+            // Sayfa yüklendiğinde soru listesini yükle (sadece AJAX ile yükleme yapılmıyorsa)
+            // İlk yükleme zaten server-side yapılıyor, bu yüzden sadece event binding yapıyoruz
 
         });
     </script>
