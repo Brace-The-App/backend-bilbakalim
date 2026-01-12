@@ -1016,9 +1016,6 @@
                 });
             }
 
-            // Sayfa yüklendiğinde soru listesini yükle (sadece AJAX ile yükleme yapılmıyorsa)
-            // İlk yükleme zaten server-side yapılıyor, bu yüzden sadece event binding yapıyoruz
-
         });
     </script>
 @endpush
