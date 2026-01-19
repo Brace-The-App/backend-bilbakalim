@@ -153,7 +153,10 @@
                                             data-question-count="{{ $tournament->question_count }}"
                                             data-difficulty="{{ $tournament->difficulty_level }}"
                                             data-status="{{ $tournament->status }}"
-                                            data-featured="{{ $tournament->is_featured }}">Düzenle</button>
+                                            data-featured="{{ $tournament->is_featured }}"
+                                            data-tournament-type="{{ $tournament->tournament_type ?? 'question_based' }}"
+                                            data-min-participants="{{ $tournament->min_participants ?? 1 }}"
+                                            data-awards="{{ json_encode($tournament->awards) }}">Düzenle</button>
                                     @endcan
                                     @can('delete tournaments')
                                     <button type="button" class="btn btn-sm btn-danger" onclick="deleteTournament({{ $tournament->id }})">Sil</button>
@@ -224,20 +227,36 @@
             </div>
             <div class="col-md-6">
               <div class="mb-3">
-                <label for="duration_minutes" class="form-label">Süre (Dakika) <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" min="1" required>
+                <label for="tournament_type" class="form-label">Turnuva Türü <span class="text-danger">*</span></label>
+                <select class="form-select" id="tournament_type" name="tournament_type" required onchange="updateTournamentSettings()">
+                  <option value="">Seçiniz</option>
+                  <option value="question_based">Soru Bazlı (Question Based)</option>
+                  <option value="time_based">Süre Bazlı (Time Based)</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="min_participants" class="form-label">Minimum Katılımcı Sayısı <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="min_participants" name="min_participants" min="1" value="1" required>
+              </div>
+            </div>
+            <div class="col-md-6" id="questionCountGroup">
+              <div class="mb-3">
+                <label for="question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="question_count" name="question_count" min="1" placeholder="Soru sayısı">
+              </div>
+            </div>
+            <div class="col-md-6" id="durationGroup" style="display: none;">
+              <div class="mb-3">
+                <label for="duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
               </div>
             </div>
             <div class="col-md-6">
               <div class="mb-3">
                 <label for="entry_fee" class="form-label">Giriş Tokeni (₺) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control" id="entry_fee" name="entry_fee" step="0.01" min="0" required>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label for="question_count" class="form-label">Soru Sayısı <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="question_count" name="question_count" min="1" required>
               </div>
             </div>
             <div class="col-md-6">
@@ -277,6 +296,24 @@
                     Öne Çıkan
                   </label>
                 </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="mb-3">
+                <label for="reward_type" class="form-label">Ödül Tipi <span class="text-danger">*</span></label>
+                <select class="form-select" id="reward_type" name="reward_type" required>
+                  <option value="">Seçiniz</option>
+                  <option value="coin">Coin</option>
+                  <option value="gift_card">Hediye Kartı</option>
+                  <option value="product">Ürün</option>
+                  <option value="discount">İndirim</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="mb-3">
+                <label for="reward_value" class="form-label">Ödül Değeri <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="reward_value" name="reward_value" step="0.01" min="0" placeholder="Ödül değeri (coin için miktar, diğerleri için ₺)" required>
               </div>
             </div>
           </div>
@@ -341,20 +378,36 @@
             </div>
             <div class="col-md-6">
               <div class="mb-3">
-                <label for="edit-duration_minutes" class="form-label">Süre (Dakika) <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="edit-duration_minutes" name="duration_minutes" min="1" required>
+                <label for="edit-tournament_type" class="form-label">Turnuva Türü <span class="text-danger">*</span></label>
+                <select class="form-select" id="edit-tournament_type" name="tournament_type" required onchange="updateEditTournamentSettings()">
+                  <option value="">Seçiniz</option>
+                  <option value="question_based">Soru Bazlı (Question Based)</option>
+                  <option value="time_based">Süre Bazlı (Time Based)</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="edit-min_participants" class="form-label">Minimum Katılımcı Sayısı <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="edit-min_participants" name="min_participants" min="1" value="1" required>
+              </div>
+            </div>
+            <div class="col-md-6" id="editQuestionCountGroup">
+              <div class="mb-3">
+                <label for="edit-question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="edit-question_count" name="question_count" min="1" placeholder="Soru sayısı">
+              </div>
+            </div>
+            <div class="col-md-6" id="editDurationGroup" style="display: none;">
+              <div class="mb-3">
+                <label for="edit-duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="edit-duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
               </div>
             </div>
             <div class="col-md-6">
               <div class="mb-3">
                 <label for="edit-entry_fee" class="form-label">Giriş Tokeni (₺) <span class="text-danger">*</span></label>
                 <input type="number" class="form-control" id="edit-entry_fee" name="entry_fee" step="0.01" min="0" required>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label for="edit-question_count" class="form-label">Soru Sayısı <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="edit-question_count" name="question_count" min="1" required>
               </div>
             </div>
             <div class="col-md-6">
@@ -394,6 +447,24 @@
                     Öne Çıkan
                   </label>
                 </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="mb-3">
+                <label for="edit-reward_type" class="form-label">Ödül Tipi <span class="text-danger">*</span></label>
+                <select class="form-select" id="edit-reward_type" name="reward_type" required>
+                  <option value="">Seçiniz</option>
+                  <option value="coin">Coin</option>
+                  <option value="gift_card">Hediye Kartı</option>
+                  <option value="product">Ürün</option>
+                  <option value="discount">İndirim</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="mb-3">
+                <label for="edit-reward_value" class="form-label">Ödül Değeri <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="edit-reward_value" name="reward_value" step="0.01" min="0" placeholder="Ödül değeri (coin için miktar, diğerleri için ₺)" required>
               </div>
             </div>
           </div>
@@ -516,12 +587,75 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
+    // Turnuva türü değiştiğinde ayarları güncelle (Create)
+    window.updateTournamentSettings = function() {
+        const tournamentType = $('#tournament_type').val();
+        const questionCountGroup = $('#questionCountGroup');
+        const durationGroup = $('#durationGroup');
+        const questionCount = $('#question_count');
+        const durationMinutes = $('#duration_minutes');
+
+        if (tournamentType === 'question_based') {
+            questionCountGroup.show();
+            durationGroup.hide();
+            questionCount.prop('required', true);
+            durationMinutes.prop('required', false);
+        } else if (tournamentType === 'time_based') {
+            questionCountGroup.hide();
+            durationGroup.show();
+            questionCount.prop('required', false);
+            durationMinutes.prop('required', true);
+        } else {
+            questionCountGroup.hide();
+            durationGroup.hide();
+            questionCount.prop('required', false);
+            durationMinutes.prop('required', false);
+        }
+    };
+
+    // Turnuva türü değiştiğinde ayarları güncelle (Edit)
+    window.updateEditTournamentSettings = function() {
+        const tournamentType = $('#edit-tournament_type').val();
+        const questionCountGroup = $('#editQuestionCountGroup');
+        const durationGroup = $('#editDurationGroup');
+        const questionCount = $('#edit-question_count');
+        const durationMinutes = $('#edit-duration_minutes');
+
+        if (tournamentType === 'question_based') {
+            questionCountGroup.show();
+            durationGroup.hide();
+            questionCount.prop('required', true);
+            durationMinutes.prop('required', false);
+        } else if (tournamentType === 'time_based') {
+            questionCountGroup.hide();
+            durationGroup.show();
+            questionCount.prop('required', false);
+            durationMinutes.prop('required', true);
+        } else {
+            questionCountGroup.hide();
+            durationGroup.hide();
+            questionCount.prop('required', false);
+            durationMinutes.prop('required', false);
+        }
+    };
+
     // Create Tournament
     $('#tournamentCreateForm').on('submit', function(e) {
         e.preventDefault();
         
         var formData = new FormData(this);
         var url = '{{ route("admin.tournaments.store") }}';
+        
+        // Ödül bilgilerini awards JSON formatına çevir
+        var rewardType = $('#reward_type').val();
+        var rewardValue = $('#reward_value').val();
+        if (rewardType && rewardValue) {
+            var awards = {
+                type: rewardType,
+                value: parseFloat(rewardValue)
+            };
+            formData.append('awards', JSON.stringify(awards));
+        }
         
         $.ajax({
             url: url,
@@ -534,6 +668,10 @@ $(document).ready(function() {
                 toastr.success('Turnuva başarıyla oluşturuldu!');
                 loadTournaments();
                 $('#tournamentCreateForm')[0].reset();
+                // Form reset edildikten sonra ayarları güncelle
+                setTimeout(function() {
+                    updateTournamentSettings();
+                }, 100);
             },
             error: function(xhr) {
                 if (xhr.status === 422) {
@@ -624,6 +762,9 @@ $(document).ready(function() {
         var difficulty = button.data('difficulty');
         var status = button.data('status');
         var featured = button.data('featured');
+        var tournamentType = button.data('tournament-type') || 'question_based';
+        var minParticipants = button.data('min-participants') || 1;
+        var awards = button.data('awards');
         
         $('#edit-title').val(title);
         $('#edit-description').val(description);
@@ -637,6 +778,19 @@ $(document).ready(function() {
         $('#edit-difficulty_level').val(difficulty);
         $('#edit-status').val(status);
         $('#edit-is_featured').prop('checked', featured);
+        $('#edit-tournament_type').val(tournamentType);
+        $('#edit-min_participants').val(minParticipants);
+        
+        // Awards bilgilerini doldur
+        if (awards) {
+            var awardsData = typeof awards === 'string' ? JSON.parse(awards) : awards;
+            if (awardsData && awardsData.type) {
+                $('#edit-reward_type').val(awardsData.type);
+                $('#edit-reward_value').val(awardsData.value);
+            }
+        }
+        
+        updateEditTournamentSettings(); // Tür seçimine göre alanları göster/gizle
         $('#tournamentEditForm').attr('action', '/private/lesley/admin/tournaments/' + id);
     });
 
@@ -646,6 +800,17 @@ $(document).ready(function() {
         
         var formData = new FormData(this);
         var url = $(this).attr('action');
+        
+        // Ödül bilgilerini awards JSON formatına çevir
+        var rewardType = $('#edit-reward_type').val();
+        var rewardValue = $('#edit-reward_value').val();
+        if (rewardType && rewardValue) {
+            var awards = {
+                type: rewardType,
+                value: parseFloat(rewardValue)
+            };
+            formData.append('awards', JSON.stringify(awards));
+        }
         
         $.ajax({
             url: url,

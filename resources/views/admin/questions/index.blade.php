@@ -641,6 +641,16 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
+            // URL'den sayfa numarasını al
+            function getCurrentPageFromUrl() {
+                var urlParams = new URLSearchParams(window.location.search);
+                var page = urlParams.get('page');
+                return page ? parseInt(page) : null;
+            }
+            
+            // Mevcut sayfa numarasını sakla
+            var currentPage = getCurrentPageFromUrl() || 1;
+            
             // Toastr configuration
             toastr.options = {
                 "closeButton": true,
@@ -682,8 +692,8 @@
                         $('#questionCreateModal').modal('hide');
                         // Show success message
                         toastr.success('Soru başarıyla oluşturuldu!');
-                        // Reload data without page refresh
-                        loadQuestions();
+                        // Reload data without page refresh - mevcut sayfada kal
+                        loadQuestions(currentPage);
                         // Reset form
                         $('#questionCreateModal form')[0].reset();
                     },
@@ -726,8 +736,8 @@
                         $('#questionEditModal').modal('hide');
                         // Show success message
                         toastr.success('Soru başarıyla güncellendi!');
-                        // Reload data without page refresh
-                        loadQuestions();
+                        // Reload data without page refresh - mevcut sayfada kal
+                        loadQuestions(currentPage);
                     },
                     error: function(xhr) {
                         if (xhr.status === 422) {
@@ -748,7 +758,14 @@
 
 
             // Load Questions Function
-            function loadQuestions(page = 1) {
+            function loadQuestions(page = null) {
+                // Sayfa belirtilmemişse mevcut sayfayı kullan
+                if (page === null) {
+                    page = currentPage;
+                } else {
+                    currentPage = page; // Sayfa numarasını güncelle
+                }
+                
                 // Form verilerini al
                 var formData = $('#filterForm').serialize();
                 if (page > 1) {
@@ -772,6 +789,17 @@
 
                         // Update pagination
                         $('#questionsPagination').html(pagination);
+                        
+                        // URL'yi güncelle (sayfa numarasını ekle)
+                        var newUrl = formUrl;
+                        if (formData) {
+                            newUrl += '?' + formData;
+                        } else if (page > 1) {
+                            newUrl += '?page=' + page;
+                        }
+                        if (window.history && window.history.pushState) {
+                            window.history.pushState({}, '', newUrl);
+                        }
 
                         // Re-bind edit modal events
                         bindQuestionEditModalEvents();
@@ -925,8 +953,13 @@
             // Pagination Click Handler
             $(document).on('click', '.pagination a', function(e) {
                 e.preventDefault();
-                var page = $(this).attr('href').split('page=')[1];
-                loadQuestions(page);
+                var href = $(this).attr('href');
+                var page = 1;
+                if (href && href.includes('page=')) {
+                    page = href.split('page=')[1].split('&')[0];
+                }
+                currentPage = parseInt(page) || 1;
+                loadQuestions(currentPage);
             });
 
             // Remove Image Function
@@ -950,8 +983,8 @@
                         success: function(response) {
                             if (response.success) {
                                 toastr.success(response.message);
-                                // Reload data without page refresh
-                                loadQuestions();
+                                // Reload data without page refresh - mevcut sayfada kal
+                                loadQuestions(currentPage);
                             } else {
                                 toastr.error(response.message);
                             }
@@ -986,32 +1019,32 @@
                 // Socket bağlantısı kurulduğunda soru listesini yükle
                 window.socketClient.socket.on('connect', function() {
                     console.log('Socket bağlandı, soru listesi yükleniyor...');
-                    loadQuestions();
+                    loadQuestions(currentPage);
                 });
 
                 // Soru güncellemelerini dinle
                 window.socketClient.socket.on('question_created', function(data) {
                     console.log('Yeni soru oluşturuldu:', data);
-                    loadQuestions(); // Sayfayı yenile
+                    loadQuestions(currentPage); // Mevcut sayfada kal
                     toastr.success('Yeni soru eklendi!', 'BilBakalim');
                 });
 
                 window.socketClient.socket.on('question_updated', function(data) {
                     console.log('Soru güncellendi:', data);
-                    loadQuestions(); // Sayfayı yenile
+                    loadQuestions(currentPage); // Mevcut sayfada kal
                     toastr.info('Soru güncellendi!', 'BilBakalim');
                 });
 
                 window.socketClient.socket.on('question_deleted', function(data) {
                     console.log('Soru silindi:', data);
-                    loadQuestions(); // Sayfayı yenile
+                    loadQuestions(currentPage); // Mevcut sayfada kal
                     toastr.warning('Soru silindi!', 'BilBakalim');
                 });
 
                 // Kategori güncellemelerini dinle
                 window.socketClient.socket.on('category_updated', function(data) {
                     console.log('Kategori güncellendi:', data);
-                    loadQuestions(); // Sayfayı yenile
+                    loadQuestions(currentPage); // Mevcut sayfada kal
                     toastr.info('Kategori güncellendi!', 'BilBakalim');
                 });
             }
