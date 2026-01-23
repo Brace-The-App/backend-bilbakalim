@@ -74,6 +74,29 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
+        // Aktif turnuva katılımı kontrolü - Kullanıcı başka bir turnuvada aktif mi?
+        // Hangi token ile olursa olsun, kullanıcının aktif bir turnuvası varsa başka turnuvaya katılamaz
+        $activeParticipation = TournamentUser::where('user_id', $user->id)
+            ->whereIn('status', ['waiting', 'active'])
+            ->whereHas('tournament', function($query) {
+                $query->whereIn('status', ['upcoming', 'active']);
+            })
+            ->with('tournament:id,title,status')
+            ->first();
+
+        if ($activeParticipation) {
+            $activeTournament = $activeParticipation->tournament;
+            $statusText = $activeParticipation->status === 'waiting' ? 'beklemede' : 'aktif';
+            return response()->json([
+                'success' => false,
+                'message' => "Başka bir turnuvaya zaten katılmışsınız. Önce mevcut turnuvanızı bitirmeniz gerekiyor. (Turnuva ID: {$activeTournament->id}, Durum: {$statusText})",
+                'active_tournament_id' => $activeTournament->id,
+                'active_tournament_title' => $activeTournament->title,
+                'active_tournament_status' => $activeTournament->status,
+                'participation_status' => $activeParticipation->status
+            ], 400);
+        }
+
         // Socket bağlantısı kontrolü - turnuvaya katılmak için socket bağlantısı zorunlu
         $webhookService = app(\App\Http\Services\WebhookService::class);
         $isSocketConnected = $webhookService->checkUserConnection($user->id);
@@ -93,7 +116,7 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
-        // Zaten katılmış mı kontrol et
+        // Zaten bu turnuvaya katılmış mı kontrol et
         $existingParticipation = TournamentUser::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
             ->first();
@@ -297,6 +320,29 @@ class TournamentQuizController extends Controller
 
         $user = Auth::user();
         $minParticipants = $request->min_participants ?? config('app.tournament.min_participants', 2);
+
+        // Aktif turnuva katılımı kontrolü - Kullanıcı başka bir turnuvada aktif mi?
+        // Hangi token ile olursa olsun, kullanıcının aktif bir turnuvası varsa başka turnuvaya katılamaz
+        $activeParticipation = TournamentUser::where('user_id', $user->id)
+            ->whereIn('status', ['waiting', 'active'])
+            ->whereHas('tournament', function($query) {
+                $query->whereIn('status', ['upcoming', 'active']);
+            })
+            ->with('tournament:id,title,status')
+            ->first();
+
+        if ($activeParticipation) {
+            $activeTournament = $activeParticipation->tournament;
+            $statusText = $activeParticipation->status === 'waiting' ? 'beklemede' : 'aktif';
+            return response()->json([
+                'success' => false,
+                'message' => "Başka bir turnuvaya zaten katılmışsınız. Önce mevcut turnuvanızı bitirmeniz gerekiyor. (Turnuva ID: {$activeTournament->id}, Durum: {$statusText})",
+                'active_tournament_id' => $activeTournament->id,
+                'active_tournament_title' => $activeTournament->title,
+                'active_tournament_status' => $activeTournament->status,
+                'participation_status' => $activeParticipation->status
+            ], 400);
+        }
 
         // Socket bağlantısı kontrolü - turnuvaya katılmak için socket bağlantısı zorunlu
         $webhookService = app(\App\Http\Services\WebhookService::class);
@@ -2247,10 +2293,15 @@ class TournamentQuizController extends Controller
                 ? "Turnuva başlamaya hazır! ({$currentParticipants}/{$minParticipants})"
                 : "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
 
+            // Kullanıcının avatar URL'ini al
+            $user->load('avatarModel');
+            $avatarUrl = $this->getUserAvatarUrl($user);
+
             $response = Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/user-joined-tournament", [
                 'tournament_id' => $tournament->id,
                 'user_id' => $user->id,
                 'user_name' => $user->name,
+                'user_avatar' => $avatarUrl,
                 'current_participants' => $currentParticipants,
                 'min_participants' => $minParticipants,
                 'ready_to_start' => $readyToStart,
@@ -2614,18 +2665,15 @@ class TournamentQuizController extends Controller
         // Waiting durumundaki (henüz katılmamış) kullanıcıları gösterme
         return TournamentUser::where('tournament_id', $tournament->id)
             ->whereIn('status', ['active', 'eliminated', 'completed'])
-            ->with('user:id,name,avatar,profile_image')
+            ->with(['user:id,name,avatar,profile_image', 'user.avatarModel'])
             ->orderBy('score', 'desc')
             ->orderBy('total_time_seconds', 'asc')
             ->get()
             ->map(function ($participant) {
                 $user = $participant->user;
 
-                // Profil görseli tam URL
-                $profileImageUrl = null;
-                if ($user && !empty($user->profile_image)) {
-                    $profileImageUrl = $this->formatProfileImageUrl($user->profile_image);
-                }
+                // Avatar veya profil görseli tam URL
+                $avatarUrl = $this->getUserAvatarUrl($user);
 
                 return [
                     'user' => $user,
@@ -2635,7 +2683,8 @@ class TournamentQuizController extends Controller
                     'wrong_answers' => $participant->wrong_answers,
                     'status' => $participant->status,
                     'rank' => $participant->rank,
-                    'profile_image' => $profileImageUrl,
+                    'profile_image' => $avatarUrl,
+                    'avatar' => $avatarUrl, // Geriye uyumluluk için
                 ];
             });
     }
@@ -2754,6 +2803,28 @@ class TournamentQuizController extends Controller
         // Tam URL oluştur
         $baseUrl = config('app.url', 'https://bilbakalim.online');
         return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
+    }
+
+    /**
+     * Kullanıcının avatar URL'ini al (avatar varsa avatar, yoksa profile_image)
+     */
+    private function getUserAvatarUrl(?User $user): ?string
+    {
+        if (!$user) {
+            return null;
+        }
+
+        // Önce avatar kontrol et
+        if ($user->avatarModel && $user->avatarModel->image_url) {
+            return $user->avatarModel->image_url;
+        }
+
+        // Avatar yoksa profile_image kontrol et
+        if (!empty($user->profile_image)) {
+            return $this->formatProfileImageUrl($user->profile_image);
+        }
+
+        return null;
     }
 
     /**

@@ -605,7 +605,7 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
     try {
         console.log('📥 Webhook alındı: user-joined-tournament', JSON.stringify(req.body));
 
-        const { tournament_id, user_id, user_name, current_participants, min_participants, waiting_message, ready_to_start } = req.body;
+        const { tournament_id, user_id, user_name, user_avatar, current_participants, min_participants, waiting_message, ready_to_start } = req.body;
 
         if (!tournament_id || !user_id) {
             console.error('❌ Webhook: tournament_id veya user_id eksik', req.body);
@@ -630,6 +630,8 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
             user_id: parseInt(user_id),
             name: user_name || `User ${user_id}`,
             user_name: user_name || `User ${user_id}`, // Geriye uyumluluk için
+            user_avatar: user_avatar || null, // Avatar URL'i
+            avatar: user_avatar || null, // Geriye uyumluluk için
             current_participants: parseInt(current_participants) || 0,
             min_participants: parseInt(min_participants) || 2,
             ready_to_start: ready_to_start === true || ready_to_start === 'true' || ready_to_start === 1,
@@ -649,6 +651,8 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
             tournament_id,
             user_id,
             user_name,
+            user_avatar: user_avatar || null,
+            avatar: user_avatar || null,
             current_participants,
             min_participants,
             waiting_message,

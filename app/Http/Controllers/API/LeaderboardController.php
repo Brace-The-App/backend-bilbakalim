@@ -60,11 +60,12 @@ class LeaderboardController extends Controller
 
         $result = $dailyWinners->map(function ($item, $index) use ($today) {
             $user = User::with('avatarModel')->find($item->user_id);
+            $avatarUrl = $this->getUserAvatarUrl($user);
             return [
                 'rank' => $index + 1,
                 'user_id' => $item->user_id,
                 'name' => $user ? trim($user->name . ' ' . $user->surname) : 'Bilinmeyen',
-                'avatar' => $user && $user->avatarModel ? $user->avatarModel->image_url : null,
+                'avatar' => $avatarUrl,
                 'coins_earned' => (int) $item->total_coins,
                 'date' => $today->format('Y-m-d')
             ];
@@ -124,11 +125,12 @@ class LeaderboardController extends Controller
 
         $result = $weeklyWinners->map(function ($item, $index) use ($weekStart, $weekEnd) {
             $user = User::with('avatarModel')->find($item->user_id);
+            $avatarUrl = $this->getUserAvatarUrl($user);
             return [
                 'rank' => $index + 1,
                 'user_id' => $item->user_id,
                 'name' => $user ? trim($user->name . ' ' . $user->surname) : 'Bilinmeyen',
-                'avatar' => $user && $user->avatarModel ? $user->avatarModel->image_url : null,
+                'avatar' => $avatarUrl,
                 'coins_earned' => (int) $item->total_coins,
                 'week_start' => $weekStart->format('Y-m-d'),
                 'week_end' => $weekEnd->format('Y-m-d')
@@ -222,11 +224,12 @@ class LeaderboardController extends Controller
 
         $dailyResult = $dailyWinners->map(function ($item, $index) use ($today) {
             $user = User::with('avatarModel')->find($item->user_id);
+            $avatarUrl = $this->getUserAvatarUrl($user);
             return [
                 'rank' => $index + 1,
                 'user_id' => $item->user_id,
                 'name' => $user ? trim($user->name . ' ' . $user->surname) : 'Bilinmeyen',
-                'avatar' => $user && $user->avatarModel ? $user->avatarModel->image_url : null,
+                'avatar' => $avatarUrl,
                 'coins_earned' => (int) $item->total_coins,
                 'date' => $today->format('Y-m-d')
             ];
@@ -247,11 +250,12 @@ class LeaderboardController extends Controller
 
         $weeklyResult = $weeklyWinners->map(function ($item, $index) use ($weekStart, $weekEnd) {
             $user = User::with('avatarModel')->find($item->user_id);
+            $avatarUrl = $this->getUserAvatarUrl($user);
             return [
                 'rank' => $index + 1,
                 'user_id' => $item->user_id,
                 'name' => $user ? trim($user->name . ' ' . $user->surname) : 'Bilinmeyen',
-                'avatar' => $user && $user->avatarModel ? $user->avatarModel->image_url : null,
+                'avatar' => $avatarUrl,
                 'coins_earned' => (int) $item->total_coins,
                 'week_start' => $weekStart->format('Y-m-d'),
                 'week_end' => $weekEnd->format('Y-m-d')
@@ -275,11 +279,12 @@ class LeaderboardController extends Controller
 
             $tournamentWinnersList = $tournamentWinners->map(function ($participant, $index) {
                 $user = $participant->user;
+                $avatarUrl = $this->getUserAvatarUrl($user);
                 return [
                     'rank' => $participant->rank ?? ($index + 1),
                     'user_id' => $participant->user_id,
                     'name' => $user ? trim($user->name . ' ' . $user->surname) : 'Bilinmeyen',
-                    'avatar' => $user && $user->avatarModel ? $user->avatarModel->image_url : null,
+                    'avatar' => $avatarUrl,
                     'score' => (int) $participant->score,
                     'correct_answers' => (int) $participant->correct_answers
                 ];
@@ -301,5 +306,41 @@ class LeaderboardController extends Controller
                 'tournament' => $tournamentResult
             ]
         ]);
+    }
+
+    /**
+     * Kullanıcının avatar URL'ini al (avatar varsa avatar, yoksa profile_image)
+     */
+    private function getUserAvatarUrl(?User $user): ?string
+    {
+        if (!$user) {
+            return null;
+        }
+
+        // Önce avatar kontrol et
+        if ($user->avatarModel && $user->avatarModel->image_url) {
+            return $user->avatarModel->image_url;
+        }
+
+        // Avatar yoksa profile_image kontrol et
+        if (!empty($user->profile_image)) {
+            $baseUrl = config('app.url', 'https://bilbakalim.online');
+            // Eğer zaten tam URL ise, olduğu gibi döndür
+            if (filter_var($user->profile_image, FILTER_VALIDATE_URL)) {
+                return $user->profile_image;
+            }
+            // Eğer storage/profile_images/ ile başlıyorsa, sadece profile_images/ kısmını al
+            $imagePath = $user->profile_image;
+            if (strpos($imagePath, 'storage/profile_images/') !== false) {
+                $imagePath = str_replace('storage/profile_images/', 'profile_images/', $imagePath);
+            }
+            // Eğer profile_images/ ile başlamıyorsa, ekle
+            if (strpos($imagePath, 'profile_images/') !== 0) {
+                $imagePath = 'profile_images/' . ltrim($imagePath, '/');
+            }
+            return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
+        }
+
+        return null;
     }
 }
