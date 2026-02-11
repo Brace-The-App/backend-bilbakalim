@@ -103,18 +103,18 @@ class SocketClient {
     async getQuestions(categoryId = null, search = '', page = 1, perPage = 15) {
         try {
             let url = `http://localhost:3001/api/questions?page=${page}&per_page=${perPage}`;
-            
+
             if (categoryId) {
                 url += `&categoryId=${categoryId}`;
             }
-            
+
             if (search) {
                 url += `&search=${encodeURIComponent(search)}`;
             }
 
             const response = await fetch(url);
             const data = await response.json();
-            
+
             if (data.success) {
                 return data;
             } else {
@@ -131,7 +131,7 @@ class SocketClient {
         try {
             const response = await fetch('http://localhost:3001/api/categories');
             const data = await response.json();
-            
+
             if (data.success) {
                 return data;
             } else {
@@ -172,7 +172,7 @@ class SocketClient {
         }
 
         // Sayfa yenileme (eğer sorular sayfasındaysa)
-        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
+        if (window.location.pathname.includes('/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -183,7 +183,7 @@ class SocketClient {
             toastr.info('Soru güncellendi!', 'BilBakalim');
         }
 
-        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
+        if (window.location.pathname.includes('/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -194,7 +194,7 @@ class SocketClient {
             toastr.warning('Soru silindi!', 'BilBakalim');
         }
 
-        if (window.location.pathname.includes('/private/lesley/admin/questions')) {
+        if (window.location.pathname.includes('/admin/questions')) {
             this.refreshQuestionsList();
         }
     }
@@ -226,7 +226,7 @@ class SocketClient {
         if (typeof $ !== 'undefined' && $('#questions-table').length) {
             // AJAX ile sorular listesini yenile
             $.ajax({
-                url: '/private/lesley/admin/questions',
+                url: '/admin/questions',
                 method: 'GET',
                 success: function(response) {
                     // Tabloyu güncelle
@@ -240,7 +240,7 @@ class SocketClient {
     refreshCategoriesList() {
         if (typeof $ !== 'undefined' && $('#categories-table').length) {
             $.ajax({
-                url: '/private/lesley/admin/categories',
+                url: '/admin/categories',
                 method: 'GET',
                 success: function(response) {
                     $('#categories-table tbody').html(response);
@@ -253,7 +253,7 @@ class SocketClient {
     refreshTournamentsList() {
         if (typeof $ !== 'undefined' && $('#tournaments-table').length) {
             $.ajax({
-                url: '/private/lesley/admin/tournaments',
+                url: '/admin/tournaments',
                 method: 'GET',
                 success: function(response) {
                     $('#tournaments-table tbody').html(response);
@@ -280,7 +280,7 @@ $(document).ready(function() {
     // Kullanıcı bilgilerini al
     const userId = $('meta[name="user-id"]').attr('content');
     const token = $('meta[name="api-token"]').attr('content');
-    
+
     if (userId && token) {
         window.socketClient.connect(userId, token);
     }

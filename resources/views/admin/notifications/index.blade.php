@@ -355,11 +355,11 @@ $(document).ready(function() {
     // Bildirim Gönderme
     $('#notificationSendForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = new FormData(this);
-        
+
         $.ajax({
-            url: '/private/lesley/admin/notifications/send',
+            url: '/admin/notifications/send',
             type: 'POST',
             data: formData,
             processData: false,
@@ -394,7 +394,7 @@ $(document).ready(function() {
     $('#send-type').on('change', function() {
         var type = $(this).val();
         var helpText = $('#send-type-help');
-        
+
         switch(type) {
             case 'email':
                 helpText.text('Email: Tüm kullanıcılara email gönderir');
@@ -418,7 +418,7 @@ $(document).ready(function() {
         var type = button.data('type');
         var sendAt = button.data('send-at');
         var active = button.data('active');
-        
+
         $('#edit-id').val(id);
         $('#edit-title').val(title);
         $('#edit-content').val(content);
@@ -430,19 +430,19 @@ $(document).ready(function() {
     // Bildirim Güncelleme
     $('#notificationEditForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = new FormData(this);
         formData.set('is_active', $('#edit-active').is(':checked') ? '1' : '0');
         var notificationId = $('#edit-id').val();
-        
+
         // Debug: Form verilerini kontrol et
         console.log('Edit Form Data:');
         for (var pair of formData.entries()) {
             console.log(pair[0] + ': ' + pair[1]);
         }
-        
+
         $.ajax({
-            url: '/private/lesley/admin/notifications/' + notificationId,
+            url: '/admin/notifications/' + notificationId,
             type: 'PUT',
             data: formData,
             processData: false,
@@ -481,7 +481,7 @@ $(document).ready(function() {
         var type = button.data('type');
         var sendAt = button.data('send-at');
         var active = button.data('active');
-        
+
         $('#show-title').text(title);
         $('#show-content').text(content);
         $('#show-type').html('<span class="badge bg-' + getTypeColor(type) + '">' + type.toUpperCase() + '</span>');
@@ -507,11 +507,11 @@ function loadNotifications(page = 1) {
     var search = $('#searchInput').val();
     var type = $('#typeFilter').val();
     var status = $('#statusFilter').val();
-    
+
     $.ajax({
-        url: '/private/lesley/admin/notifications',
+        url: '/admin/notifications',
         type: 'GET',
-        data: { 
+        data: {
             page: page,
             search: search,
             type: type,
@@ -520,10 +520,10 @@ function loadNotifications(page = 1) {
         success: function(response) {
             var tableBody = $(response).find('#notificationsTableBody').html();
             var pagination = $(response).find('#notificationsPagination').html();
-            
+
             $('#notificationsTableBody').html(tableBody);
             $('#notificationsPagination').html(pagination);
-            
+
             // Feather icon'ları yeniden initialize et
             if (typeof feather !== 'undefined') {
                 feather.replace();
@@ -557,7 +557,7 @@ function getTypeColor(type) {
 function deleteNotification(id, title) {
     if (confirm('"' + title + '" bildirimini silmek istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/private/lesley/admin/notifications/' + id,
+            url: '/admin/notifications/' + id,
             type: 'DELETE',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content')

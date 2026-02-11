@@ -22,7 +22,7 @@ Route::get('/', function () {
 })->name('welcome');
 
 // Admin login redirect
-Route::get('/private/lesley/admin', function () {
+Route::get('/admin', function () {
     if (auth()->check()) {
         return redirect()->route('admin.dashboard');
     }
@@ -30,7 +30,7 @@ Route::get('/private/lesley/admin', function () {
 })->name('admin');
 
 // Auth routes - Login & Logout
-Route::get('/private/lesley/login', function () {
+Route::get('/login', function () {
     return view('admin.auth.login');
 })->name('login')->middleware('guest');
 
@@ -44,31 +44,31 @@ Route::post('/logout', function () {
 // Admin panel routes
 Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    
+
     // Users management
     Route::resource('users', UserController::class);
-    
+
     // Categories management
     Route::resource('categories', CategoryController::class);
-    
+
     // Questions management
     Route::resource('questions', QuestionController::class);
-    
+
     // Tournaments management
     Route::resource('tournaments', TournamentController::class);
-    
+
     // General Settings management
     Route::resource('general-settings', GeneralSettingController::class);
     Route::post('general-settings/upload-logo', [GeneralSettingController::class, 'uploadLogo'])->name('general-settings.upload-logo');
     Route::post('general-settings/upload-favicon', [GeneralSettingController::class, 'uploadFavicon'])->name('general-settings.upload-favicon');
-    
+
     // Permission management
     Route::get('permissions', [PermissionController::class, 'index'])->name('permissions.index');
     Route::post('permissions/roles', [PermissionController::class, 'createRole'])->name('permissions.roles.create');
     Route::put('permissions/roles/{role}', [PermissionController::class, 'updateRole'])->name('permissions.roles.update');
     Route::delete('permissions/roles/{role}', [PermissionController::class, 'destroyRole'])->name('permissions.roles.destroy');
     Route::post('permissions/roles/{role}/permissions', [PermissionController::class, 'updateRolePermissions'])->name('permissions.roles.permissions.update');
-    
+
     // Notifications management
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
@@ -102,7 +102,7 @@ Route::get('private/lesley/jetwaldes/api/documentation', function () {
     $urlsToDocs = [
         'BilBakalim API' => asset('docs/api-docs.json')
     ];
-    
+
     return view('l5-swagger::index', compact('documentation', 'documentationTitle', 'urlsToDocs', 'useAbsolutePath'));
 })->name('l5-swagger.default.docs');
 

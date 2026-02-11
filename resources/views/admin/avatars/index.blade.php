@@ -43,7 +43,7 @@
                             <tr>
                                 <td>{{ $avatar->id }}</td>
                                 <td>
-                                    <img src="{{ $avatar->image_url }}" alt="Avatar {{ $avatar->id }}" 
+                                    <img src="{{ $avatar->image_url }}" alt="Avatar {{ $avatar->id }}"
                                          style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%;">
                                 </td>
                                 <td>{{ $avatar->sort_order }}</td>
@@ -140,7 +140,7 @@
       </div>
       <div class="modal-body">
         <div class="text-center mb-3">
-          <img id="show-image" src="" alt="Avatar" 
+          <img id="show-image" src="" alt="Avatar"
                style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid #ddd;">
         </div>
         <div class="row">
@@ -188,7 +188,7 @@
             <div class="col-12">
               <label class="form-label">Mevcut Görsel</label>
               <div class="text-center mb-2">
-                <img id="edit-current-image" src="" alt="Avatar" 
+                <img id="edit-current-image" src="" alt="Avatar"
                      style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 2px solid #ddd;">
               </div>
             </div>
@@ -337,7 +337,7 @@ $(document).ready(function() {
     // Load Avatars Function
     function loadAvatars(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/avatars',
+            url: '/admin/avatars',
             type: 'GET',
             data: { page: page },
             success: function(response) {
@@ -374,7 +374,7 @@ $(document).ready(function() {
             $('#edit-current-image').attr('src', imageUrl);
             $('#edit-sort').val(sort);
             $('#edit-active').prop('checked', active == 1);
-            $('#avatarEditForm').attr('action', '/private/lesley/admin/avatars/' + id);
+            $('#avatarEditForm').attr('action', '/admin/avatars/' + id);
         });
     }
 
@@ -404,7 +404,7 @@ $(document).ready(function() {
     window.deleteAvatar = function(id) {
         if (confirm('Bu avatarı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/avatars/' + id,
+                url: '/admin/avatars/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE',

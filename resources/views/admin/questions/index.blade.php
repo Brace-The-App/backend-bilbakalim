@@ -647,10 +647,10 @@
                 var page = urlParams.get('page');
                 return page ? parseInt(page) : null;
             }
-            
+
             // Mevcut sayfa numarasını sakla
             var currentPage = getCurrentPageFromUrl() || 1;
-            
+
             // Toastr configuration
             toastr.options = {
                 "closeButton": true,
@@ -765,7 +765,7 @@
                 } else {
                     currentPage = page; // Sayfa numarasını güncelle
                 }
-                
+
                 // Form verilerini al
                 var formData = $('#filterForm').serialize();
                 if (page > 1) {
@@ -773,7 +773,7 @@
                 }
 
                 // Form action'dan URL'yi al
-                var formUrl = $('#filterForm').attr('action') || '/private/lesley/admin/questions';
+                var formUrl = $('#filterForm').attr('action') || '/admin/questions';
 
                 $.ajax({
                     url: formUrl,
@@ -789,7 +789,7 @@
 
                         // Update pagination
                         $('#questionsPagination').html(pagination);
-                        
+
                         // URL'yi güncelle (sayfa numarasını ekle)
                         var newUrl = formUrl;
                         if (formData) {
@@ -887,7 +887,7 @@
                     $('#edit-coin').val(coin);
                     $('#edit-active').prop('checked', active == 1);
                     $('#edit-category').val(category);
-                    $('#questionEditForm').attr('action', '/private/lesley/admin/questions/' + id);
+                    $('#questionEditForm').attr('action', '/admin/questions/' + id);
 
                     // Image handling
                     if (image) {
@@ -975,7 +975,7 @@
             window.deleteQuestion = function(id) {
                 if (confirm('Bu soruyu silmek istediğinizden emin misiniz?')) {
                     $.ajax({
-                        url: '/private/lesley/admin/questions/' + id,
+                        url: '/admin/questions/' + id,
                         type: 'POST',
                         data: {
                             _method: 'DELETE'

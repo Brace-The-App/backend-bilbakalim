@@ -90,7 +90,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Soru *</label>
@@ -165,7 +165,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Soru *</label>
@@ -211,14 +211,14 @@ $(document).ready(function() {
     // Create FAQ Form
     $('#faqCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -245,18 +245,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit FAQ Form
     $('#faqEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -282,42 +282,42 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#faqShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var question = button.data('question');
         var answer = button.data('answer');
-        
+
         $('#show-question').text(question);
         $('#show-answer').text(answer);
     });
-    
+
     // Edit Modal - Fill data
     $('#faqEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var id = button.data('id');
         var question = button.data('question');
         var answer = button.data('answer');
-        
+
         $('#edit-question').val(question);
         $('#edit-answer').val(answer);
-        $('#faqEditForm').attr('action', '/private/lesley/admin/landing/faqs/' + id);
+        $('#faqEditForm').attr('action', '/admin/landing/faqs/' + id);
     });
-    
+
     // Load FAQs Function
     function loadFaqs(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/landing/faqs',
+            url: '/admin/landing/faqs',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 var tableBody = $(response).find('#faqTableBody').html();
                 var pagination = $(response).find('#faqPagination').html();
-                
+
                 $('#faqTableBody').html(tableBody);
                 $('#faqPagination').html(pagination);
-                
+
                 bindEditModalEvents();
                 bindFaqShowModalEvents();
             },
@@ -326,7 +326,7 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Bind Edit Modal Events
     function bindEditModalEvents() {
         $('#faqEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
@@ -334,10 +334,10 @@ $(document).ready(function() {
             var id = button.data('id');
             var question = button.data('question');
             var answer = button.data('answer');
-            
+
             $('#edit-question').val(question);
             $('#edit-answer').val(answer);
-            $('#faqEditForm').attr('action', '/private/lesley/admin/landing/faqs/' + id);
+            $('#faqEditForm').attr('action', '/admin/landing/faqs/' + id);
         });
     }
 
@@ -347,24 +347,24 @@ $(document).ready(function() {
             var button = $(event.relatedTarget);
             var question = button.data('question');
             var answer = button.data('answer');
-            
+
             $('#show-question').text(question);
             $('#show-answer').text(answer);
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadFaqs(page);
     });
-    
+
     // Delete FAQ
     window.deleteFaq = function(id) {
         if (confirm('Bu SSS\'yi silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/landing/faqs/' + id,
+                url: '/admin/landing/faqs/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

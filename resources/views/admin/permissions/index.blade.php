@@ -25,15 +25,15 @@
                                 <div class="card-header d-flex justify-content-between align-items-center">
                                     <h6 class="card-title mb-0">{{ $role->display_name ?? ucfirst($role->name) }}</h6>
                                     <div class="btn-group btn-group-sm">
-                                     
-                                       
+
+
                                     </div>
                                 </div>
                                 <div class="card-body">
                                     @if($role->description)
                                         <p class="card-text text-muted small">{{ $role->description }}</p>
                                     @endif
-                                    
+
                                     <h6 class="mt-3 mb-2">Yetkiler:</h6>
                                     <div class="permission-list">
                                         @if($role->permissions->count() > 0)
@@ -58,10 +58,10 @@
                                             <span class="text-muted">Hiç yetki atanmamış</span>
                                         @endif
                                     </div>
-                                    
+
                                     <div class="mt-3">
-                                        <button class="btn btn-outline-primary btn-sm" 
-                                                data-bs-toggle="modal" 
+                                        <button class="btn btn-outline-primary btn-sm"
+                                                data-bs-toggle="modal"
                                                 data-bs-target="#permissionModal"
                                                 data-role-id="{{ $role->id }}"
                                                 data-role-name="{{ $role->name }}"
@@ -170,10 +170,10 @@
                                         <div class="card-body">
                                             @foreach($permissions as $permission)
                                                 <div class="form-check">
-                                                    <input class="form-check-input permission-checkbox" 
-                                                           type="checkbox" 
-                                                           name="permissions[]" 
-                                                           value="{{ $permission->id }}" 
+                                                    <input class="form-check-input permission-checkbox"
+                                                           type="checkbox"
+                                                           name="permissions[]"
+                                                           value="{{ $permission->id }}"
                                                            id="permission-{{ $permission->id }}">
                                                     <label class="form-check-label" for="permission-{{ $permission->id }}">
                                                         {{ $permission->name }}
@@ -203,11 +203,11 @@ $(document).ready(function() {
     // Rol Oluşturma
     $('#roleCreateForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = $(this).serialize();
-        
+
         $.ajax({
-            url: '/private/lesley/admin/permissions/roles',
+            url: '/admin/permissions/roles',
             type: 'POST',
             data: formData,
             success: function(response) {
@@ -243,7 +243,7 @@ $(document).ready(function() {
         var name = button.data('name');
         var displayName = button.data('display-name');
         var description = button.data('description');
-        
+
         $('#edit-role-id').val(id);
         $('#edit-name').val(name);
         $('#edit-display-name').val(displayName);
@@ -253,12 +253,12 @@ $(document).ready(function() {
     // Rol Güncelleme
     $('#roleEditForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = $(this).serialize();
         var roleId = $('#edit-role-id').val();
-        
+
         $.ajax({
-            url: '/private/lesley/admin/permissions/roles/' + roleId,
+            url: '/admin/permissions/roles/' + roleId,
             type: 'PUT',
             data: formData,
             success: function(response) {
@@ -293,13 +293,13 @@ $(document).ready(function() {
         var roleId = button.data('role-id');
         var roleName = button.data('role-name');
         var rolePermissions = button.data('role-permissions');
-        
+
         $('#permission-role-id').val(roleId);
         $('.modal-title').text('Yetkileri Düzenle - ' + roleName);
-        
+
         // Tüm checkbox'ları temizle
         $('.permission-checkbox').prop('checked', false);
-        
+
         // Rol yetkilerini işaretle
         if (rolePermissions && rolePermissions.length > 0) {
             rolePermissions.forEach(function(permissionId) {
@@ -311,21 +311,21 @@ $(document).ready(function() {
     // Yetki Güncelleme
     $('#permissionForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var roleId = $('#permission-role-id').val();
-        
+
         // Checkbox değerlerini topla
         var selectedPermissions = [];
         $('.permission-checkbox:checked').each(function() {
             selectedPermissions.push(parseInt($(this).val()));
         });
-        
+
         console.log('Updating permissions for role:', roleId);
         console.log('Selected permissions:', selectedPermissions);
-        
+
         // FormData yerine JSON gönder
         $.ajax({
-            url: '/private/lesley/admin/permissions/roles/' + roleId + '/permissions',
+            url: '/admin/permissions/roles/' + roleId + '/permissions',
             type: 'POST',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
@@ -364,7 +364,7 @@ $(document).ready(function() {
 function deleteRole(roleId, roleName) {
     if (confirm('"' + roleName + '" rolünü silmek istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/private/lesley/admin/permissions/roles/' + roleId,
+            url: '/admin/permissions/roles/' + roleId,
             type: 'DELETE',
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content')

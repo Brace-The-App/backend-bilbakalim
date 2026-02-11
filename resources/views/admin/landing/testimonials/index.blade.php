@@ -100,7 +100,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Kullanıcı Adı *</label>
@@ -188,7 +188,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Kullanıcı Adı *</label>
@@ -240,14 +240,14 @@ $(document).ready(function() {
     // Create Testimonial Form
     $('#testimonialCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = new FormData(this);
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -276,18 +276,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit Testimonial Form
     $('#testimonialEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = new FormData(this);
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -315,14 +315,14 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#testimonialShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var userName = button.data('user-name');
         var comment = button.data('comment');
         var profileImg = button.data('profile-img');
-        
+
         $('#show-user-name').text(userName);
         $('#show-comment').text(comment);
         if (profileImg) {
@@ -331,7 +331,7 @@ $(document).ready(function() {
             $('#show-profile-img').text('Resim Yok');
         }
     });
-    
+
     // Edit Modal - Fill data
     $('#testimonialEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
@@ -339,7 +339,7 @@ $(document).ready(function() {
         var userName = button.data('user-name');
         var comment = button.data('comment');
         var profileImg = button.data('profile-img');
-        
+
         $('#edit-user-name').val(userName);
         $('#edit-comment').val(comment);
         if (profileImg) {
@@ -347,22 +347,22 @@ $(document).ready(function() {
         } else {
             $('#current-profile-img').html('<small class="text-muted">Mevcut resim yok</small>');
         }
-        $('#testimonialEditForm').attr('action', '/private/lesley/admin/landing/testimonials/' + id);
+        $('#testimonialEditForm').attr('action', '/admin/landing/testimonials/' + id);
     });
-    
+
     // Load Testimonials Function
     function loadTestimonials(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/landing/testimonials',
+            url: '/admin/landing/testimonials',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 var tableBody = $(response).find('#testimonialTableBody').html();
                 var pagination = $(response).find('#testimonialPagination').html();
-                
+
                 $('#testimonialTableBody').html(tableBody);
                 $('#testimonialPagination').html(pagination);
-                
+
                 bindEditModalEvents();
                 bindTestimonialShowModalEvents();
             },
@@ -371,7 +371,7 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Bind Edit Modal Events
     function bindEditModalEvents() {
         $('#testimonialEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
@@ -380,7 +380,7 @@ $(document).ready(function() {
             var userName = button.data('user-name');
             var comment = button.data('comment');
             var profileImg = button.data('profile-img');
-            
+
             $('#edit-user-name').val(userName);
             $('#edit-comment').val(comment);
             if (profileImg) {
@@ -388,7 +388,7 @@ $(document).ready(function() {
             } else {
                 $('#current-profile-img').html('<small class="text-muted">Mevcut resim yok</small>');
             }
-            $('#testimonialEditForm').attr('action', '/private/lesley/admin/landing/testimonials/' + id);
+            $('#testimonialEditForm').attr('action', '/admin/landing/testimonials/' + id);
         });
     }
 
@@ -399,7 +399,7 @@ $(document).ready(function() {
             var userName = button.data('user-name');
             var comment = button.data('comment');
             var profileImg = button.data('profile-img');
-            
+
             $('#show-user-name').text(userName);
             $('#show-comment').text(comment);
             if (profileImg) {
@@ -409,19 +409,19 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadTestimonials(page);
     });
-    
+
     // Delete Testimonial
     window.deleteTestimonial = function(id) {
         if (confirm('Bu kullanıcı yorumunu silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/landing/testimonials/' + id,
+                url: '/admin/landing/testimonials/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

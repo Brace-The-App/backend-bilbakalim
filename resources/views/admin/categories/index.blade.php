@@ -480,7 +480,7 @@ $(document).ready(function() {
     // Load Categories Function
     function loadCategories(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/categories',
+            url: '/admin/categories',
             type: 'GET',
             data: { page: page },
             success: function(response) {
@@ -527,7 +527,7 @@ $(document).ready(function() {
             $('#edit-color').val(color);
             $('#edit-sort').val(sort);
             $('#edit-active').prop('checked', active == 1);
-            $('#categoryEditForm').attr('action', '/private/lesley/admin/categories/' + id);
+            $('#categoryEditForm').attr('action', '/admin/categories/' + id);
         });
     }
 
@@ -567,7 +567,7 @@ $(document).ready(function() {
     window.deleteCategory = function(id) {
         if (confirm('Bu kategoriyi silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/categories/' + id,
+                url: '/admin/categories/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

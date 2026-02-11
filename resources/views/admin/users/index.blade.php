@@ -310,14 +310,14 @@ $(document).ready(function() {
     // Create User Form
     $('#userCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -346,18 +346,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit User Form
     $('#userEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -384,7 +384,7 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#userShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
@@ -393,16 +393,16 @@ $(document).ready(function() {
         var phone = button.data('phone');
         var status = button.data('status');
         var coins = button.data('coins');
-        
+
         $('#show-name').text(name);
         $('#show-email').text(email);
         $('#show-phone').text(phone || '-');
         $('#show-coins').text(coins || 0);
-        $('#show-status').html(status === 'active' ? '<span class="badge bg-success">Aktif</span>' : 
-                              status === 'suspended' ? '<span class="badge bg-danger">Askıya Alınmış</span>' : 
+        $('#show-status').html(status === 'active' ? '<span class="badge bg-success">Aktif</span>' :
+                              status === 'suspended' ? '<span class="badge bg-danger">Askıya Alınmış</span>' :
                               '<span class="badge bg-warning">Beklemede</span>');
     });
-    
+
     // Edit Modal - Fill data
     $('#userEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
@@ -414,7 +414,7 @@ $(document).ready(function() {
         var coins = button.data('coins');
         var role = button.data('role');
         var package = button.data('package');
-        
+
         $('#edit-name').val(name);
         $('#edit-email').val(email);
         $('#edit-phone').val(phone);
@@ -423,23 +423,23 @@ $(document).ready(function() {
         $('#edit-role').val(role);
         $('#edit-package').val(package);
         $('#edit-password').val(''); // Clear password field
-        $('#userEditForm').attr('action', '/private/lesley/admin/users/' + id);
+        $('#userEditForm').attr('action', '/admin/users/' + id);
     });
-    
+
     // Load Users Function
     function loadUsers(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/users',
+            url: '/admin/users',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 // Extract table body and pagination from response
                 var tableBody = $(response).find('tbody').html();
                 var pagination = $(response).find('.pagination').parent().html();
-                
+
                 // Update table body
                 $('tbody').html(tableBody);
-                
+
                 // Update pagination
                 $('.pagination').parent().html(pagination);
             },
@@ -448,14 +448,14 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadUsers(page);
     });
-    
+
 });
 </script>
 @endpush

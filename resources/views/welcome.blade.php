@@ -578,7 +578,7 @@
                         <li><a href="#features">Özellikler</a></li>
                         <li><a href="#stats">İstatistikler</a></li>
                         <li><a href="#about">Hakkımızda</a></li>
-                        <li><a href="/private/lesley/admin">Admin Panel</a></li>
+                        <li><a href="/admin">Admin Panel</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">

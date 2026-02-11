@@ -132,7 +132,7 @@ $(document).ready(function() {
 function approveRequest(id) {
     if (confirm('Bu ödül talebini onaylamak istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/private/lesley/admin/reward-requests/' + id + '/approve',
+            url: '/admin/reward-requests/' + id + '/approve',
             type: 'POST',
             data: {
                 _token: '{{ csrf_token() }}'
@@ -162,7 +162,7 @@ function approveRequest(id) {
 function rejectRequest(id) {
     if (confirm('Bu ödül talebini reddetmek istediğinizden emin misiniz?')) {
         $.ajax({
-            url: '/private/lesley/admin/reward-requests/' + id + '/reject',
+            url: '/admin/reward-requests/' + id + '/reject',
             type: 'POST',
             data: {
                 _token: '{{ csrf_token() }}'

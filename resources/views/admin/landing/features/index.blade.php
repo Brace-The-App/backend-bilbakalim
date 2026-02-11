@@ -90,7 +90,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -165,7 +165,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -211,14 +211,14 @@ $(document).ready(function() {
     // Create Feature Form
     $('#featureCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -245,18 +245,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit Feature Form
     $('#featureEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -282,42 +282,42 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#featureShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var title = button.data('title');
         var description = button.data('description');
-        
+
         $('#show-title').text(title);
         $('#show-description').text(description);
     });
-    
+
     // Edit Modal - Fill data
     $('#featureEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var id = button.data('id');
         var title = button.data('title');
         var description = button.data('description');
-        
+
         $('#edit-title').val(title);
         $('#edit-description').val(description);
-        $('#featureEditForm').attr('action', '/private/lesley/admin/landing/features/' + id);
+        $('#featureEditForm').attr('action', '/admin/landing/features/' + id);
     });
-    
+
     // Load Features Function
     function loadFeatures(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/landing/features',
+            url: '/admin/landing/features',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 var tableBody = $(response).find('#featureTableBody').html();
                 var pagination = $(response).find('#featurePagination').html();
-                
+
                 $('#featureTableBody').html(tableBody);
                 $('#featurePagination').html(pagination);
-                
+
                 bindEditModalEvents();
                 bindFeatureShowModalEvents();
             },
@@ -326,7 +326,7 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Bind Edit Modal Events
     function bindEditModalEvents() {
         $('#featureEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
@@ -334,10 +334,10 @@ $(document).ready(function() {
             var id = button.data('id');
             var title = button.data('title');
             var description = button.data('description');
-            
+
             $('#edit-title').val(title);
             $('#edit-description').val(description);
-            $('#featureEditForm').attr('action', '/private/lesley/admin/landing/features/' + id);
+            $('#featureEditForm').attr('action', '/admin/landing/features/' + id);
         });
     }
 
@@ -347,24 +347,24 @@ $(document).ready(function() {
             var button = $(event.relatedTarget);
             var title = button.data('title');
             var description = button.data('description');
-            
+
             $('#show-title').text(title);
             $('#show-description').text(description);
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadFeatures(page);
     });
-    
+
     // Delete Feature
     window.deleteFeature = function(id) {
         if (confirm('Bu özelliği silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/landing/features/' + id,
+                url: '/admin/landing/features/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

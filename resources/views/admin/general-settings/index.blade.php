@@ -18,7 +18,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h4 class="card-title">Genel Ayarlar</h4>
-                   
+
                 </div>
                 <div class="card-body">
                     <!-- Kategoriler -->
@@ -83,7 +83,7 @@
                             $otherSettings = $settings->whereNotIn('key', array_merge($siteSettings->pluck('key')->toArray(), $logoFaviconSettings->pluck('key')->toArray(), $seoSettings->pluck('key')->toArray(), $contactSettings->pluck('key')->toArray(), $socialSettings->pluck('key')->toArray(), $languageSettings->pluck('key')->toArray(), $smsSettings->pluck('key')->toArray(), $emailSettings->pluck('key')->toArray()));
                         @endphp
 
-                    
+
 
                         <!-- Site Bilgileri -->
                         <div class="tab-pane fade show active" id="site" role="tabpanel">
@@ -102,9 +102,9 @@
                                                     <div class="form-text">PNG, JPG, GIF formatları desteklenir. Maksimum 2MB.</div>
                                                     @if($logoFaviconSettings->where('key', 'site_logo')->first() && $logoFaviconSettings->where('key', 'site_logo')->first()->value)
                                                         <div class="mt-2">
-                                                            <img src="{{ asset('storage/' . $logoFaviconSettings->where('key', 'site_logo')->first()->value) }}" 
-                                                                 alt="Site Logo" 
-                                                                 style="max-width: 100px; max-height: 50px;" 
+                                                            <img src="{{ asset('storage/' . $logoFaviconSettings->where('key', 'site_logo')->first()->value) }}"
+                                                                 alt="Site Logo"
+                                                                 style="max-width: 100px; max-height: 50px;"
                                                                  class="img-fluid rounded">
                                                         </div>
                                                     @endif
@@ -115,9 +115,9 @@
                                                     <div class="form-text">ICO, PNG formatları desteklenir. 32x32 veya 16x16 piksel önerilir.</div>
                                                     @if($logoFaviconSettings->where('key', 'site_favicon')->first() && $logoFaviconSettings->where('key', 'site_favicon')->first()->value)
                                                         <div class="mt-2">
-                                                            <img src="{{ asset('storage/' . $logoFaviconSettings->where('key', 'site_favicon')->first()->value) }}" 
-                                                                 alt="Favicon" 
-                                                                 style="max-width: 32px; max-height: 32px;" 
+                                                            <img src="{{ asset('storage/' . $logoFaviconSettings->where('key', 'site_favicon')->first()->value) }}"
+                                                                 alt="Favicon"
+                                                                 style="max-width: 32px; max-height: 32px;"
                                                                  class="img-fluid rounded">
                                                         </div>
                                                     @endif
@@ -167,8 +167,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -187,7 +187,7 @@
                                 @endforeach
                             </div>
 
-                           
+
                         </div>
 
                         <!-- SEO -->
@@ -203,8 +203,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -237,8 +237,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -280,8 +280,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -320,8 +320,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -360,8 +360,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -400,8 +400,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -444,8 +444,8 @@
                                                 <small class="text-muted"><code>{{ $setting->key }}</code></small>
                                                 <div class="btn-group btn-group-sm">
                                                     @can('edit general settings')
-                                                    <button class="btn btn-outline-warning" 
-                                                            data-bs-toggle="modal" 
+                                                    <button class="btn btn-outline-warning"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#settingEditModal"
                                                             data-id="{{ $setting->id }}"
                                                             data-key="{{ $setting->key }}"
@@ -607,10 +607,10 @@ $(document).ready(function() {
     // Create Setting
     $('#settingCreateForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = $(this).serialize();
         var url = '{{ route("admin.general-settings.store") }}';
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -647,29 +647,29 @@ $(document).ready(function() {
         var type = button.data('type');
         var description = button.data('description');
         var active = button.data('active');
-        
+
         // Handle object values
         if (typeof value === 'object' && value !== null) {
             value = JSON.stringify(value);
         }
-        
+
         $('#edit-key').val(key);
         $('#edit-value').val(value || '');
         $('#edit-type').val(type);
         $('#edit-description').val(description || '');
         $('#edit-is_active').prop('checked', active == 1 || active === true);
-        $('#settingEditForm').attr('action', '/private/lesley/admin/general-settings/' + id);
+        $('#settingEditForm').attr('action', '/admin/general-settings/' + id);
     });
 
     // Update Setting
     $('#settingEditForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         var formData = new FormData(this);
         // Checkbox değerini doğru şekilde ekle
         formData.set('is_active', $('#edit-is_active').is(':checked') ? '1' : '0');
         var url = $(this).attr('action');
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -702,16 +702,16 @@ $(document).ready(function() {
     $('#site_logo_upload').on('change', function() {
         var file = this.files[0];
         console.log('Logo file selected:', file);
-        
+
         if (file) {
             var formData = new FormData();
             formData.append('logo', file);
             formData.append('_token', $('meta[name="csrf-token"]').attr('content'));
-            
+
             console.log('Sending logo upload request...');
-            
+
             $.ajax({
-                url: '/private/lesley/admin/general-settings/upload-logo',
+                url: '/admin/general-settings/upload-logo',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -744,16 +744,16 @@ $(document).ready(function() {
     $('#site_favicon_upload').on('change', function() {
         var file = this.files[0];
         console.log('Favicon file selected:', file);
-        
+
         if (file) {
             var formData = new FormData();
             formData.append('favicon', file);
             formData.append('_token', $('meta[name="csrf-token"]').attr('content'));
-            
+
             console.log('Sending favicon upload request...');
-            
+
             $.ajax({
-                url: '/private/lesley/admin/general-settings/upload-favicon',
+                url: '/admin/general-settings/upload-favicon',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -798,7 +798,7 @@ $(document).ready(function() {
     window.deleteSetting = function(id) {
         if (confirm('Bu ayarı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/general-settings/' + id,
+                url: '/admin/general-settings/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

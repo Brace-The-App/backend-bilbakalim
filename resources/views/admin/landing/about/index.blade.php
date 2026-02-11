@@ -100,7 +100,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -188,7 +188,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -240,14 +240,14 @@ $(document).ready(function() {
     // Create About Form
     $('#aboutCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = new FormData(this);
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -276,18 +276,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit About Form
     $('#aboutEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = new FormData(this);
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -315,14 +315,14 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#aboutShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var title = button.data('title');
         var description = button.data('description');
         var img = button.data('img');
-        
+
         $('#show-title').text(title);
         $('#show-description').text(description);
         if (img) {
@@ -331,7 +331,7 @@ $(document).ready(function() {
             $('#show-img').text('Resim Yok');
         }
     });
-    
+
     // Edit Modal - Fill data
     $('#aboutEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
@@ -339,7 +339,7 @@ $(document).ready(function() {
         var title = button.data('title');
         var description = button.data('description');
         var img = button.data('img');
-        
+
         $('#edit-title').val(title);
         $('#edit-description').val(description);
         if (img) {
@@ -347,22 +347,22 @@ $(document).ready(function() {
         } else {
             $('#current-img').html('<small class="text-muted">Mevcut resim yok</small>');
         }
-        $('#aboutEditForm').attr('action', '/private/lesley/admin/landing/about/' + id);
+        $('#aboutEditForm').attr('action', '/admin/landing/about/' + id);
     });
-    
+
     // Load Abouts Function
     function loadAbouts(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/landing/about',
+            url: '/admin/landing/about',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 var tableBody = $(response).find('#aboutTableBody').html();
                 var pagination = $(response).find('#aboutPagination').html();
-                
+
                 $('#aboutTableBody').html(tableBody);
                 $('#aboutPagination').html(pagination);
-                
+
                 bindEditModalEvents();
                 bindAboutShowModalEvents();
             },
@@ -371,7 +371,7 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Bind Edit Modal Events
     function bindEditModalEvents() {
         $('#aboutEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
@@ -380,7 +380,7 @@ $(document).ready(function() {
             var title = button.data('title');
             var description = button.data('description');
             var img = button.data('img');
-            
+
             $('#edit-title').val(title);
             $('#edit-description').val(description);
             if (img) {
@@ -388,7 +388,7 @@ $(document).ready(function() {
             } else {
                 $('#current-img').html('<small class="text-muted">Mevcut resim yok</small>');
             }
-            $('#aboutEditForm').attr('action', '/private/lesley/admin/landing/about/' + id);
+            $('#aboutEditForm').attr('action', '/admin/landing/about/' + id);
         });
     }
 
@@ -399,7 +399,7 @@ $(document).ready(function() {
             var title = button.data('title');
             var description = button.data('description');
             var img = button.data('img');
-            
+
             $('#show-title').text(title);
             $('#show-description').text(description);
             if (img) {
@@ -409,19 +409,19 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadAbouts(page);
     });
-    
+
     // Delete About
     window.deleteAbout = function(id) {
         if (confirm('Bu kaydı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/landing/about/' + id,
+                url: '/admin/landing/about/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

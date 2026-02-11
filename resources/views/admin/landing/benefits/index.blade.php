@@ -90,7 +90,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -165,7 +165,7 @@
               </ul>
             </div>
           @endif
-          
+
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Başlık *</label>
@@ -211,14 +211,14 @@ $(document).ready(function() {
     // Create Benefit Form
     $('#benefitCreateModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -245,18 +245,18 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Edit Benefit Form
     $('#benefitEditModal form').on('submit', function(e) {
         e.preventDefault();
-        
+
         var form = $(this);
         var formData = form.serialize();
         var url = form.attr('action');
-        
+
         // Clear previous errors
         form.find('.alert-danger').remove();
-        
+
         $.ajax({
             url: url,
             type: 'POST',
@@ -282,42 +282,42 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     // Show Modal - Fill data
     $('#benefitShowModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var title = button.data('title');
         var description = button.data('description');
-        
+
         $('#show-title').text(title);
         $('#show-description').text(description);
     });
-    
+
     // Edit Modal - Fill data
     $('#benefitEditModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var id = button.data('id');
         var title = button.data('title');
         var description = button.data('description');
-        
+
         $('#edit-title').val(title);
         $('#edit-description').val(description);
-        $('#benefitEditForm').attr('action', '/private/lesley/admin/landing/benefits/' + id);
+        $('#benefitEditForm').attr('action', '/admin/landing/benefits/' + id);
     });
-    
+
     // Load Benefits Function
     function loadBenefits(page = 1) {
         $.ajax({
-            url: '/private/lesley/admin/landing/benefits',
+            url: '/admin/landing/benefits',
             type: 'GET',
             data: { page: page },
             success: function(response) {
                 var tableBody = $(response).find('#benefitTableBody').html();
                 var pagination = $(response).find('#benefitPagination').html();
-                
+
                 $('#benefitTableBody').html(tableBody);
                 $('#benefitPagination').html(pagination);
-                
+
                 bindEditModalEvents();
                 bindBenefitShowModalEvents();
             },
@@ -326,7 +326,7 @@ $(document).ready(function() {
             }
         });
     }
-    
+
     // Bind Edit Modal Events
     function bindEditModalEvents() {
         $('#benefitEditModal').off('show.bs.modal').on('show.bs.modal', function (event) {
@@ -334,10 +334,10 @@ $(document).ready(function() {
             var id = button.data('id');
             var title = button.data('title');
             var description = button.data('description');
-            
+
             $('#edit-title').val(title);
             $('#edit-description').val(description);
-            $('#benefitEditForm').attr('action', '/private/lesley/admin/landing/benefits/' + id);
+            $('#benefitEditForm').attr('action', '/admin/landing/benefits/' + id);
         });
     }
 
@@ -347,24 +347,24 @@ $(document).ready(function() {
             var button = $(event.relatedTarget);
             var title = button.data('title');
             var description = button.data('description');
-            
+
             $('#show-title').text(title);
             $('#show-description').text(description);
         });
     }
-    
+
     // Pagination Click Handler
     $(document).on('click', '.pagination a', function(e) {
         e.preventDefault();
         var page = $(this).attr('href').split('page=')[1];
         loadBenefits(page);
     });
-    
+
     // Delete Benefit
     window.deleteBenefit = function(id) {
         if (confirm('Bu avantajı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/landing/benefits/' + id,
+                url: '/admin/landing/benefits/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE'

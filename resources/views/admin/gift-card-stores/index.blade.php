@@ -51,7 +51,7 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <img src="{{ $store->image_url }}" alt="Store {{ $store->id }}" 
+                                    <img src="{{ $store->image_url }}" alt="Store {{ $store->id }}"
                                          style="width: 100px; height: 60px; object-fit: contain; border: 1px solid #ddd; padding: 5px;">
                                 </td>
                                 <td>{{ $store->sort_order }}</td>
@@ -158,7 +158,7 @@
       </div>
       <div class="modal-body">
         <div class="text-center mb-3">
-          <img id="show-image" src="" alt="Store" 
+          <img id="show-image" src="" alt="Store"
                style="max-width: 300px; max-height: 200px; object-fit: contain; border: 2px solid #ddd; padding: 10px;">
         </div>
         <div class="row">
@@ -220,7 +220,7 @@
             <div class="col-12">
               <label class="form-label">Mevcut Görsel</label>
               <div class="text-center mb-2">
-                <img id="edit-current-image" src="" alt="Store" 
+                <img id="edit-current-image" src="" alt="Store"
                      style="max-width: 200px; max-height: 120px; object-fit: contain; border: 2px solid #ddd; padding: 5px;">
               </div>
             </div>
@@ -365,7 +365,7 @@ $(document).ready(function() {
         $('#edit-current-image').attr('src', imageUrl);
         $('#edit-sort').val(sort);
         $('#edit-active').prop('checked', active == 1);
-        $('#storeEditForm').attr('action', '/private/lesley/admin/gift-card-stores/' + id);
+        $('#storeEditForm').attr('action', '/admin/gift-card-stores/' + id);
     });
 
     // Bind Store Show Modal Events
@@ -387,7 +387,7 @@ $(document).ready(function() {
     window.deleteStore = function(id) {
         if (confirm('Bu mağazayı silmek istediğinizden emin misiniz?')) {
             $.ajax({
-                url: '/private/lesley/admin/gift-card-stores/' + id,
+                url: '/admin/gift-card-stores/' + id,
                 type: 'POST',
                 data: {
                     _method: 'DELETE',
