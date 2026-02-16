@@ -16,7 +16,7 @@ class QuestionController extends Controller
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view questions')->only(['index', 'show']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create questions')->only(['create', 'store']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update', 'toggleCheck']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete questions')->only(['destroy']);
     }
 
@@ -294,6 +294,21 @@ class QuestionController extends Controller
         return response()->json([
             'message' => 'Soru başarıyla güncellendi.'
         ], 200);
+    }
+
+    /**
+     * Soru "kontrol edildi" işaretini aç/kapat (AJAX).
+     */
+    public function toggleCheck(Question $question)
+    {
+        $question->check = !$question->check;
+        $question->save();
+
+        return response()->json([
+            'success' => true,
+            'check' => (int) $question->check,
+            'message' => $question->check ? 'Soru kontrol edildi olarak işaretlendi.' : 'Soru kontrol edilmedi olarak işaretlendi.'
+        ]);
     }
 
     public function destroy(Question $question)

@@ -24,7 +24,8 @@ class Question extends Model
         'question_level',
         'coin_value',
         'image',
-        'is_active'
+        'is_active',
+        'check'
     ];
 
     protected $casts = [
@@ -32,7 +33,8 @@ class Question extends Model
         'question_level' => 'string',
         'coin_value' => 'integer',
         'is_active' => 'boolean',
-        'category_id' => 'integer'
+        'category_id' => 'integer',
+        'check' => 'boolean'
     ];
 
     // Relationships

@@ -82,6 +82,7 @@
                                 <th>Seviye</th>
                                 <th>Coin</th>
                                 <th>Durum</th>
+                                <th class="text-center">Kontrol</th>
                                 <th>İşlemler</th>
                             </tr>
                             </thead>
@@ -130,6 +131,23 @@
                                         @else
                                             <span class="badge bg-danger px-1 py-0" style="font-size: 0.75rem;">Pasif</span>
                                         @endif
+                                    </td>
+                                    <td class="text-center align-middle">
+                                        @can('edit questions')
+                                            <button type="button" class="btn btn-sm btn-link p-0 border-0 question-check-btn" data-id="{{ $question->id }}" data-check="{{ $question->check ? '1' : '0' }}" title="{{ $question->check ? 'Kontrol edildi (tiklemek için tıklayın)' : 'Kontrol edilmedi (tiklemek için tıklayın)' }}">
+                                                @if($question->check)
+                                                    <i data-feather="check-circle" class="text-success" style="width: 22px; height: 22px;"></i>
+                                                @else
+                                                    <i data-feather="circle" class="text-muted" style="width: 22px; height: 22px;"></i>
+                                                @endif
+                                            </button>
+                                        @else
+                                            @if($question->check)
+                                                <i data-feather="check-circle" class="text-success" style="width: 22px; height: 22px;"></i>
+                                            @else
+                                                <span class="text-muted">-</span>
+                                            @endif
+                                        @endcan
                                     </td>
                                     <td>
                                         <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#questionShowModal"
@@ -805,6 +823,7 @@
                         bindQuestionEditModalEvents();
                         // Re-bind show modal events
                         bindQuestionShowModalEvents();
+                        if (typeof feather !== 'undefined') feather.replace();
                     },
                     error: function() {
                         toastr.error('Veriler yüklenirken bir hata oluştu!');
@@ -949,6 +968,48 @@
                     }
                 });
             }
+
+            // Soru "Kontrol edildi" tikleme (AJAX)
+            var questionToggleCheckUrl = "{{ route('admin.questions.toggle-check', ['question' => ':id']) }}";
+            $(document).on('click', '.question-check-btn', function(e) {
+                e.preventDefault();
+                var btn = $(this);
+                if (btn.prop('disabled')) return;
+                var id = btn.data('id');
+                var url = questionToggleCheckUrl.replace(':id', id);
+                btn.prop('disabled', true);
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var isChecked = response.check === 1;
+                            btn.data('check', isChecked ? '1' : '0');
+                            btn.attr('title', isChecked ? 'Kontrol edildi (tiklemek için tıklayın)' : 'Kontrol edilmedi (tiklemek için tıklayın)');
+                            if (isChecked) {
+                                btn.html('<i data-feather="check-circle" class="text-success" style="width: 22px; height: 22px;"></i>');
+                            } else {
+                                btn.html('<i data-feather="circle" class="text-muted" style="width: 22px; height: 22px;"></i>');
+                            }
+                            if (typeof feather !== 'undefined') feather.replace();
+                            toastr.success(response.message);
+                        }
+                    },
+                    error: function(xhr) {
+                        toastr.error(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'İşlem yapılamadı.');
+                    },
+                    complete: function() {
+                        btn.prop('disabled', false);
+                    }
+                });
+            });
 
             // Pagination Click Handler
             $(document).on('click', '.pagination a', function(e) {

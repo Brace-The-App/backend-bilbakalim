@@ -52,6 +52,7 @@ Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->gro
     Route::resource('categories', CategoryController::class);
 
     // Questions management
+    Route::post('questions/{question}/toggle-check', [QuestionController::class, 'toggleCheck'])->name('questions.toggle-check');
     Route::resource('questions', QuestionController::class);
 
     // Tournaments management
