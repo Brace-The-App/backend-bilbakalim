@@ -91,7 +91,7 @@ return [
     'quiz_normal_time_limit' => env('QUIZ_NORMAL_TIME_LIMIT', 600),
     'quiz_premium_question_count' => env('QUIZ_PREMIUM_QUESTION_COUNT', 15),
     'quiz_premium_time_limit' => env('QUIZ_PREMIUM_TIME_LIMIT', 1800),
-    'quiz_answer_time_limit' => env('QUIZ_ANSWER_TIME_LIMIT', 15), // Cevap süresi (saniye)
+    'quiz_answer_time_limit' => env('QUIZ_ANSWER_TIME_LIMIT', 20), // Soru başına cevap süresi (saniye)
     'tournament_min_participants' => env('TOURNAMENT_MIN_PARTICIPANTS', 2),
     'tournament_max_participants' => env('TOURNAMENT_MAX_PARTICIPANTS', 100),
     'quiz_dev_mode' => env('QUIZ_DEV_MODE', false),
