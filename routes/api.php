@@ -163,11 +163,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Duel (Meydan Okuma) routes
     Route::prefix('duel')->group(function () {
         Route::post('create', [DuelController::class, 'create']);
+        Route::get('list', [DuelController::class, 'list']);
         Route::get('status/{duel_id}', [DuelController::class, 'status']);
         Route::post('accept/{duel_id}', [DuelController::class, 'accept']);
+        Route::post('join/{duel_id}', [DuelController::class, 'join']);
         Route::post('reject/{duel_id}', [DuelController::class, 'reject']);
         Route::post('leave/{duel_id}', [DuelController::class, 'leave']);
         Route::post('answer/{duel_id}', [DuelController::class, 'submitAnswer']);
+        Route::post('question-multiplier/{duel_id}', [DuelController::class, 'offerQuestionMultiplier']);
+        Route::post('question-multiplier/respond/{duel_id}', [DuelController::class, 'respondQuestionMultiplier']);
     });
 
     // Diamond (Elmas) routes

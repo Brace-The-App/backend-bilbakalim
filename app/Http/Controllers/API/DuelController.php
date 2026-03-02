@@ -19,6 +19,284 @@ class DuelController extends Controller
 {
     /**
      * @OA\Post(
+     *     path="/api/duel/question-multiplier/{duel_id}",
+     *     summary="Soru Bazlı 2x/3x Teklif Et",
+     *     description="Aktif düellodaki mevcut soru için 2x/3x elmas çarpanı teklifi gönderir. Teklif rakibe socket üzerinden iletilir.",
+     *     tags={"Duel"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="duel_id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer"),
+     *         description="Düello ID'si"
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 @OA\Property(property="question_id", type="integer", example=123, description="Mevcut sorunun ID'si"),
+     *                 @OA\Property(property="multiplier", type="integer", enum={2,3}, example=2, description="Soru bazlı çarpan değeri (2x veya 3x)")
+     *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="question_id", type="integer", example=123),
+     *             @OA\Property(property="multiplier", type="integer", enum={2,3}, example=2)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Teklif oluşturuldu",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Soru için çarpan teklifi gönderildi."),
+     *             @OA\Property(
+     *                 property="bet",
+     *                 type="object",
+     *                 @OA\Property(property="question_id", type="integer", example=123),
+     *                 @OA\Property(property="initiator_id", type="integer", example=1),
+     *                 @OA\Property(property="opponent_id", type="integer", example=2),
+     *                 @OA\Property(property="multiplier", type="integer", example=2),
+     *                 @OA\Property(property="status", type="string", example="pending")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Hata",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu soru için zaten bekleyen bir teklif var.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Yetki yok",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu düelloya erişim yetkiniz yok.")
+     *         )
+     *     )
+     * )
+     */
+    public function offerQuestionMultiplier(Request $request, $duel_id): JsonResponse
+    {
+        $request->validate([
+            'question_id' => 'required|integer',
+            'multiplier' => 'required|integer|in:2,3',
+        ]);
+
+        $user = Auth::user();
+        $duel = Duel::with('currentQuestion')->findOrFail($duel_id);
+
+        if ($duel->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Düello aktif değil.'
+            ], 400);
+        }
+
+        if ($duel->challenger_id !== $user->id && $duel->opponent_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu düelloya erişim yetkiniz yok.'
+            ], 403);
+        }
+
+        if (!$duel->current_question_id || $duel->current_question_id != $request->question_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sadece mevcut soru için çarpan teklifi yapabilirsiniz.'
+            ], 400);
+        }
+
+        $settings = $duel->settings ?? [];
+        $currentBet = $settings['current_bet'] ?? null;
+
+        if ($currentBet && ($currentBet['status'] ?? null) === 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu soru için zaten bekleyen bir teklif var.'
+            ], 400);
+        }
+
+        $opponentId = $duel->challenger_id === $user->id ? $duel->opponent_id : $duel->challenger_id;
+
+        $settings['current_bet'] = [
+            'question_id' => $duel->current_question_id,
+            'initiator_id' => $user->id,
+            'opponent_id' => $opponentId,
+            'multiplier' => (int) $request->multiplier,
+            'status' => 'pending',
+            'offered_at' => now()->toISOString(),
+        ];
+
+        $duel->update(['settings' => $settings]);
+
+        $this->sendDuelQuestionBetRequestedWebhook($duel, $settings['current_bet']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Soru için çarpan teklifi gönderildi.',
+            'bet' => $settings['current_bet'],
+        ]);
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/duel/question-multiplier/respond/{duel_id}",
+     *     summary="Soru Bazlı 2x/3x Teklifine Cevap Ver",
+     *     description="Rakipten gelen soru bazlı 2x/3x teklifini kabul eder veya reddeder. Kabul edilirse sadece o soru için çarpan uygulanır, reddedilirse teklifi yapan düelloyu kazanır.",
+     *     tags={"Duel"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="duel_id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer"),
+     *         description="Düello ID'si"
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="application/x-www-form-urlencoded",
+     *             @OA\Schema(
+     *                 @OA\Property(property="question_id", type="integer", example=123, description="Teklif yapılan sorunun ID'si"),
+     *                 @OA\Property(property="accept", type="boolean", example=true, description="true: kabul, false: reddet")
+     *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="question_id", type="integer", example=123),
+     *             @OA\Property(property="accept", type="boolean", example=true)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Kabul: bet ve message döner. Reddet: bet, message ve winner_id döner.",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Teklif kabul edildi. Bu soru için çarpan uygulandı."),
+     *             @OA\Property(
+     *                 property="bet",
+     *                 type="object",
+     *                 @OA\Property(property="question_id", type="integer", example=123),
+     *                 @OA\Property(property="initiator_id", type="integer", example=1),
+     *                 @OA\Property(property="opponent_id", type="integer", example=2),
+     *                 @OA\Property(property="multiplier", type="integer", example=2),
+     *                 @OA\Property(property="status", type="string", example="accepted")
+     *             ),
+     *             @OA\Property(property="winner_id", type="integer", example=1, description="Sadece accept=false (red) durumunda döner")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Hata",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu soru için bekleyen bir teklif bulunmuyor.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=403,
+     *         description="Yetki yok",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu düelloya erişim yetkiniz yok.")
+     *         )
+     *     )
+     * )
+     */
+    public function respondQuestionMultiplier(Request $request, $duel_id): JsonResponse
+    {
+        $request->validate([
+            'question_id' => 'required|integer',
+            'accept' => 'required|boolean',
+        ]);
+
+        $user = Auth::user();
+        $duel = Duel::with('currentQuestion')->findOrFail($duel_id);
+
+        if ($duel->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Düello aktif değil.'
+            ], 400);
+        }
+
+        if ($duel->challenger_id !== $user->id && $duel->opponent_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu düelloya erişim yetkiniz yok.'
+            ], 403);
+        }
+
+        $settings = $duel->settings ?? [];
+        $currentBet = $settings['current_bet'] ?? null;
+
+        if (!$currentBet || ($currentBet['status'] ?? null) !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu soru için bekleyen bir teklif bulunmuyor.'
+            ], 400);
+        }
+
+        if ($currentBet['question_id'] != $request->question_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Geçersiz soru için işlem yapılmaya çalışılıyor.'
+            ], 400);
+        }
+
+        // Teklife cevap verebilecek kişi sadece rakip oyuncu
+        if ($currentBet['opponent_id'] != $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu teklife cevap verme yetkiniz yok.'
+            ], 403);
+        }
+
+        $accept = (bool) $request->accept;
+
+        if ($accept) {
+            // Kabul edildi: soru bazlı çarpanı ayarla
+            $settings['current_bet']['status'] = 'accepted';
+            $settings['current_bet']['responded_at'] = now()->toISOString();
+            $settings['current_question_multiplier'] = (int) $currentBet['multiplier'];
+
+            $duel->update(['settings' => $settings]);
+
+            $this->sendDuelQuestionBetRespondedWebhook($duel, $settings['current_bet']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Teklif kabul edildi. Bu soru için çarpan uygulandı.',
+                'bet' => $settings['current_bet'],
+            ]);
+        }
+
+        // Reddedildi: reddeden elenir, teklifi yapan düelloyu kazanır
+        $settings['current_bet']['status'] = 'rejected';
+        $settings['current_bet']['responded_at'] = now()->toISOString();
+        $duel->update(['settings' => $settings]);
+
+        $winnerId = (int) $currentBet['initiator_id'];
+
+        $this->finishDuel($duel, $winnerId);
+        $this->sendDuelFinishedWebhook($duel);
+
+        $this->sendDuelQuestionBetRespondedWebhook($duel, $settings['current_bet']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Teklif reddedildi. Düelloyu teklif eden kazandı.',
+            'bet' => $settings['current_bet'],
+            'winner_id' => $winnerId,
+        ]);
+    }
+
+    /**
+     * @OA\Post(
      *     path="/api/duel/create",
      *     summary="Düello Oluştur",
      *     description="Yeni bir düello oluşturur. X1 otomatik başlar, X2/X4/X8 karşı tarafa istek gönderir.",
@@ -62,7 +340,6 @@ class DuelController extends Controller
         $request->validate([
             'multiplier' => 'required|in:x1,x2,x4,x8',
         ]);
-
         $user = Auth::user();
 
         // Elmas paketi kontrolü
@@ -92,20 +369,41 @@ class DuelController extends Controller
 
         DB::beginTransaction();
         try {
-            // Rastgele rakip seç (elmas bakiyesi olan kullanıcılar arasından)
+            // Aktif düellosu olmayan rastgele rakip seç (elmas bakiyesi > 0 olanlar arasından)
             $opponent = User::where('id', '!=', $user->id)
                 ->whereHas('diamond', function($query) {
                     $query->where('balance', '>', 0);
                 })
+                ->whereDoesntHave('duelsAsChallenger', function($query) {
+                    $query->whereIn('status', ['waiting', 'active']);
+                })
+                ->whereDoesntHave('duelsAsOpponent', function($query) {
+                    $query->whereIn('status', ['waiting', 'active']);
+                })
                 ->inRandomOrder()
                 ->first();
 
+            // Eğer uygun rakip bulunamazsa, açık düello oluştur ve katılımcı bekle
             if (!$opponent) {
-                DB::rollBack();
+                $duel = Duel::create([
+                    'challenger_id' => $user->id,
+                    'opponent_id' => null,
+                    'multiplier' => $request->multiplier,
+                    'status' => 'waiting',
+                    'challenger_diamonds_before' => $diamond->balance,
+                ]);
+
+                $this->sendDuelCreatedWebhook($duel);
+
+                DB::commit();
+
                 return response()->json([
-                    'success' => false,
-                    'message' => 'Uygun rakip bulunamadı. Lütfen daha sonra tekrar deneyin.'
-                ], 404);
+                    'success' => true,
+                    'message' => 'Düello oluşturuldu. Katılımcı bekleniyor.',
+                    'duel' => $duel->load(['challenger', 'opponent']),
+                    'auto_started' => false,
+                    'waiting_for_opponent' => true,
+                ]);
             }
 
             $opponentDiamond = Diamond::where('user_id', $opponent->id)->first();
@@ -149,25 +447,24 @@ class DuelController extends Controller
                     'question' => $firstQuestion ? $this->formatQuestionMultilingual($firstQuestion) : null,
                     'auto_started' => true
                 ]);
-            } else {
-                // X2/X4/X8: Karşı tarafa istek gönder (waiting durumunda kal)
-                $this->sendDuelCreatedWebhook($duel);
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Düello isteği gönderildi. Rakip onay bekleniyor...',
-                    'duel' => $duel->load(['challenger', 'opponent']),
-                    'opponent' => [
-                        'id' => $opponent->id,
-                        'name' => $opponent->name,
-                        'avatar' => $opponent->avatar,
-                    ],
-                    'requires_acceptance' => true
-                ]);
             }
 
+            // X2/X4/X8: Karşı tarafa istek gönder (waiting durumunda kal)
+            $this->sendDuelCreatedWebhook($duel);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Düello isteği gönderildi. Rakip onay bekleniyor...',
+                'duel' => $duel->load(['challenger', 'opponent']),
+                'opponent' => [
+                    'id' => $opponent->id,
+                    'name' => $opponent->name,
+                    'avatar' => $opponent->avatar,
+                ],
+                'requires_acceptance' => true
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Duel creation error', [
@@ -252,19 +549,96 @@ class DuelController extends Controller
                     'diamonds_after' => $duel->challenger_diamonds_after,
                     'current_diamonds' => $challengerDiamond->balance ?? 0,
                 ],
-                'opponent' => [
+                'opponent' => $duel->opponent ? [
                     'id' => $duel->opponent->id,
                     'name' => $duel->opponent->name,
                     'avatar' => $duel->opponent->avatar,
                     'diamonds_before' => $duel->opponent_diamonds_before,
                     'diamonds_after' => $duel->opponent_diamonds_after,
                     'current_diamonds' => $opponentDiamond->balance ?? 0,
-                ],
+                ] : null,
                 'current_question' => $currentQuestion,
                 'winner_id' => $duel->winner_id,
                 'started_at' => $duel->started_at,
                 'finished_at' => $duel->finished_at,
             ]
+        ]);
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/duel/list",
+     *     summary="Aktif Düello Listesi",
+     *     description="Katılımcı bekleyen ve kullanıcının içinde bulunduğu aktif düelloları listeler.",
+     *     tags={"Duel"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Düello listesi",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="waiting_duels", type="array", @OA\Items(type="object")),
+     *             @OA\Property(property="active_duels", type="array", @OA\Items(type="object"))
+     *         )
+     *     )
+     * )
+     */
+    public function list(): JsonResponse
+    {
+        $user = Auth::user();
+
+        // Katılımcı bekleyen (opponent_id null) düellolar
+        $waitingDuels = Duel::with(['challenger'])
+            ->where('status', 'waiting')
+            ->whereNull('opponent_id')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (Duel $duel) {
+                return [
+                    'id' => $duel->id,
+                    'multiplier' => $duel->multiplier,
+                    'status' => $duel->status,
+                    'challenger' => [
+                        'id' => $duel->challenger->id,
+                        'name' => $duel->challenger->name,
+                        'avatar' => $duel->challenger->avatar,
+                    ],
+                    'created_at' => $duel->created_at,
+                ];
+            });
+
+        // Kullanıcının içinde bulunduğu aktif düellolar (bilgi amaçlı)
+        $activeDuels = Duel::with(['challenger', 'opponent'])
+            ->where('status', 'active')
+            ->where(function ($query) use ($user) {
+                $query->where('challenger_id', $user->id)
+                    ->orWhere('opponent_id', $user->id);
+            })
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (Duel $duel) {
+                return [
+                    'id' => $duel->id,
+                    'multiplier' => $duel->multiplier,
+                    'status' => $duel->status,
+                    'challenger' => [
+                        'id' => $duel->challenger->id,
+                        'name' => $duel->challenger->name,
+                        'avatar' => $duel->challenger->avatar,
+                    ],
+                    'opponent' => $duel->opponent ? [
+                        'id' => $duel->opponent->id,
+                        'name' => $duel->opponent->name,
+                        'avatar' => $duel->opponent->avatar,
+                    ] : null,
+                    'started_at' => $duel->started_at,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'waiting_duels' => $waitingDuels,
+            'active_duels' => $activeDuels,
         ]);
     }
 
@@ -368,6 +742,129 @@ class DuelController extends Controller
 
     /**
      * @OA\Post(
+     *     path="/api/duel/join/{duel_id}",
+     *     summary="Açık Düelloya Katıl",
+     *     description="Katılımcı bekleyen (opponentsiz) bir düelloya katılır ve düelloyu başlatır.",
+     *     tags={"Duel"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="duel_id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer"),
+     *         description="Düello ID'si"
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Düello başladı",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Düello başladı!"),
+     *             @OA\Property(property="duel", type="object"),
+     *             @OA\Property(property="question", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Hata",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Bu düelloya katılamazsınız.")
+     *         )
+     *     )
+     * )
+     */
+    public function join($duel_id): JsonResponse
+    {
+        $user = Auth::user();
+        $duel = Duel::findOrFail($duel_id);
+
+        // Yalnızca opponentsiz ve waiting durumundaki düellolara katılınabilir
+        if ($duel->status !== 'waiting' || $duel->opponent_id !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu düello katılıma açık değil.'
+            ], 400);
+        }
+
+        // Kullanıcı kendi açtığı düelloya join atamaz
+        if ($duel->challenger_id === $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kendi oluşturduğunuz düelloya katılamazsınız.'
+            ], 400);
+        }
+
+        // Kullanıcının aktif düellosu olmamalı
+        $activeDuel = Duel::where(function($query) use ($user) {
+                $query->where('challenger_id', $user->id)
+                    ->orWhere('opponent_id', $user->id);
+            })
+            ->whereIn('status', ['waiting', 'active'])
+            ->first();
+
+        if ($activeDuel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Zaten aktif bir düellonuz var.'
+            ], 400);
+        }
+
+        // Kullanıcının elmas bakiyesi kontrolü
+        $diamond = Diamond::where('user_id', $user->id)->first();
+        if (!$diamond || $diamond->balance <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Düelloya katılmak için elmas paketi gereklidir.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Opponent bilgilerini güncelle
+            $duel->opponent_id = $user->id;
+            $duel->opponent_diamonds_before = $diamond->balance;
+            $duel->status = 'active';
+            $duel->started_at = now();
+            $duel->save();
+
+            // İlk soruyu getir ve başlat
+            $firstQuestion = $this->getNextQuestion($duel);
+            if ($firstQuestion) {
+                $duel->update([
+                    'current_question_id' => $firstQuestion->id,
+                    'current_question_number' => 1,
+                ]);
+            }
+
+            // Socket bildirimi gönder
+            $this->sendDuelStartedWebhook($duel, $firstQuestion);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Düello başladı!',
+                'duel' => $duel->load(['challenger', 'opponent', 'currentQuestion']),
+                'question' => $firstQuestion ? $this->formatQuestionMultilingual($firstQuestion) : null,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Duel join error', [
+                'duel_id' => $duel->id,
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Düelloya katılırken bir hata oluştu.'
+            ], 500);
+        }
+    }
+
+    /**
+     * @OA\Post(
      *     path="/api/duel/reject/{duel_id}",
      *     summary="Düelloyu Reddet",
      *     description="X2/X4/X8 düello isteğini reddeder. Reddedilirse isteği gönderen otomatik kazanır.",
@@ -439,7 +936,7 @@ class DuelController extends Controller
 
             // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır
             $opponentLoss = min($questionValue, $opponentDiamond->balance);
-            
+
             if ($opponentLoss > 0) {
                 $opponentDiamond->subtract($opponentLoss);
                 $challengerDiamond->add($opponentLoss);
@@ -533,8 +1030,8 @@ class DuelController extends Controller
         DB::beginTransaction();
         try {
             // Kazanan belirle (çekilenin rakibi)
-            $winnerId = $duel->challenger_id === $user->id 
-                ? $duel->opponent_id 
+            $winnerId = $duel->challenger_id === $user->id
+                ? $duel->opponent_id
                 : $duel->challenger_id;
 
             // Düello bitir - Kazananın elmaslarından %10 komisyon kes
@@ -616,7 +1113,7 @@ class DuelController extends Controller
     public function submitAnswer(Request $request, $duel_id): JsonResponse
     {
         $request->validate([
-            'selected_answer' => 'required|in:1,2,3,4',
+            'selected_answer' => 'required|in:0,1,2,3,4',
         ]);
 
         $user = Auth::user();
@@ -660,8 +1157,19 @@ class DuelController extends Controller
         DB::beginTransaction();
         try {
             $question = $duel->currentQuestion;
-            $isCorrect = $request->selected_answer === $question->correct_answer;
-            $questionValue = $duel->question_value; // 10 * multiplier
+            // Cevap 0 gelirse (süre bitti / cevap verilmedi) yanlış kabul et - quiz ve turnuva ile aynı mantık
+            $selectedAnswer = $request->selected_answer;
+            $isCorrect = ($selectedAnswer !== '0' && $selectedAnswer !== 0 && (string) $selectedAnswer === (string) $question->correct_answer);
+
+            // Soru bazlı çarpan (2x/3x vb) - varsayılan 1
+            $settings = $duel->settings ?? [];
+            $currentMultiplier = isset($settings['current_question_multiplier'])
+                ? max(1, (int) $settings['current_question_multiplier'])
+                : 1;
+
+            // Temel soru değeri (10 * duel multiplier) ve soru bazlı çarpan ile çarpılmış nihai değer
+            $baseQuestionValue = $duel->question_value;
+            $questionValue = $baseQuestionValue * $currentMultiplier;
 
             $userDiamond = Diamond::where('user_id', $user->id)->first();
             $diamondsBefore = $userDiamond->balance;
@@ -738,10 +1246,59 @@ class DuelController extends Controller
         $challengerCorrect = $challengerAnswer->is_correct;
         $opponentCorrect = $opponentAnswer->is_correct;
 
-        // Senaryo 1: Her ikisi de doğru → Bakiyeler değişmez
+        // Temel soru değeri (duel bazlı) ve gerçek soru değeri (soru bazlı çarpan ile)
+        $baseQuestionValue = $duel->question_value;
+        $effectiveQuestionValue = $questionValue;
+
+        // Senaryo 1: Her ikisi de doğru
         if ($challengerCorrect && $opponentCorrect) {
-            $challengerAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $challengerDiamond->balance]);
-            $opponentAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $opponentDiamond->balance]);
+            // Eğer soru bazlı çarpan uygulanmışsa (ör: 2x/3x) ve her iki oyuncu da doğruysa,
+            // daha hızlı cevap veren, diğerinden soru değeri kadar elmas alır.
+            if ($effectiveQuestionValue > $baseQuestionValue &&
+                $challengerAnswer->answered_at &&
+                $opponentAnswer->answered_at &&
+                $challengerAnswer->answered_at != $opponentAnswer->answered_at) {
+
+                $challengerTime = $challengerAnswer->answered_at;
+                $opponentTime = $opponentAnswer->answered_at;
+
+                $winnerId = $challengerTime < $opponentTime ? $duel->challenger_id : $duel->opponent_id;
+                $loserId = $winnerId === $duel->challenger_id ? $duel->opponent_id : $duel->challenger_id;
+
+                $winnerDiamond = $winnerId === $duel->challenger_id ? $challengerDiamond : $opponentDiamond;
+                $loserDiamond = $loserId === $duel->challenger_id ? $challengerDiamond : $opponentDiamond;
+
+                $transferAmount = min($effectiveQuestionValue, $loserDiamond->balance);
+                if ($transferAmount > 0) {
+                    $loserDiamond->subtract($transferAmount);
+                    $winnerDiamond->add($transferAmount);
+                }
+
+                if ($winnerId === $duel->challenger_id) {
+                    $challengerAnswer->update([
+                        'diamonds_change' => $transferAmount,
+                        'diamonds_after' => $challengerDiamond->balance,
+                    ]);
+                    $opponentAnswer->update([
+                        'diamonds_change' => -$transferAmount,
+                        'diamonds_after' => $opponentDiamond->balance,
+                    ]);
+                } else {
+                    $challengerAnswer->update([
+                        'diamonds_change' => -$transferAmount,
+                        'diamonds_after' => $challengerDiamond->balance,
+                    ]);
+                    $opponentAnswer->update([
+                        'diamonds_change' => $transferAmount,
+                        'diamonds_after' => $opponentDiamond->balance,
+                    ]);
+                }
+            } else {
+                // Normal durumda (soru bazlı çarpan yoksa) bakiye değişmez
+                $challengerAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $challengerDiamond->balance]);
+                $opponentAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $opponentDiamond->balance]);
+            }
+
             return;
         }
 
@@ -828,17 +1385,22 @@ class DuelController extends Controller
         // Sonraki soruya geç
         $nextQuestion = $this->getNextQuestion($duel);
         if ($nextQuestion) {
+            // Bir önceki soruya ait soru bazlı çarpan / bahis bilgilerini sıfırla
+            $settings = $duel->settings ?? [];
+            unset($settings['current_question_multiplier'], $settings['current_bet']);
+
             $duel->update([
                 'current_question_id' => $nextQuestion->id,
                 'current_question_number' => $duel->current_question_number + 1,
+                'settings' => $settings,
             ]);
 
             // Socket bildirimi gönder
             $this->sendDuelNextQuestionWebhook($duel, $nextQuestion);
         } else {
             // Soru kalmadı, düello bitir (daha fazla elması olan kazanır)
-            $winnerId = $challengerDiamond->balance >= $opponentDiamond->balance 
-                ? $duel->challenger_id 
+            $winnerId = $challengerDiamond->balance >= $opponentDiamond->balance
+                ? $duel->challenger_id
                 : $duel->opponent_id;
             $this->finishDuel($duel, $winnerId);
         }
@@ -857,7 +1419,7 @@ class DuelController extends Controller
         // Her şart ve koşulda kazananın toplam elmasından %10 komisyon kesilir
         $winnerDiamond = Diamond::where('user_id', $winnerId)->first();
         $winnerBalance = $winnerDiamond->balance;
-        
+
         // Komisyon hesapla (%10)
         $commission = (int) ($winnerBalance * 0.1);
         $finalBalance = $winnerBalance - $commission;
@@ -916,14 +1478,14 @@ class DuelController extends Controller
         // Çoklu dil desteği - tr ve en
         $questionTr = $question->getTranslation('question', 'tr');
         $questionEn = $question->getTranslation('question', 'en');
-        
+
         $choicesTr = [
             '1' => $question->getTranslation('one_choice', 'tr'),
             '2' => $question->getTranslation('two_choice', 'tr'),
             '3' => $question->getTranslation('three_choice', 'tr'),
             '4' => $question->getTranslation('four_choice', 'tr'),
         ];
-        
+
         $choicesEn = [
             '1' => $question->getTranslation('one_choice', 'en'),
             '2' => $question->getTranslation('two_choice', 'en'),
@@ -1065,6 +1627,55 @@ class DuelController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to send duel finished webhook', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Soru bazlı çarpan teklifi webhook'u
+     */
+    private function sendDuelQuestionBetRequestedWebhook(Duel $duel, array $bet): void
+    {
+        try {
+            $socketUrl = config('app.socket_server_url', 'https://bilbakalim.online');
+
+            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-question-bet-requested", [
+                'duel_id' => $duel->id,
+                'question_id' => $bet['question_id'] ?? null,
+                'initiator_id' => $bet['initiator_id'] ?? null,
+                'opponent_id' => $bet['opponent_id'] ?? null,
+                'multiplier' => $bet['multiplier'] ?? null,
+                'status' => $bet['status'] ?? 'pending',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Duel question bet requested webhook error', [
+                'duel_id' => $duel->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Soru bazlı çarpan teklifi cevabı webhook'u
+     */
+    private function sendDuelQuestionBetRespondedWebhook(Duel $duel, array $bet): void
+    {
+        try {
+            $socketUrl = config('app.socket_server_url', 'https://bilbakalim.online');
+
+            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-question-bet-responded", [
+                'duel_id' => $duel->id,
+                'question_id' => $bet['question_id'] ?? null,
+                'initiator_id' => $bet['initiator_id'] ?? null,
+                'opponent_id' => $bet['opponent_id'] ?? null,
+                'multiplier' => $bet['multiplier'] ?? null,
+                'status' => $bet['status'] ?? null,
+                'accepted' => ($bet['status'] ?? null) === 'accepted',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Duel question bet responded webhook error', [
+                'duel_id' => $duel->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

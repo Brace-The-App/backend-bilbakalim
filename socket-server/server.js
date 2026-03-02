@@ -963,6 +963,69 @@ app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
     }
 });
 
+app.post('/socket-webhooks/webhook/duel-question-bet-requested', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-question-bet-requested', JSON.stringify(req.body));
+        const { duel_id, question_id, initiator_id, opponent_id, multiplier, status } = req.body;
+
+        if (!duel_id || !question_id || !initiator_id || !opponent_id) {
+            return res.status(400).json({ success: false, message: 'Eksik parametreler' });
+        }
+
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            question_id: parseInt(question_id),
+            initiator_id: parseInt(initiator_id),
+            opponent_id: parseInt(opponent_id),
+            multiplier: parseInt(multiplier || 1),
+            status: status || 'pending',
+            timestamp: new Date().toISOString()
+        };
+
+        // Odaya ve özellikle rakip kullanıcıya gönder
+        io.to(roomName).emit('duel-question-bet-requested', data);
+        io.to(`user_${opponent_id}`).emit('duel-question-bet-requested', data);
+
+        console.log('✅ duel-question-bet-requested event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel question bet requested webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/socket-webhooks/webhook/duel-question-bet-responded', (req, res) => {
+    try {
+        console.log('📥 Webhook alındı: duel-question-bet-responded', JSON.stringify(req.body));
+        const { duel_id, question_id, initiator_id, opponent_id, multiplier, status, accepted } = req.body;
+
+        if (!duel_id || !question_id || !initiator_id || !opponent_id) {
+            return res.status(400).json({ success: false, message: 'Eksik parametreler' });
+        }
+
+        const roomName = `duel_${duel_id}`;
+        const data = {
+            duel_id: parseInt(duel_id),
+            question_id: parseInt(question_id),
+            initiator_id: parseInt(initiator_id),
+            opponent_id: parseInt(opponent_id),
+            multiplier: parseInt(multiplier || 1),
+            status: status || null,
+            accepted: !!accepted,
+            timestamp: new Date().toISOString()
+        };
+
+        io.to(roomName).emit('duel-question-bet-responded', data);
+
+        console.log('✅ duel-question-bet-responded event gönderildi');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Duel question bet responded webhook error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
