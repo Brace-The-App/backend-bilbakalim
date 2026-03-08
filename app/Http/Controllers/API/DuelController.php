@@ -37,12 +37,12 @@ class DuelController extends Controller
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
      *                 @OA\Property(property="question_id", type="integer", example=123, description="Mevcut sorunun ID'si"),
-     *                 @OA\Property(property="multiplier", type="integer", enum={2,3}, example=2, description="Soru bazlı çarpan değeri (2x veya 3x)")
+     *                 @OA\Property(property="multiplier", type="integer", enum={2,4,6,8}, example=2, description="Soru bazlı çarpan değeri (2x, 3x, 4x veya 8x)")
      *             )
      *         ),
      *         @OA\JsonContent(
      *             @OA\Property(property="question_id", type="integer", example=123),
-     *             @OA\Property(property="multiplier", type="integer", enum={2,3}, example=2)
+     *             @OA\Property(property="multiplier", type="integer", enum={2,4,6,8}, example=2)
      *         )
      *     ),
      *     @OA\Response(
@@ -84,7 +84,7 @@ class DuelController extends Controller
     {
         $request->validate([
             'question_id' => 'required|integer',
-            'multiplier' => 'required|integer|in:2,3',
+            'multiplier' => 'required|integer|in:2,4,6,8',
         ]);
 
         $user = Auth::user();
@@ -1029,12 +1029,12 @@ class DuelController extends Controller
 
         DB::beginTransaction();
         try {
-            // Kazanan belirle (çekilenin rakibi)
+            // Kazanan belirle (çekilenin rakibi). Açık düelloda rakip yoksa winner null olur
             $winnerId = $duel->challenger_id === $user->id
                 ? $duel->opponent_id
                 : $duel->challenger_id;
 
-            // Düello bitir - Kazananın elmaslarından %10 komisyon kes
+            // Düello bitir (winner null ise sadece iptal/kapat, komisyon yok)
             $this->finishDuel($duel, $winnerId);
 
             // Socket bildirimi gönder
@@ -1408,26 +1408,27 @@ class DuelController extends Controller
 
     /**
      * Düello bitir
-     * Kazananın elmaslarından %10 komisyon kesilir
+     * Kazanan varsa elmaslarından %10 komisyon kesilir. Kazanan yoksa (açık düello iptal) sadece kapatılır.
      */
-    private function finishDuel(Duel $duel, int $winnerId): void
+    private function finishDuel(Duel $duel, ?int $winnerId): void
     {
         $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-        $opponentDiamond = Diamond::where('user_id', $duel->opponent_id)->first();
+        $opponentDiamond = $duel->opponent_id
+            ? Diamond::where('user_id', $duel->opponent_id)->first()
+            : null;
 
-        // Kazananın elmaslarını güncelle (komisyon kesilir)
-        // Her şart ve koşulda kazananın toplam elmasından %10 komisyon kesilir
-        $winnerDiamond = Diamond::where('user_id', $winnerId)->first();
-        $winnerBalance = $winnerDiamond->balance;
-
-        // Komisyon hesapla (%10)
-        $commission = (int) ($winnerBalance * 0.1);
-        $finalBalance = $winnerBalance - $commission;
-
-        // Komisyonu kes
-        if ($commission > 0) {
-            $winnerDiamond->update(['balance' => $finalBalance]);
-            $duel->increment('app_commission', $commission);
+        if ($winnerId !== null) {
+            // Kazanan var: komisyon kes
+            $winnerDiamond = Diamond::where('user_id', $winnerId)->first();
+            if ($winnerDiamond) {
+                $winnerBalance = $winnerDiamond->balance;
+                $commission = (int) ($winnerBalance * 0.1);
+                $finalBalance = $winnerBalance - $commission;
+                if ($commission > 0) {
+                    $winnerDiamond->update(['balance' => $finalBalance]);
+                    $duel->increment('app_commission', $commission);
+                }
+            }
         }
 
         // Düello bitiş bilgilerini güncelle
@@ -1435,8 +1436,8 @@ class DuelController extends Controller
             'status' => 'finished',
             'winner_id' => $winnerId,
             'finished_at' => now(),
-            'challenger_diamonds_after' => $challengerDiamond->balance,
-            'opponent_diamonds_after' => $opponentDiamond->balance,
+            'challenger_diamonds_after' => $challengerDiamond?->balance ?? 0,
+            'opponent_diamonds_after' => $opponentDiamond?->balance ?? $duel->opponent_diamonds_after ?? 0,
         ]);
     }
 
@@ -1592,6 +1593,8 @@ class DuelController extends Controller
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-answer", [
                 'duel_id' => $duel->id,
                 'user_id' => $user->id,
+                'challenger_id' => $duel->challenger_id,
+                'opponent_id' => $duel->opponent_id,
                 'is_correct' => $isCorrect,
                 'both_answered' => $bothAnswered,
                 'timestamp' => now()->toISOString()
@@ -1607,6 +1610,8 @@ class DuelController extends Controller
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-next-question", [
                 'duel_id' => $duel->id,
+                'challenger_id' => $duel->challenger_id,
+                'opponent_id' => $duel->opponent_id,
                 'question' => $this->formatQuestionMultilingual($question),
                 'question_number' => $duel->current_question_number,
                 'timestamp' => now()->toISOString()
@@ -1623,6 +1628,8 @@ class DuelController extends Controller
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-finished", [
                 'duel_id' => $duel->id,
                 'winner_id' => $duel->winner_id,
+                'challenger_id' => $duel->challenger_id,
+                'opponent_id' => $duel->opponent_id,
                 'timestamp' => now()->toISOString()
             ]);
         } catch (\Exception $e) {
@@ -1636,7 +1643,7 @@ class DuelController extends Controller
     private function sendDuelQuestionBetRequestedWebhook(Duel $duel, array $bet): void
     {
         try {
-            $socketUrl = config('app.socket_server_url', 'https://bilbakalim.online');
+            $socketUrl = config('app.socket_url', 'http://socket-server:3001');
 
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-question-bet-requested", [
                 'duel_id' => $duel->id,
@@ -1660,7 +1667,7 @@ class DuelController extends Controller
     private function sendDuelQuestionBetRespondedWebhook(Duel $duel, array $bet): void
     {
         try {
-            $socketUrl = config('app.socket_server_url', 'https://bilbakalim.online');
+            $socketUrl = config('app.socket_url', 'http://socket-server:3001');
 
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-question-bet-responded", [
                 'duel_id' => $duel->id,

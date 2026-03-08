@@ -98,6 +98,18 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Genel oda katılımı (duel_68, user_36 vb.) – room_joined döner
+    socket.on('join-room', (data) => {
+        const room = data && (data.room || data.roomName);
+        if (!room || typeof room !== 'string') {
+            socket.emit('room_joined', { success: false, message: 'room veya roomName gereklidir' });
+            return;
+        }
+        socket.join(room);
+        console.log(`✅ Socket ${socket.id} odaya katıldı: ${room}`);
+        socket.emit('room_joined', { success: true, room });
+    });
+
     // Düello odasına katılma
     socket.on('join_duel', (data) => {
         console.log('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
@@ -938,7 +950,7 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-answer', JSON.stringify(req.body));
-        const { duel_id, user_id, is_correct, both_answered } = req.body;
+        const { duel_id, user_id, is_correct, both_answered, challenger_id, opponent_id } = req.body;
         
         if (!duel_id || !user_id) {
             return res.status(400).json({ success: false, message: 'Eksik parametreler' });
@@ -954,6 +966,8 @@ app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
         };
         
         io.to(roomName).emit('duel-answer', data);
+        if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-answer', data);
+        if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-answer', data);
         
         console.log('✅ duel-answer event gönderildi');
         res.json({ success: true });
@@ -1017,6 +1031,8 @@ app.post('/socket-webhooks/webhook/duel-question-bet-responded', (req, res) => {
         };
 
         io.to(roomName).emit('duel-question-bet-responded', data);
+        io.to(`user_${initiator_id}`).emit('duel-question-bet-responded', data);
+        io.to(`user_${opponent_id}`).emit('duel-question-bet-responded', data);
 
         console.log('✅ duel-question-bet-responded event gönderildi');
         res.json({ success: true });
@@ -1029,7 +1045,7 @@ app.post('/socket-webhooks/webhook/duel-question-bet-responded', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
-        const { duel_id, question, question_number } = req.body;
+        const { duel_id, question, question_number, challenger_id, opponent_id } = req.body;
         
         if (!duel_id || !question) {
             return res.status(400).json({ success: false, message: 'Eksik parametreler' });
@@ -1044,6 +1060,8 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
         };
         
         io.to(roomName).emit('duel-next-question', data);
+        if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-next-question', data);
+        if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-next-question', data);
         
         console.log('✅ duel-next-question event gönderildi');
         res.json({ success: true });
@@ -1056,7 +1074,7 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
-        const { duel_id, winner_id } = req.body;
+        const { duel_id, winner_id, challenger_id, opponent_id } = req.body;
         
         if (!duel_id) {
             return res.status(400).json({ success: false, message: 'duel_id gerekli' });
@@ -1070,6 +1088,8 @@ app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
         };
         
         io.to(roomName).emit('duel-finished', data);
+        if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-finished', data);
+        if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-finished', data);
         
         console.log('✅ duel-finished event gönderildi');
         res.json({ success: true });

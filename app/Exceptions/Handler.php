@@ -6,6 +6,7 @@ use Abbasudo\Purity\Exceptions\FieldNotSupported;
 use App\Http\Custom\Response;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -39,6 +40,16 @@ class Handler extends ExceptionHandler
         $this->renderable(function (FieldNotSupported $e, $request) {
             if ($request->is('api/*')) {
                 return (new Response())->error([],$e->getMessage());
+            }
+        });
+
+        // API'de validation hatası her zaman JSON (422) dönsün, 302 redirect olmasın
+        $this->renderable(function (ValidationException $e, $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors' => $e->errors(),
+                ], 422);
             }
         });
     }
