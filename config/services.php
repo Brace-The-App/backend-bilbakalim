@@ -42,4 +42,8 @@ return [
         'api_url' => env('NETGSM_API_URL', 'https://api.netgsm.com.tr/sms/rest/v2/send'),
     ],
 
+    'revenuecat' => [
+        'api_key' => env('REVENUECAT_API_KEY'),
+    ],
+
 ];

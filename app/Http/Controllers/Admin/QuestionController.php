@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Question;
 use App\Models\Category;
 use App\Http\Controllers\WebhookController;
+use Illuminate\Validation\Rule;
 
 class QuestionController extends Controller
 {
@@ -78,7 +79,6 @@ class QuestionController extends Controller
         $supportedLocales = config('app.supported_locales', ['tr', 'en']);
 
         $rules = [
-            'question' => 'required|unique:questions,question',
             'category_id' => 'required|exists:categories,id',
             'correct_answer' => 'required|in:1,2,3,4',
             'question_level' => 'required|in:easy,medium,hard',
@@ -90,7 +90,11 @@ class QuestionController extends Controller
         // Add validation rules for each supported locale
         foreach ($supportedLocales as $locale) {
             if ($locale === 'tr') {
-                $rules["question.{$locale}"] = 'required|string';
+                $rules["question.{$locale}"] = [
+                    'required',
+                    'string',
+                    Rule::unique('questions', "question->{$locale}"),
+                ];
                 $rules["one_choice.{$locale}"] = 'required|string|max:255';
                 $rules["two_choice.{$locale}"] = 'required|string|max:255';
                 $rules["three_choice.{$locale}"] = 'required|string|max:255';
@@ -112,37 +116,31 @@ class QuestionController extends Controller
                 'request' => $request->all()
             ]);
             return response()->json([
-                'message' => 'Soru kaydedilemedi, lütfen tekrar deneyiniz.'
-            ], 500);
-        }
-
-        $exists = \App\Models\Question::where("question->tr", $request->input("question.tr"))->exists();
-
-
-        if ($exists) {
-            return response()->json([
-                'message' => 'Aynı soru zaten mevcut.'
-            ], 500);
+                'message' => 'Doğrulama hatası.',
+                'errors' => $e->errors(),
+            ], 422);
         }
 
         $question = new Question();
 
         // Set translations
         foreach ($supportedLocales as $locale) {
-            if ($request->filled("question.{$locale}")) {
-                $question->setTranslation('question', $locale, $request->input("question.{$locale}"));
-            }
-            if ($request->filled("one_choice.{$locale}")) {
-                $question->setTranslation('one_choice', $locale, $request->input("one_choice.{$locale}"));
-            }
-            if ($request->filled("two_choice.{$locale}")) {
-                $question->setTranslation('two_choice', $locale, $request->input("two_choice.{$locale}"));
-            }
-            if ($request->filled("three_choice.{$locale}")) {
-                $question->setTranslation('three_choice', $locale, $request->input("three_choice.{$locale}"));
-            }
-            if ($request->filled("four_choice.{$locale}")) {
-                $question->setTranslation('four_choice', $locale, $request->input("four_choice.{$locale}"));
+            // TR zorunlu; diğer diller opsiyonel. Boş string gelirse DB'de tutulmasın.
+            foreach (['question', 'one_choice', 'two_choice', 'three_choice', 'four_choice'] as $field) {
+                $key = "{$field}.{$locale}";
+                if (!$request->has($key)) {
+                    continue;
+                }
+
+                $value = $request->input($key);
+                $value = is_string($value) ? trim($value) : $value;
+
+                if ($value === '' || $value === null) {
+                    // create'te boş bırakılan locale için hiçbir şey set etmiyoruz
+                    continue;
+                }
+
+                $question->setTranslation($field, $locale, $value);
             }
         }
 
@@ -190,7 +188,6 @@ class QuestionController extends Controller
         $supportedLocales = config('app.supported_locales', ['tr', 'en']);
 
         $rules = [
-            'question' => 'required|unique:questions,question',
             'category_id' => 'required|exists:categories,id',
             'correct_answer' => 'required|in:1,2,3,4',
             'question_level' => 'required|in:easy,medium,hard',
@@ -202,7 +199,11 @@ class QuestionController extends Controller
         // Add validation rules for each supported locale
         foreach ($supportedLocales as $locale) {
             if ($locale === 'tr') {
-                $rules["question.{$locale}"] = 'required|string';
+                $rules["question.{$locale}"] = [
+                    'required',
+                    'string',
+                    Rule::unique('questions', "question->{$locale}")->ignore($question->id),
+                ];
                 $rules["one_choice.{$locale}"] = 'required|string|max:255';
                 $rules["two_choice.{$locale}"] = 'required|string|max:255';
                 $rules["three_choice.{$locale}"] = 'required|string|max:255';
@@ -224,28 +225,34 @@ class QuestionController extends Controller
                 'request' => $request->all()
             ]);
             return response()->json([
-                'message' => 'Soru güncellenemedi, lütfen tekrar deneyiniz.'
-            ], 500);
+                'message' => 'Doğrulama hatası.',
+                'errors' => $e->errors(),
+            ], 422);
         }
 
 
 
-        // Set translations
+        // Set translations (boş gelen EN alanları DB'den sil)
         foreach ($supportedLocales as $locale) {
-            if ($request->filled("question.{$locale}")) {
-                $question->setTranslation('question', $locale, $request->input("question.{$locale}"));
-            }
-            if ($request->filled("one_choice.{$locale}")) {
-                $question->setTranslation('one_choice', $locale, $request->input("one_choice.{$locale}"));
-            }
-            if ($request->filled("two_choice.{$locale}")) {
-                $question->setTranslation('two_choice', $locale, $request->input("two_choice.{$locale}"));
-            }
-            if ($request->filled("three_choice.{$locale}")) {
-                $question->setTranslation('three_choice', $locale, $request->input("three_choice.{$locale}"));
-            }
-            if ($request->filled("four_choice.{$locale}")) {
-                $question->setTranslation('four_choice', $locale, $request->input("four_choice.{$locale}"));
+            foreach (['question', 'one_choice', 'two_choice', 'three_choice', 'four_choice'] as $field) {
+                $key = "{$field}.{$locale}";
+                if (!$request->has($key)) {
+                    continue;
+                }
+
+                $value = $request->input($key);
+                $value = is_string($value) ? trim($value) : $value;
+
+                // TR alanları zorunlu; boş olamaz (validation yakalar)
+                if ($locale !== 'tr' && ($value === '' || $value === null)) {
+                    // İlgili locale çevirisini kaldır
+                    $question->forgetTranslation($field, $locale);
+                    continue;
+                }
+
+                if ($value !== '' && $value !== null) {
+                    $question->setTranslation($field, $locale, $value);
+                }
             }
         }
 

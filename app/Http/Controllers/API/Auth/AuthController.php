@@ -12,6 +12,8 @@ use App\Http\Custom\Response;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
@@ -404,7 +406,17 @@ class AuthController extends Controller
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="message", type="string", example="Kullanıcı detayı başarılı bir şekilde listelendi."),
      *             @OA\Property(property="data", type="object",
-     *                 @OA\Property(property="user", type="object")
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="name", type="string", example="Test User"),
+     *                 @OA\Property(property="coins", type="integer", example=1200),
+     *                 @OA\Property(property="diamonds", type="integer", example=10),
+     *                 @OA\Property(property="is_premium", type="boolean", example=true, description="RevenueCat sonucuna göre hesaplanan premium durumu"),
+     *                 @OA\Property(property="revenuecat", type="object",
+     *                     @OA\Property(property="checked", type="boolean", example=true),
+     *                     @OA\Property(property="is_premium", type="boolean", example=true),
+     *                     @OA\Property(property="entitlements", type="array", @OA\Items(type="string", example="premium")),
+     *                     @OA\Property(property="error", type="string", nullable=true, example=null)
+     *                 )
      *             )
      *         )
      *     )
@@ -420,11 +432,74 @@ class AuthController extends Controller
             );
         }
 
-        return $this->response->withData(
-            true,
-            "Kullanıcı detayı başarılı bir şekilde listelendi.",
-            UserResource::make($this->user)
-        );
+        $resourceData = UserResource::make($this->user)->resolve();
+        $revenueCat = $this->fetchRevenueCatPremiumStatus($this->user);
+
+        // RevenueCat sonucu geldiyse premium bilgisini onunla güncelle
+        if ($revenueCat['checked'] === true) {
+            $resourceData['is_premium'] = $revenueCat['is_premium'];
+        }
+
+        $resourceData['revenuecat'] = $revenueCat;
+
+        return $this->response->withData(true, "Kullanıcı detayı başarılı bir şekilde listelendi.", $resourceData);
+    }
+
+    private function fetchRevenueCatPremiumStatus(User $user): array
+    {
+        $apiKey = config('services.revenuecat.api_key');
+
+        if (empty($apiKey)) {
+            return [
+                'checked' => false,
+                'is_premium' => (bool) $user->is_premium,
+                'entitlements' => [],
+                'error' => 'RevenueCat API key tanimli degil.',
+            ];
+        }
+
+        try {
+            $appUserId = (string) $user->id;
+            $response = Http::timeout(8)
+                ->acceptJson()
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiKey,
+                ])
+                ->get("https://api.revenuecat.com/v1/subscribers/{$appUserId}");
+
+            if (!$response->successful()) {
+                return [
+                    'checked' => false,
+                    'is_premium' => (bool) $user->is_premium,
+                    'entitlements' => [],
+                    'error' => 'RevenueCat response status: ' . $response->status(),
+                ];
+            }
+
+            $body = $response->json();
+            $activeEntitlements = data_get($body, 'subscriber.entitlements', []);
+            $activeEntitlementKeys = array_keys(is_array($activeEntitlements) ? $activeEntitlements : []);
+            $isPremium = !empty($activeEntitlementKeys);
+
+            return [
+                'checked' => true,
+                'is_premium' => $isPremium,
+                'entitlements' => $activeEntitlementKeys,
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('RevenueCat me check failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'checked' => false,
+                'is_premium' => (bool) $user->is_premium,
+                'entitlements' => [],
+                'error' => 'RevenueCat baglanti hatasi.',
+            ];
+        }
     }
 
     /**

@@ -15,6 +15,7 @@ use App\Http\Controllers\API\TournamentQuizController;
 use App\Http\Controllers\API\LandingController;
 use App\Http\Controllers\API\DuelController;
 use App\Http\Controllers\API\DiamondController;
+use App\Http\Controllers\API\StorePackageController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\AdWatchController;
 use App\Http\Controllers\API\CoinHistoryController;
@@ -86,6 +87,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('{coinPackage}', [CoinPackageController::class, 'update']); // Admin only
         Route::delete('{coinPackage}', [CoinPackageController::class, 'destroy']); // Admin only
         Route::get('{coinPackage}/stats', [CoinPackageController::class, 'stats']); // Admin only
+    });
+
+    // Store package catalog routes
+    Route::prefix('store-packages')->group(function () {
+        Route::get('premium', [StorePackageController::class, 'premiumPackages']);
+        Route::get('joker', [StorePackageController::class, 'jokerPackages']);
+        Route::get('diamond', [StorePackageController::class, 'diamondPackages']);
     });
 
     // Coin Purchase routes
