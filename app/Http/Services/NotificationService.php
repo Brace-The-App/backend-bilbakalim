@@ -8,6 +8,7 @@ use App\Notifications\FCMNotification;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\Fcm\FcmChannel;
 
 class NotificationService
 {
@@ -123,22 +124,66 @@ class NotificationService
      */
     private function sendFCMNotifications($title, $content, $targetUsers)
     {
-        $users = $this->getTargetUsers($targetUsers, true); // Only role 3 with device_id
+        $users = $this->getTargetUsers($targetUsers, true);
         $sentCount = 0;
 
         foreach ($users as $user) {
-            if ($user->device_id && $user->role_id == 3) {
-                try {
-                    Notification::send($user, new FCMNotification($title, $content, [
-                        'title' => $title,
-                        'body' => $content,
+            if (!$user->device_id || (int) $user->role_id !== 3) {
+                continue;
+            }
+
+            try {
+                $notification = new \App\Notifications\FCMNotification($title, $content, [
+                    'title' => $title,
+                    'body' => $content,
+                    'user_id' => (string) $user->id,
+                    'timestamp' => now()->toISOString(),
+                ]);
+
+                $result = app(FcmChannel::class)->send($user, $notification);
+
+                if ($result instanceof \Illuminate\Support\Collection) {
+                    $reports = $result->map(function ($report) {
+                        if ($report instanceof \Kreait\Firebase\Messaging\MulticastSendReport) {
+                            return [
+                                'successes' => $report->successes()->count(),
+                                'failures' => $report->failures()->count(),
+                                'valid_tokens' => $report->validTokens(),
+                                'unknown_tokens' => $report->unknownTokens(),
+                                'invalid_tokens' => $report->invalidTokens(),
+                            ];
+                        }
+
+                        return [
+                            'type' => is_object($report) ? get_class($report) : gettype($report),
+                        ];
+                    })->values()->all();
+
+                    Log::info('FCM send report', [
                         'user_id' => $user->id,
-                        'timestamp' => now()->toISOString(),
-                    ]));
-                    $sentCount++;
-                } catch (\Exception $e) {
-                    Log::error("FCM sending failed for user {$user->id}: " . $e->getMessage());
+                        'device_id' => $user->device_id,
+                        'reports' => $reports,
+                    ]);
+
+                    $hasSuccess = collect($reports)->contains(function ($item) {
+                        return ($item['successes'] ?? 0) > 0;
+                    });
+
+                    if ($hasSuccess) {
+                        $sentCount++;
+                    }
+                } else {
+                    Log::info('FCM unexpected result', [
+                        'user_id' => $user->id,
+                        'device_id' => $user->device_id,
+                        'result_type' => is_object($result) ? get_class($result) : gettype($result),
+                    ]);
                 }
+            } catch (\Throwable $e) {
+                Log::error("FCM sending failed for user {$user->id}", [
+                    'device_id' => $user->device_id,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 

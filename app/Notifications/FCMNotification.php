@@ -3,72 +3,77 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\Fcm\FcmChannel;
 use NotificationChannels\Fcm\FcmMessage;
-use NotificationChannels\Fcm\Resources\AndroidConfig;
-use NotificationChannels\Fcm\Resources\AndroidFcmOptions;
-use NotificationChannels\Fcm\Resources\AndroidNotification;
-use NotificationChannels\Fcm\Resources\ApnsConfig;
-use NotificationChannels\Fcm\Resources\ApnsFcmOptions;
+use NotificationChannels\Fcm\Resources\Notification as FcmResourceNotification;
 
 class FCMNotification extends Notification
 {
     use Queueable;
 
-    protected $title;
-    protected $body;
-    protected $data;
+    protected string $title;
+    protected string $body;
+    protected array $data;
 
-    /**
-     * Create a new notification instance.
-     */
-    public function __construct($title, $body, $data = [])
+    public function __construct(string $title, string $body, array $data = [])
     {
         $this->title = $title;
         $this->body = $body;
         $this->data = $data;
     }
 
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @return array<int, string>
-     */
     public function via(object $notifiable): array
     {
         return [FcmChannel::class];
     }
 
-    /**
-     * Get the FCM representation of the notification.
-     */
     public function toFcm($notifiable): FcmMessage
     {
+        $data = [];
+
+        foreach ($this->data as $key => $value) {
+            if ($value === null) {
+                $data[$key] = '';
+            } elseif (is_bool($value)) {
+                $data[$key] = $value ? '1' : '0';
+            } elseif (is_scalar($value)) {
+                $data[$key] = (string) $value;
+            } else {
+                $data[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+            }
+        }
+
         return FcmMessage::create()
-            ->setData($this->data)
-            ->setNotification(\NotificationChannels\Fcm\Resources\Notification::create()
-                ->setTitle($this->title)
-                ->setBody($this->body))
-            ->setAndroid(
-                AndroidConfig::create()
-                    ->setFcmOptions(AndroidFcmOptions::create()->setAnalyticsLabel('analytics'))
-                    ->setNotification(AndroidNotification::create()
-                        ->setColor('#0A0A0A')
-                        ->setIcon('ic_notification'))
-            )->setApns(
-                ApnsConfig::create()
-                    ->setFcmOptions(ApnsFcmOptions::create()->setAnalyticsLabel('analytics_ios'))
-            );
+            ->notification(
+                FcmResourceNotification::create(
+                    title: $this->title,
+                    body: $this->body
+                )
+            )
+            ->data($data)
+            ->custom([
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'sound' => 'default',
+                        'channel_id' => 'default',
+                    ],
+                ],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10',
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                            'content-available' => 1,
+                        ],
+                    ],
+                ],
+            ]);
     }
 
-    /**
-     * Get the array representation of the notification.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(object $notifiable): array
     {
         return [

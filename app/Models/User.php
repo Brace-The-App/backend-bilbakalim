@@ -199,7 +199,9 @@ class User extends Authenticatable
      */
     public function routeNotificationForFcm()
     {
-        return $this->device_token;
+        // Bu projede FCM token pratikte `device_id` alanında tutuluyor.
+        // Geriye dönük uyumluluk için `device_token`'a da fallback yap.
+        return $this->device_id ?: $this->device_token;
     }
 
     // Account relationships kaldırıldı
