@@ -27,7 +27,7 @@ class NotificationService
             ]);
 
             $sentCount = 0;
-     
+
             switch ($type) {
                 case 'email':
                     $sentCount = $this->sendEmailNotifications($title, $content, $targetUsers);
@@ -82,9 +82,9 @@ class NotificationService
                         'type' => 'email',
                         'sentAt' => now()->format('d.m.Y H:i'),
                         'user' => $user
-                    ], function ($message) use ($user, $title) {     
+                    ], function ($message) use ($user, $title) {
                         $message->to($user->email)
-                                ->subject($title);
+                            ->subject($title);
                     });
                     $sentCount++;
                 } catch (\Exception $e) {
@@ -101,14 +101,32 @@ class NotificationService
      */
     private function sendSMSNotifications($title, $content, $targetUsers)
     {
+        if (!config('app.notification_sms_enabled', false)) {
+            Log::warning('SMS notifications disabled by config.');
+            return 0;
+        }
+
         $users = $this->getTargetUsers($targetUsers);
         $sentCount = 0;
+        $netGsmService = new NetGsmService();
 
         foreach ($users as $user) {
             if ($user->phone) {
                 try {
-                    // TODO: Implement SMS service integration
-                    Log::info("SMS would be sent to {$user->phone}: {$title} - {$content}");
+                    $message = trim((string) $title) !== ''
+                        ? (trim((string) $title) . "\n" . (string) $content)
+                        : (string) $content;
+
+                    $smsResult = $netGsmService->sendSms((string) $user->phone, $message);
+
+                    if (!($smsResult['success'] ?? false)) {
+                        Log::error("NetGSM SMS sending failed for user {$user->id}", [
+                            'phone' => $user->phone,
+                            'result' => $smsResult,
+                        ]);
+                        continue;
+                    }
+
                     $sentCount++;
                 } catch (\Exception $e) {
                     Log::error("SMS sending failed for user {$user->id}: " . $e->getMessage());
@@ -189,30 +207,35 @@ class NotificationService
 
         return $sentCount;
     }
-
     /**
      * Get target users based on criteria
      */
     private function getTargetUsers($targetUsers = null, $fcmOnly = false)
     {
         $query = User::query();
-    
+
         if ($fcmOnly) {
             // Sadece FCM device_id olan kullanıcılar
             $query->whereNotNull('device_id');
         }
-    
+
         // Role 3 filtrele
         $query->where('role_id', 3);
-    
+
+        if (is_array($targetUsers) && count($targetUsers) > 0) {
+            $query->whereIn('id', $targetUsers);
+            return $query->get();
+        }
+
+
         // Limit uygula
         if ($targetUsers && is_numeric($targetUsers)) {
             $query->limit((int) $targetUsers);
         }
-    
+
         return $query->get();
     }
-    
+
 
     /**
      * Get notification statistics
@@ -226,8 +249,8 @@ class NotificationService
             AVG(sent_count) as avg_sent_per_notification,
             MAX(created_at) as last_sent
         ')
-        ->groupBy('type')
-        ->get();
+            ->groupBy('type')
+            ->get();
     }
 
     /**
