@@ -108,7 +108,11 @@ class NotificationService
 
         $users = $this->getTargetUsers($targetUsers);
         $sentCount = 0;
-        $netGsmService = new NetGsmService();
+
+        // Eski NetGSM (silinmedi — geri almak için):
+        // $netGsmService = new NetGsmService();
+
+        $smsService = new SmsVitriniService;
 
         foreach ($users as $user) {
             if ($user->phone) {
@@ -117,10 +121,11 @@ class NotificationService
                         ? (trim((string) $title) . "\n" . (string) $content)
                         : (string) $content;
 
-                    $smsResult = $netGsmService->sendSms((string) $user->phone, $message);
+                    // $smsResult = $netGsmService->sendSms($user->phone, $message);
+                    $smsResult = $smsService->sendSms($user->phone, $message);
 
-                    if (!($smsResult['success'] ?? false)) {
-                        Log::error("NetGSM SMS sending failed for user {$user->id}", [
+                    if (! ($smsResult['success'] ?? false)) {
+                        Log::error("SMS (bildirim) gönderilemedi, kullanıcı {$user->id}", [
                             'phone' => $user->phone,
                             'result' => $smsResult,
                         ]);

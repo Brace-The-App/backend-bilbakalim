@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use App\Http\Services\NetGsmService;
+// use App\Http\Services\NetGsmService; // eski şifre sıfırlama SMS
+use App\Http\Services\SmsVitriniService;
 
 class PasswordResetService
 {
@@ -45,7 +46,7 @@ class PasswordResetService
 
             // Generate verification code
             $code = $this->generateVerificationCode($email, 'email');
-            
+
             // Set rate limit
             $this->setRateLimit($email, 'email');
 
@@ -55,7 +56,7 @@ class PasswordResetService
                 'email' => $email
             ], function ($message) use ($email) {
                 $message->to($email)
-                        ->subject('Şifre Sıfırlama Kodu - Bilbakalim');
+                    ->subject('Şifre Sıfırlama Kodu - Bilbakalim');
             });
 
             Log::info("Password reset code sent to: {$email}");
@@ -68,7 +69,7 @@ class PasswordResetService
 
         } catch (\Exception $e) {
             Log::error("Password reset code sending failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Kod gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -109,18 +110,23 @@ class PasswordResetService
 
             // Generate verification code
             $code = $this->generateVerificationCode($phone, 'phone');
-            
+
             // Set rate limit
             $this->setRateLimit($phone, 'phone');
 
-            // Send SMS via NetGSM
             $smsMessage = $this->getSmsMessage($code);
-            $netGsmService = new NetGsmService();
-            $smsResult = $netGsmService->sendSms($phone, $smsMessage);
 
-            if (!$smsResult['success']) {
-                Log::error("NetGSM SMS sending failed for phone {$phone}: " . ($smsResult['message'] ?? 'Unknown error'));
-                
+            // Eski NetGSM (silinmedi — geri almak için):
+            // $netGsmService = new NetGsmService();
+            // $smsResult = $netGsmService->sendSms($phone, $smsMessage);
+
+            // Mesaj Paneli: SmsVitriniService (sınıf adı tarihsel)
+            $smsService = new SmsVitriniService;
+            $smsResult = $smsService->sendSms($phone, $smsMessage);
+
+            if (! $smsResult['success']) {
+                Log::error("SMS Vitrini (şifre sıfırlama) gönderilemedi, telefon {$phone}: ".($smsResult['message'] ?? 'Unknown error'));
+
                 return [
                     'success' => false,
                     'message' => 'SMS gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -138,7 +144,7 @@ class PasswordResetService
 
         } catch (\Exception $e) {
             Log::error("Password reset code sending to phone failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Kod gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -159,7 +165,7 @@ class PasswordResetService
     {
         try {
             $verificationResult = $this->verifyCodeFromTrait($identifier, $code, $type);
-            
+
             if (!$verificationResult['success']) {
                 return [
                     'success' => false,
@@ -182,7 +188,7 @@ class PasswordResetService
 
         } catch (\Exception $e) {
             Log::error("Password reset code verification failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Doğrulama sırasında bir hata oluştu.',
@@ -213,7 +219,7 @@ class PasswordResetService
             }
 
             // Find user
-            $user = $type === 'email' 
+            $user = $type === 'email'
                 ? User::where('email', $identifier)->first()
                 : User::where('phone', $identifier)->first();
 
@@ -242,7 +248,7 @@ class PasswordResetService
 
         } catch (\Exception $e) {
             Log::error("Password reset failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Şifre sıfırlama sırasında bir hata oluştu.',
@@ -261,7 +267,7 @@ class PasswordResetService
     public function checkIdentifierExists(string $identifier, string $type = 'email'): array
     {
         try {
-            $user = $type === 'email' 
+            $user = $type === 'email'
                 ? User::where('email', $identifier)->first()
                 : User::where('phone', $identifier)->first();
 
@@ -274,7 +280,7 @@ class PasswordResetService
 
         } catch (\Exception $e) {
             Log::error("Identifier check failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'exists' => false,

@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\LandingBenefitController;
 use App\Http\Controllers\Admin\LandingTestimonialController;
 use App\Http\Controllers\Admin\LandingFaqController;
 use App\Http\Controllers\Admin\LandingNewsController;
+use App\Http\Controllers\Admin\SmsVitriniTestController;
 
 // Welcome page
 Route::get('/', function () {
@@ -42,8 +43,10 @@ Route::post('/logout', function () {
 })->name('logout');
 
 // Admin panel routes
-Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->group(function () {
+Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('/sms-vitrini-test', SmsVitriniTestController::class)->name('sms-vitrini-test');
 
     // Users management
     Route::resource('users', UserController::class);
@@ -96,7 +99,7 @@ Route::prefix('private/lesley/admin')->name('admin.')->middleware(['auth'])->gro
     });
 });
 
-Route::get('private/lesley/jetwaldes/api/documentation', function () {
+Route::get('/api/documentation', function () {
     $documentation = 'default';
     $documentationTitle = 'BilBakalim API Documentation';
     $useAbsolutePath = true;

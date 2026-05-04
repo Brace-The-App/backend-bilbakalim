@@ -6,7 +6,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use App\Http\Services\NetGsmService;
+// use App\Http\Services\NetGsmService; // eski SMS (NetGSM)
+use App\Http\Services\SmsVitriniService;
 
 class VerificationCodeService
 {
@@ -48,7 +49,7 @@ class VerificationCodeService
 
             // Generate verification code
             $code = $this->generateVerificationCode($email, 'email');
-            
+
             // Set rate limit
             $this->setRateLimit($email, 'email');
 
@@ -77,7 +78,7 @@ class VerificationCodeService
 
         } catch (\Exception $e) {
             Log::error("Email verification code sending failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Kod gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -122,18 +123,22 @@ class VerificationCodeService
 
             // Generate verification code
             $code = $this->generateVerificationCode($phone, 'phone');
-            
+
             // Set rate limit
             $this->setRateLimit($phone, 'phone');
 
-            // Send SMS via NetGSM
             $smsMessage = $this->getSmsMessage($code, $purpose);
-            $netGsmService = new NetGsmService();
-            $smsResult = $netGsmService->sendSms($phone, $smsMessage);
 
-            if (!$smsResult['success']) {
-                Log::error("NetGSM SMS sending failed for phone {$phone}: " . ($smsResult['message'] ?? 'Unknown error'));
-                
+            // Eski NetGSM (silinmedi — geri almak için):
+            // $netGsmService = new NetGsmService();
+            // $smsResult = $netGsmService->sendSms($phone, $smsMessage);
+
+            $smsService = new SmsVitriniService;
+            $smsResult = $smsService->sendSms($phone, $smsMessage);
+
+            if (! $smsResult['success']) {
+                Log::error("SMS (doğrulama) gönderilemedi, telefon {$phone}: ".($smsResult['message'] ?? 'Unknown error'));
+
                 return [
                     'success' => false,
                     'message' => 'SMS gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -151,7 +156,7 @@ class VerificationCodeService
 
         } catch (\Exception $e) {
             Log::error("Phone verification code sending failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Kod gönderilirken bir hata oluştu. Lütfen tekrar deneyin.',
@@ -173,7 +178,7 @@ class VerificationCodeService
     {
         try {
             $verificationResult = $this->verifyCodeFromTrait($identifier, $code, $type);
-            
+
             if (!$verificationResult['success']) {
                 return [
                     'success' => false,
@@ -198,7 +203,7 @@ class VerificationCodeService
 
         } catch (\Exception $e) {
             Log::error("Code verification failed: " . $e->getMessage());
-            
+
             return [
                 'success' => false,
                 'message' => 'Doğrulama sırasında bir hata oluştu.',
@@ -324,7 +329,7 @@ class VerificationCodeService
     {
         $cacheKey = "verification_code_{$type}_{$identifier}";
         $verificationKey = "verified_{$type}_{$purpose}_{$identifier}";
-        
+
         Cache::forget($cacheKey);
         Cache::forget($verificationKey);
     }

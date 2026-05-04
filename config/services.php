@@ -10,7 +10,7 @@ return [
     | This file is for storing the credentials for third party services such
     | as Mailgun, Postmark, AWS and more. This file provides the de facto
     | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | a conventional way to locate the various service credentials.
     |
     */
 
@@ -38,12 +38,30 @@ return [
     'netgsm' => [
         'username' => env('NETGSM_USERNAME', '8503055373'),
         'password' => env('NETGSM_PASSWORD', 'F1AF196'),
-        'msgheader' => env('NETGSM_MSGHEADER', 'ATOM GIDA'),
+        'msgheader' => env('NETGSM_MSGHEADER', 'BILBKLMINT'),
         'api_url' => env('NETGSM_API_URL', 'https://api.netgsm.com.tr/sms/rest/v2/send'),
+    ],
+
+    /*
+    | Mesaj Paneli (mesajpaneli.com) — SmsVitriniService içinde resmi PHP SDK kullanılır.
+    | API anahtarı: https://mesajpaneli.com/api
+    */
+    'smsvitrini' => [
+        'api_hash' => env('SMSVITRINI_API_HASH') ?: env('SMSVITRINI_API_KEY'),
+        'baslik' => env('SMSVITRINI_BASLIK'),
+        'sdk_path' => env('SMSVITRINI_SDK_PATH', base_path('lib/MesajPaneli/MesajPaneliApi.php')),
+        'verify_ssl' => env('SMSVITRINI_SSL_VERIFY', true) !== false
+            && env('SMSVITRINI_SSL_VERIFY') !== 'false',
+        'use_turkish_chars' => env('SMSVITRINI_USE_TURKISH_CHARS', true) !== false
+            && env('SMSVITRINI_USE_TURKISH_CHARS') !== 'false',
+        'test_phone' => env('SMSVITRINI_TEST_PHONE', '05312853058'),
     ],
 
     'revenuecat' => [
         'api_key' => env('REVENUECAT_API_KEY'),
     ],
 
+    'ai_questions' => [
+        'token' => env('AI_QUESTIONS_TOKEN'),
+    ],
 ];

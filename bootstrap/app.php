@@ -11,8 +11,27 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->appendToGroup('api', [
+            \App\Http\Middleware\ForceJsonAcceptForApi::class,
+        ]);
+
+        $middleware->alias([
+            'ai.questions.token' => \App\Http\Middleware\AiQuestionsTokenMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, \Illuminate\Http\Request $request) {
+            if (!$request->is('api/*')) {
+                return null;
+            }
+
+            $headers = $e->getHeaders();
+            $retryAfter = isset($headers['Retry-After']) ? (int) $headers['Retry-After'] : null;
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Çok fazla istek attınız. Lütfen daha sonra tekrar deneyin.',
+                'retry_after_seconds' => $retryAfter,
+            ], 429);
+        });
     })->create();
