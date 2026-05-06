@@ -45,7 +45,7 @@ class QuestionController extends Controller
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->whereRaw("JSON_EXTRACT(question, '$.tr') LIKE ?", ["%{$search}%"])
-                  ->orWhereRaw("JSON_EXTRACT(question, '$.en') LIKE ?", ["%{$search}%"]);
+                    ->orWhereRaw("JSON_EXTRACT(question, '$.en') LIKE ?", ["%{$search}%"]);
             });
         }
 
@@ -63,10 +63,50 @@ class QuestionController extends Controller
             });
         }
 
+        $supportedLocales = config('app.supported_locales', ['tr', 'en']);
+
+        $filteredTotalCount = (clone $query)->count();
+        $languageCounts = [];
+
+        foreach ($supportedLocales as $locale) {
+            $languageCounts[$locale] = (clone $query)
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.\"{$locale}\"')), '')) != ''")
+                ->count();
+        }
+
+        $bilingualCount = null;
+        $trOnlyCount = null;
+        $enOnlyCount = null;
+
+        if (in_array('tr', $supportedLocales, true) && in_array('en', $supportedLocales, true)) {
+            $bilingualCount = (clone $query)
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) != ''")
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) != ''")
+                ->count();
+
+            $trOnlyCount = (clone $query)
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) != ''")
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) = ''")
+                ->count();
+
+            $enOnlyCount = (clone $query)
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) != ''")
+                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) = ''")
+                ->count();
+        }
+
         $questions = $query->latest()->paginate(10);
         $categories = Category::active()->get();
 
-        return view('admin.questions.index', compact('questions', 'categories'));
+        return view('admin.questions.index', compact(
+            'questions',
+            'categories',
+            'filteredTotalCount',
+            'languageCounts',
+            'bilingualCount',
+            'trOnlyCount',
+            'enOnlyCount'
+        ));
     }
 
     public function create()

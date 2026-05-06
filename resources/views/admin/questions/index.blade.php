@@ -70,6 +70,21 @@
                             <button type="button" id="clearFiltersBtn" class="btn btn-outline-secondary">Temizle</button>
                         </div>
                     </form>
+                    <div id="questionsSummary" class="mb-3">
+                        <span class="badge bg-primary me-2 mb-1">Filtreye göre toplam soru: {{ $filteredTotalCount ?? 0 }}</span>
+                        @foreach(($languageCounts ?? []) as $locale => $count)
+                            <span class="badge bg-info text-dark me-2 mb-1">{{ strtoupper($locale) }}: {{ $count }}</span>
+                        @endforeach
+                        @if(!is_null($bilingualCount) && $bilingualCount > 0)
+                            <span class="badge bg-success me-2 mb-1">TR + EN: {{ $bilingualCount }}</span>
+                        @endif
+                        @if(!is_null($trOnlyCount) && $trOnlyCount > 0)
+                            <span class="badge bg-secondary me-2 mb-1">Sadece TR: {{ $trOnlyCount }}</span>
+                        @endif
+                        @if(!is_null($enOnlyCount) && $enOnlyCount > 0)
+                            <span class="badge bg-warning text-dark me-2 mb-1">Sadece EN: {{ $enOnlyCount }}</span>
+                        @endif
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
@@ -799,8 +814,12 @@
                     data: formData,
                     success: function(response) {
                         // Extract table body and pagination from response
+                        var summary = $(response).find('#questionsSummary').html();
                         var tableBody = $(response).find('#questionsTableBody').html();
                         var pagination = $(response).find('#questionsPagination').html();
+
+                        // Update summary
+                        $('#questionsSummary').html(summary);
 
                         // Update table body
                         $('#questionsTableBody').html(tableBody);
