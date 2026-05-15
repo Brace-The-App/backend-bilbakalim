@@ -28,6 +28,12 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        RateLimiter::for('ai-questions', function (Request $request) {
+            $token = (string) $request->header('X-AI-TOKEN', '');
+            $key = $token !== '' ? 'ai:' . sha1($token) : 'ai:' . $request->ip();
+            return Limit::perMinute((int) env('AI_QUESTIONS_MAX_REQUESTS_PER_MINUTE', 1))->by($key);
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\RevealsCorrectAnswerWhenWrong;
 use App\Models\Tournament;
 use App\Models\TournamentUser;
 use App\Models\Question;
@@ -18,6 +19,7 @@ use Carbon\Carbon;
 
 class TournamentQuizController extends Controller
 {
+    use RevealsCorrectAnswerWhenWrong;
     /**
      * @OA\Post(
      *     path="/api/tournament-quiz/join",
@@ -1255,10 +1257,9 @@ class TournamentQuizController extends Controller
             $nextQuestionData = $this->formatQuestionMultilingual($nextQuestion);
         }
 
-        return response()->json([
+        return response()->json(array_merge([
             'success' => true,
             'is_correct' => $isCorrect,
-            'correct_option' => $question->correct_answer,
             'coin_change' => $coinChange,
             'score' => $newScore, // Score = toplam coin değişimi (turnuvadan kazanılan/kaybedilen)
             'status' => $status,
@@ -1266,7 +1267,7 @@ class TournamentQuizController extends Controller
             'next_question' => $nextQuestionData,
             'tournament_finished' => $tournamentFinished,
             'time_remaining' => $timeRemaining
-        ]);
+        ], $this->correctAnswerRevealForQuestion($question, $isCorrect)));
     }
 
     /**
@@ -2202,7 +2203,7 @@ class TournamentQuizController extends Controller
                 }
             }
 
-            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/tournament-answer-submitted", [
+            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/tournament-answer-submitted", array_merge([
                 'tournament_id' => $tournament->id,
                 'user_id' => $tournamentUser->user_id,
                 'question_id' => $question->id,
@@ -2212,7 +2213,7 @@ class TournamentQuizController extends Controller
                 'speed_bonus' => $speedBonus,
                 'leaderboard' => $this->getLeaderboard($tournament),
                 'timestamp' => now()->toISOString()
-            ]);
+            ], $this->correctAnswerRevealForQuestion($question, $isCorrect)));
 
             Log::info('Tournament answer webhook sent', [
                 'tournament_id' => $tournament->id,

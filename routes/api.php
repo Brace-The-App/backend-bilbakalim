@@ -22,11 +22,17 @@ use App\Http\Controllers\API\CoinHistoryController;
 use App\Http\Controllers\API\GiftCardStoreController;
 use App\Http\Controllers\API\LeaderboardController;
 use App\Http\Controllers\API\RewardController;
+use App\Http\Controllers\API\AiQuestionController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+});
+
+// AI Question ingest (no sanctum, manual token header + strict throttling)
+Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-questions'])->group(function () {
+    Route::post('questions', [AiQuestionController::class, 'store']);
 });
 
 // Referral routes (auth required)
@@ -78,7 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('cancel', [PaymentController::class, 'cancelPayment']);
     });
 
-    // Coin Package routes 
+    // Coin Package routes
     Route::prefix('coin-packages')->group(function () {
         Route::get('/', [CoinPackageController::class, 'index']);
         Route::get('popular', [CoinPackageController::class, 'popular']);
@@ -203,7 +209,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Gift Card Stores routes
     Route::get('gift-card-stores', [GiftCardStoreController::class, 'index']);
-    
+
     // Leaderboard routes
     Route::prefix('leaderboard')->group(function () {
         Route::get('/', [LeaderboardController::class, 'all']);

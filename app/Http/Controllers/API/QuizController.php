@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\RevealsCorrectAnswerWhenWrong;
 use App\Models\Question;
 use App\Models\IndividualGame;
 use App\Models\GameAnswer;
@@ -18,6 +19,7 @@ use Carbon\Carbon;
 
 class QuizController extends Controller
 {
+    use RevealsCorrectAnswerWhenWrong;
     /**
      * @OA\Post(
      *     path="/api/quiz/normal/start",
@@ -223,7 +225,7 @@ class QuizController extends Controller
             $jokerUsed = null;
             if ($request->joker_used) {
                 $settings = $game->settings ?? [];
-                
+
                 // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
                 if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
                     $settings['jokers'] = [
@@ -232,7 +234,7 @@ class QuizController extends Controller
                         'hint' => $user->hint_jokers ?? 0
                     ];
                 }
-                
+
                 if (isset($settings['jokers'][$request->joker_used]) && $settings['jokers'][$request->joker_used] > 0) {
                     $settings['jokers'][$request->joker_used]--;
                     $jokerUsed = $request->joker_used;
@@ -318,7 +320,7 @@ class QuizController extends Controller
                     $finalCoins = max(0, $userCoins - $coinDeduction);
                     $user->update(['coins' => $finalCoins]);
 
-                    return response()->json([
+                    return response()->json(array_merge([
                         'success' => false,
                         'message' => 'Yeterli jetonunuz yok. Reklam izleyerek veya jeton satın alarak devam edebilirsiniz.',
                         'is_correct' => false,
@@ -335,7 +337,7 @@ class QuizController extends Controller
                             'total_coins' => $game->coins_earned,
                             'user_coins' => $finalCoins
                         ]
-                    ]);
+                    ], $this->correctAnswerRevealForQuestion($question, false)));
                 }
             }
 
@@ -372,7 +374,7 @@ class QuizController extends Controller
         // Soruyu çoklu dil formatında formatla
         $nextQuestionData = $nextQuestion ? $this->formatQuestionMultilingual($nextQuestion) : null;
 
-        return response()->json([
+        return response()->json(array_merge([
             'success' => true,
             'is_correct' => $isCorrect,
             'earned_coins' => $coinsChange,
@@ -386,7 +388,7 @@ class QuizController extends Controller
                 'jokers_remaining' => $game->settings['jokers'] ?? []
             ],
             'next_question' => $nextQuestionData
-        ]);
+        ], $this->correctAnswerRevealForQuestion($question, $isCorrect)));
     }
 
     /**
@@ -674,12 +676,12 @@ class QuizController extends Controller
             'question_id' => 'required|exists:questions,id',
             'joker_type' => 'required|in:fifty_fifty,double_answer,hint',
         ];
-        
+
         // selected_answer sadece null değilse ve boş string değilse validation'a ekle
         if ($request->has('selected_answer') && $request->selected_answer !== null && $request->selected_answer !== '') {
             $rules['selected_answer'] = 'required|in:1,2,3,4';
         }
-        
+
         $request->validate($rules);
 
         $user = Auth::user();
@@ -701,7 +703,7 @@ class QuizController extends Controller
 
         // Joker hakkı kontrolü
         $settings = $game->settings ?? [];
-        
+
         // Eğer jokers anahtarı yoksa, kullanıcının güncel joker değerlerini al
         if (!isset($settings['jokers']) || !is_array($settings['jokers'])) {
             $user = Auth::user();
@@ -711,7 +713,7 @@ class QuizController extends Controller
                 'hint' => $user->hint_jokers ?? 0
             ];
         }
-        
+
         // Joker tipi kontrolü
         if (!isset($settings['jokers'][$jokerType]) || $settings['jokers'][$jokerType] <= 0) {
             return response()->json([
@@ -744,7 +746,7 @@ class QuizController extends Controller
         // Seçilen cevabın doğruluğunu kontrol et
         $selectedAnswer = $request->selected_answer;
         $isCorrect = null;
-        
+
         if ($selectedAnswer !== null) {
             // Çift cevap joker kontrolü
             if ($jokerType === 'double_answer' && $request->second_option) {
@@ -818,7 +820,7 @@ class QuizController extends Controller
         // Şık numarasını harfe çevir (1 -> A, 2 -> B, 3 -> C, 4 -> D)
         $answerMap = ['1' => 'A', '2' => 'B', '3' => 'C', '4' => 'D'];
         $answerLetter = $answerMap[$question->correct_answer] ?? $question->correct_answer;
-        
+
         $hints = [
             'Doğru cevap ' . $answerLetter . ' şıkkında.',
             'Kategori: ' . ($question->category->name ?? 'Genel')
@@ -1149,7 +1151,7 @@ class QuizController extends Controller
             $isCorrect,
             $coinsChange,
             'normal',
-            [
+            array_merge([
                 'user_coins' => $user->coins,
                 'game_stats' => [
                     'total_questions' => $game->question_count,
@@ -1157,7 +1159,7 @@ class QuizController extends Controller
                     'wrong_answers' => $game->wrong_answers,
                     'total_coins' => $game->coins_earned
                 ]
-            ]
+            ], $this->correctAnswerRevealForQuestion($question, $isCorrect))
         );
     }
 

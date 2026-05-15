@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\RevealsCorrectAnswerWhenWrong;
 use App\Models\Duel;
 use App\Models\DuelAnswer;
 use App\Models\Diamond;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Http;
 
 class DuelController extends Controller
 {
+    use RevealsCorrectAnswerWhenWrong;
     /**
      * @OA\Post(
      *     path="/api/duel/question-multiplier/{duel_id}",
@@ -1212,13 +1214,12 @@ class DuelController extends Controller
             // Socket bildirimi gönder
             $this->sendDuelAnswerWebhook($duel, $user, $isCorrect, $bothAnswered);
 
-            return response()->json([
+            return response()->json(array_merge([
                 'success' => true,
                 'is_correct' => $isCorrect,
-                'correct_answer' => $question->correct_answer,
                 'both_answered' => $bothAnswered,
                 'waiting_for_opponent' => !$bothAnswered,
-            ]);
+            ], $this->correctAnswerRevealForQuestion($question, $isCorrect)));
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -1590,7 +1591,7 @@ class DuelController extends Controller
     {
         try {
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
-            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-answer", [
+            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-answer", array_merge([
                 'duel_id' => $duel->id,
                 'user_id' => $user->id,
                 'challenger_id' => $duel->challenger_id,
@@ -1598,7 +1599,7 @@ class DuelController extends Controller
                 'is_correct' => $isCorrect,
                 'both_answered' => $bothAnswered,
                 'timestamp' => now()->toISOString()
-            ]);
+            ], $this->correctAnswerRevealForQuestion($duel->currentQuestion, $isCorrect)));
         } catch (\Exception $e) {
             Log::error('Failed to send duel answer webhook', ['error' => $e->getMessage()]);
         }

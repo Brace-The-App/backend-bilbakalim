@@ -113,7 +113,7 @@ io.on('connection', (socket) => {
     // Düello odasına katılma
     socket.on('join_duel', (data) => {
         console.log('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
-        
+
         if (!data || !data.duelId || !data.userId) {
             socket.emit('join_duel_error', {
                 success: false,
@@ -121,15 +121,15 @@ io.on('connection', (socket) => {
             });
             return;
         }
-        
+
         const { duelId, userId, userName } = data;
         const roomName = `duel_${duelId}`;
-        
+
         socket.join(roomName);
         socket.join(`user_${userId}`);
-        
+
         console.log(`✅ Kullanıcı ${userId} düello odasına katıldı: ${roomName}`);
-        
+
         socket.emit('duel_joined', {
             success: true,
             duel_id: duelId,
@@ -285,11 +285,11 @@ io.on('connection', (socket) => {
     socket.on('test-user-joined-tournament', (data) => {
         console.log('🧪 Test event: test-user-joined-tournament', JSON.stringify(data, null, 2));
         const { tournament_id, user_id, user_name, current_participants, min_participants, waiting_message, ready_to_start } = data;
-        
+
         const roomName = `tournament_${tournament_id}`;
         const room = io.sockets.adapter.rooms.get(roomName);
         const roomSize = room ? room.size : 0;
-        
+
         // Odadaki gerçek kullanıcıları al
         const socketIds = room ? Array.from(room) : [];
         const usersInRoom = [];
@@ -303,7 +303,7 @@ io.on('connection', (socket) => {
                 });
             }
         });
-        
+
         const joinData = {
             tournament_id: parseInt(tournament_id),
             user_id: parseInt(user_id),
@@ -317,18 +317,18 @@ io.on('connection', (socket) => {
             room_size: roomSize,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('user-joined-tournament', joinData);
         io.to(`tournament_${tournament_id}`).emit('user_joined_tournament', joinData);
         io.to(`user_${user_id}`).emit('tournament_joined', joinData);
-        
+
         const isReady = ready_to_start || (joinData.current_participants >= joinData.min_participants);
         const waitingMsg = waiting_message || (
-            isReady 
+            isReady
                 ? `Turnuva başlamaya hazır! (${joinData.current_participants}/${joinData.min_participants})`
                 : `Diğer oyuncular bekleniyor... (${joinData.current_participants}/${joinData.min_participants})`
         );
-        
+
         const waitingData = {
             tournament_id: parseInt(tournament_id),
             current_participants: joinData.current_participants,
@@ -338,25 +338,25 @@ io.on('connection', (socket) => {
             users_in_room: usersInRoom, // Bekleyen kullanıcılar
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('waiting-players', waitingData);
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'user-joined-tournament', 
+        socket.emit('test-response', {
+            success: true,
+            event: 'user-joined-tournament',
             data: joinData,
             waiting_data: waitingData,
-            message: 'Event gönderildi, gerçek kullanıcı bilgileri ile' 
+            message: 'Event gönderildi, gerçek kullanıcı bilgileri ile'
         });
     });
 
     socket.on('test-tournament-started', (data) => {
         console.log('🧪 Test event: test-tournament-started', JSON.stringify(data, null, 2));
         const { tournament_id, tournament_type, participants, question_count, time_limit, first_question, start_time } = data;
-        
+
         const roomName = `tournament_${tournament_id}`;
         const room = io.sockets.adapter.rooms.get(roomName);
         const roomSize = room ? room.size : 0;
-        
+
         // Odadaki gerçek kullanıcıları al
         const socketIds = room ? Array.from(room) : [];
         const realParticipants = [];
@@ -369,7 +369,7 @@ io.on('connection', (socket) => {
                 });
             }
         });
-        
+
         const startData = {
             tournament_id: parseInt(tournament_id),
             tournament_type: tournament_type || 'question_based',
@@ -382,21 +382,21 @@ io.on('connection', (socket) => {
             room_size: roomSize,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('tournament-started', startData);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'tournament-started', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'tournament-started',
             data: startData,
-            message: 'Event gönderildi, gerçek katılımcı bilgileri ile' 
+            message: 'Event gönderildi, gerçek katılımcı bilgileri ile'
         });
     });
 
     socket.on('test-tournament-answer-submitted', (data) => {
         console.log('🧪 Test event: test-tournament-answer-submitted', JSON.stringify(data, null, 2));
         const { tournament_id, user_id, question_id, is_correct, score_change, current_score, speed_bonus, leaderboard } = data;
-        
+
         const answerData = {
             tournament_id: parseInt(tournament_id),
             user_id: parseInt(user_id),
@@ -408,41 +408,49 @@ io.on('connection', (socket) => {
             leaderboard: leaderboard || [],
             timestamp: new Date().toISOString()
         };
-        
+
+        if (!is_correct && data.correct_answer) {
+            answerData.correct_answer = data.correct_answer;
+            answerData.correct_option = data.correct_option ?? data.correct_answer;
+            if (data.correct_answer_text) {
+                answerData.correct_answer_text = data.correct_answer_text;
+            }
+        }
+
         io.to(`tournament_${tournament_id}`).emit('tournament-answer-submitted', answerData);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'tournament-answer-submitted', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'tournament-answer-submitted',
             data: answerData,
-            message: 'Event gönderildi' 
+            message: 'Event gönderildi'
         });
     });
 
     socket.on('test-tournament-ranking-updated', (data) => {
         console.log('🧪 Test event: test-tournament-ranking-updated', JSON.stringify(data, null, 2));
         const { tournament_id, rankings } = data;
-        
+
         const rankingData = {
             tournament_id: parseInt(tournament_id),
             rankings: rankings || [],
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(`tournament_${tournament_id}`).emit('tournament-ranking-updated', rankingData);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'tournament-ranking-updated', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'tournament-ranking-updated',
             data: rankingData,
-            message: 'Event gönderildi' 
+            message: 'Event gönderildi'
         });
     });
 
     socket.on('test-tournament-next-question', (data) => {
         console.log('🧪 Test event: test-tournament-next-question', JSON.stringify(data, null, 2));
         const { tournament_id, question, question_number, total_questions } = data;
-        
+
         const payload = {
             tournament_id: parseInt(tournament_id),
             question: question,
@@ -450,25 +458,25 @@ io.on('connection', (socket) => {
             total_questions: total_questions,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(`tournament_${tournament_id}`).emit('tournament-next-question', payload);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'tournament-next-question', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'tournament-next-question',
             data: payload,
-            message: 'Event gönderildi' 
+            message: 'Event gönderildi'
         });
     });
 
     socket.on('test-player-eliminated', (data) => {
         console.log('🧪 Test event: test-player-eliminated', JSON.stringify(data, null, 2));
         const { tournament_id, user_id, user_name, reason, remaining_players, final_score, position } = data;
-        
+
         const roomName = `tournament_${tournament_id}`;
         const room = io.sockets.adapter.rooms.get(roomName);
         const roomSize = room ? room.size : 0;
-        
+
         const eliminationData = {
             tournament_id: parseInt(tournament_id),
             user_id: parseInt(user_id),
@@ -479,21 +487,21 @@ io.on('connection', (socket) => {
             remaining_players: remaining_players || roomSize,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('player-eliminated', eliminationData);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'player-eliminated', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'player-eliminated',
             data: eliminationData,
-            message: 'Event gönderildi' 
+            message: 'Event gönderildi'
         });
     });
 
     socket.on('test-tournament-finished', (data) => {
         console.log('🧪 Test event: test-tournament-finished', JSON.stringify(data, null, 2));
         const { tournament_id, final_rankings, final_leaderboard, winner, winners, end_reason } = data;
-        
+
         const finishData = {
             tournament_id: parseInt(tournament_id),
             final_rankings: final_rankings || final_leaderboard || [],
@@ -502,14 +510,14 @@ io.on('connection', (socket) => {
             end_reason: end_reason || 'completed',
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(`tournament_${tournament_id}`).emit('tournament-finished', finishData);
-        
-        socket.emit('test-response', { 
-            success: true, 
-            event: 'tournament-finished', 
+
+        socket.emit('test-response', {
+            success: true,
+            event: 'tournament-finished',
             data: finishData,
-            message: 'Event gönderildi' 
+            message: 'Event gönderildi'
         });
     });
 
@@ -748,9 +756,21 @@ app.post('/socket-webhooks/webhook/tournament-started', (req, res) => {
 });
 
 app.post('/socket-webhooks/webhook/tournament-answer-submitted', (req, res) => {
-    const { tournament_id, user_id, question_id, is_correct, score_change, current_score, speed_bonus, leaderboard } = req.body;
+    const {
+        tournament_id,
+        user_id,
+        question_id,
+        is_correct,
+        score_change,
+        current_score,
+        speed_bonus,
+        leaderboard,
+        correct_answer,
+        correct_option,
+        correct_answer_text
+    } = req.body;
 
-    io.to(`tournament_${tournament_id}`).emit('tournament-answer-submitted', {
+    const payload = {
         tournament_id,
         user_id,
         question_id,
@@ -760,7 +780,17 @@ app.post('/socket-webhooks/webhook/tournament-answer-submitted', (req, res) => {
         speed_bonus: speed_bonus || 0,
         leaderboard: leaderboard || [],
         timestamp: new Date().toISOString()
-    });
+    };
+
+    if (!is_correct) {
+        payload.correct_answer = correct_answer ?? correct_option ?? null;
+        payload.correct_option = correct_option ?? correct_answer ?? null;
+        if (correct_answer_text) {
+            payload.correct_answer_text = correct_answer_text;
+        }
+    }
+
+    io.to(`tournament_${tournament_id}`).emit('tournament-answer-submitted', payload);
 
     console.log(`Turnuva cevabı gönderildi: Tournament ${tournament_id}, User ${user_id}, Correct: ${is_correct}, Score: ${current_score}`);
     res.json({ success: true, message: 'Tournament answer submitted webhook processed' });
@@ -879,11 +909,11 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-created', JSON.stringify(req.body));
         const { duel_id, challenger_id, opponent_id, multiplier, question_value, requires_acceptance } = req.body;
-        
+
         if (!duel_id || !challenger_id || !opponent_id) {
             return res.status(400).json({ success: false, message: 'Eksik parametreler' });
         }
-        
+
         const roomName = `duel_${duel_id}`;
         const data = {
             duel_id: parseInt(duel_id),
@@ -894,7 +924,7 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
             requires_acceptance: requires_acceptance || false, // X2/X4/X8 için true
             timestamp: new Date().toISOString()
         };
-        
+
         // X2/X4/X8 ise sadece rakibe bildirim gönder (kabul/reddet seçeneği ile)
         if (requires_acceptance) {
             io.to(`user_${opponent_id}`).emit('duel-challenge-request', {
@@ -906,9 +936,9 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
             io.to(`user_${challenger_id}`).emit('duel-created', data);
             io.to(`user_${opponent_id}`).emit('duel-created', data);
         }
-        
+
         io.to(roomName).emit('duel-created', data);
-        
+
         console.log('✅ duel-created event gönderildi');
         res.json({ success: true });
     } catch (error) {
@@ -921,11 +951,11 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-started', JSON.stringify(req.body));
         const { duel_id, challenger_id, opponent_id, question } = req.body;
-        
+
         if (!duel_id) {
             return res.status(400).json({ success: false, message: 'duel_id gerekli' });
         }
-        
+
         const roomName = `duel_${duel_id}`;
         const data = {
             duel_id: parseInt(duel_id),
@@ -934,11 +964,11 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
             question: question,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('duel-started', data);
         io.to(`user_${challenger_id}`).emit('duel-started', data);
         io.to(`user_${opponent_id}`).emit('duel-started', data);
-        
+
         console.log('✅ duel-started event gönderildi');
         res.json({ success: true });
     } catch (error) {
@@ -950,12 +980,22 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-answer', JSON.stringify(req.body));
-        const { duel_id, user_id, is_correct, both_answered, challenger_id, opponent_id } = req.body;
-        
+        const {
+            duel_id,
+            user_id,
+            is_correct,
+            both_answered,
+            challenger_id,
+            opponent_id,
+            correct_answer,
+            correct_option,
+            correct_answer_text
+        } = req.body;
+
         if (!duel_id || !user_id) {
             return res.status(400).json({ success: false, message: 'Eksik parametreler' });
         }
-        
+
         const roomName = `duel_${duel_id}`;
         const data = {
             duel_id: parseInt(duel_id),
@@ -964,11 +1004,19 @@ app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
             both_answered: both_answered,
             timestamp: new Date().toISOString()
         };
-        
+
+        if (!is_correct) {
+            data.correct_answer = correct_answer ?? correct_option ?? null;
+            data.correct_option = correct_option ?? correct_answer ?? null;
+            if (correct_answer_text) {
+                data.correct_answer_text = correct_answer_text;
+            }
+        }
+
         io.to(roomName).emit('duel-answer', data);
         if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-answer', data);
         if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-answer', data);
-        
+
         console.log('✅ duel-answer event gönderildi');
         res.json({ success: true });
     } catch (error) {
@@ -1046,11 +1094,11 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
         const { duel_id, question, question_number, challenger_id, opponent_id } = req.body;
-        
+
         if (!duel_id || !question) {
             return res.status(400).json({ success: false, message: 'Eksik parametreler' });
         }
-        
+
         const roomName = `duel_${duel_id}`;
         const data = {
             duel_id: parseInt(duel_id),
@@ -1058,11 +1106,11 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
             question_number: question_number,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('duel-next-question', data);
         if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-next-question', data);
         if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-next-question', data);
-        
+
         console.log('✅ duel-next-question event gönderildi');
         res.json({ success: true });
     } catch (error) {
@@ -1075,22 +1123,22 @@ app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
         const { duel_id, winner_id, challenger_id, opponent_id } = req.body;
-        
+
         if (!duel_id) {
             return res.status(400).json({ success: false, message: 'duel_id gerekli' });
         }
-        
+
         const roomName = `duel_${duel_id}`;
         const data = {
             duel_id: parseInt(duel_id),
             winner_id: winner_id ? parseInt(winner_id) : null,
             timestamp: new Date().toISOString()
         };
-        
+
         io.to(roomName).emit('duel-finished', data);
         if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-finished', data);
         if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-finished', data);
-        
+
         console.log('✅ duel-finished event gönderildi');
         res.json({ success: true });
     } catch (error) {
