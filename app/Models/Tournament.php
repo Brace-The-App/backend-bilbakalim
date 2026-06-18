@@ -55,6 +55,29 @@ class Tournament extends Model
         'ranking_type' => 'string'
     ];
 
+    public static function staticRules(): array
+    {
+        $rules = config('tournament.rules', []);
+
+        if (is_array($rules)) {
+            return array_values($rules);
+        }
+
+        if (is_string($rules) && $rules !== '') {
+            return array_values(array_filter(explode("\n", $rules), fn ($line) => trim($line) !== ''));
+        }
+
+        return [];
+    }
+
+    public function toArray()
+    {
+        $array = parent::toArray();
+        $array['rules'] = static::staticRules();
+
+        return $array;
+    }
+
     // Relationships
     public function tournamentUsers(): HasMany
     {

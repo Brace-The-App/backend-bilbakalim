@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
 
 /**
  * @OA\Tag(
@@ -194,8 +195,12 @@ class PaymentController extends Controller
                     $diamond->add((int) $selectedPackage->diamond_amount);
                 } elseif ($type === 'premium') {
                     /** @var PremiumPackage $selectedPackage */
-                    $baseTime = $user->premium_expires_at && $user->premium_expires_at->isFuture()
-                        ? $user->premium_expires_at
+                    $premiumExpiresAt = $user->premium_expires_at
+                        ? Carbon::parse($user->premium_expires_at)
+                        : null;
+
+                    $baseTime = $premiumExpiresAt && $premiumExpiresAt->isFuture()
+                        ? $premiumExpiresAt
                         : now();
                     $newExpireAt = $baseTime->copy()->addDays((int) $selectedPackage->duration_days);
 

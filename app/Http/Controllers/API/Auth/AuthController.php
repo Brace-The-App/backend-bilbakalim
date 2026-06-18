@@ -215,7 +215,7 @@ class AuthController extends Controller
         $user->phone = $request->phone;
         $user->role_id = 3;
         $user->account_status = 'active';
-        $user->coins = 1000;
+        $user->coins = 2000;
 
         // Unique referral kodu oluştur
         $user->referral_code = User::generateReferralCode();
@@ -256,7 +256,7 @@ class AuthController extends Controller
                 $referrer->increment('coins', $referralReward);
 
                 // Coin history kayıtları
-                // Kullanıcı zaten 1000 coin ile kaydedildi, sonra 50 eklendi
+                // Kullanıcı zaten 2000 coin ile kaydedildi, sonra 50 eklendi
                 $userBalanceBefore = $user->coins - $referralReward;
                 $userBalanceAfter = $user->coins;
 
