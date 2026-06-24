@@ -219,7 +219,7 @@ class WebhookService
     public function checkUserConnection(int $userId): bool
     {
         try {
-            $response = Http::timeout(3)->post($this->socketUrl . '/check-user-connection', [
+            $response = Http::timeout(3)->post($this->socketUrl . '/socket-webhooks/check-user-connection', [
                 'userId' => $userId
             ]);
             
@@ -244,7 +244,7 @@ class WebhookService
     public function checkUsersConnection(array $userIds): array
     {
         try {
-            $response = Http::timeout(5)->post($this->socketUrl . '/check-users-connection', [
+            $response = Http::timeout(5)->post($this->socketUrl . '/socket-webhooks/check-users-connection', [
                 'userIds' => $userIds
             ]);
             

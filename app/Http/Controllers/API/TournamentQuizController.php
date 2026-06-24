@@ -68,11 +68,19 @@ class TournamentQuizController extends Controller
         $user = Auth::user();
         $tournament = Tournament::find($request->tournament_id);
 
-        // Turnuva durumu kontrolü
+        // Turnuva durumu kontrolü — yalnızca kayıt açıkken katılım
         if ($tournament->status !== 'upcoming') {
             return response()->json([
                 'success' => false,
-                'message' => 'Bu turnuvaya katılım alınmıyor.'
+                'message' => 'Turnuva başladı. Katılım kapandı.',
+            ], 400);
+        }
+
+        $registeredParticipants = $this->countRegisteredParticipants($tournament);
+        if (!$this->canJoinTournament($tournament, $registeredParticipants, $user->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bu turnuvaya şu anda katılamazsınız.',
             ], 400);
         }
 
@@ -99,19 +107,9 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
-        // Socket bağlantısı kontrolü - turnuvaya katılmak için socket bağlantısı zorunlu
-        $webhookService = app(\App\Http\Services\WebhookService::class);
-        $isSocketConnected = $webhookService->checkUserConnection($user->id);
-
-        if (!$isSocketConnected) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Turnuvaya katılmak için socket bağlantısı gereklidir. Lütfen uygulamayı yeniden başlatın.'
-            ], 400);
-        }
-
         // Katılım kotası kontrolü
-        if ($tournament->current_participants >= $tournament->max_participants) {
+        $registeredParticipants = $this->countRegisteredParticipants($tournament);
+        if ($registeredParticipants >= $tournament->max_participants) {
             return response()->json([
                 'success' => false,
                 'message' => 'Turnuva dolu.'
@@ -152,7 +150,7 @@ class TournamentQuizController extends Controller
             'correct_answers' => 0,
             'wrong_answers' => 0,
             'total_time_seconds' => 0,
-            'status' => 'waiting',  // Enum'da 'waiting' var, 'registered' yok
+            'status' => 'waiting',
             'joined_at' => now(),
             'answers_detail' => []
         ]);
@@ -166,28 +164,37 @@ class TournamentQuizController extends Controller
 
         // Socket ile katılım bildirimi gönder
         $this->broadcastUserJoinedTournament($tournament, $user);
-        $this->sendTournamentJoinWebhook($tournament, $user);
 
-        // Minimum katılım kontrolü ve bekleme mesajı
+        $tournamentStarted = $this->autoStartTournamentIfReady($tournament);
+        $tournament = $tournament->fresh();
+
+        if (!$tournamentStarted) {
+            $this->sendTournamentJoinWebhook($tournament, $user);
+        }
+
+        $currentParticipants = $this->countRegisteredParticipants($tournament);
+        $availability = $this->buildTournamentAvailability($tournament, $currentParticipants, $user->id);
         $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
-        $waitingMessage = null;
 
-        if ($tournament->current_participants < $minParticipants) {
-            $waitingMessage = "Diğer oyuncular bekleniyor... ({$tournament->current_participants}/{$minParticipants})";
+        if (
+            !$tournamentStarted
+            && $currentParticipants < $minParticipants
+        ) {
             $this->broadcastWaitingPlayers($tournament);
-        } else {
-            $waitingMessage = "Turnuva başlamaya hazır! ({$tournament->current_participants}/{$minParticipants})";
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Turnuvaya başarıyla katıldınız.',
-            'tournament_user' => $tournamentUser,
+            'message' => $tournamentStarted ? 'Turnuva başladı!' : 'Turnuvaya başarıyla katıldınız.',
+            'tournament_started' => $tournamentStarted,
+            'tournament_user' => $tournamentUser->fresh(),
             'tournament' => $tournament,
-            'waiting_message' => $waitingMessage,
+            'waiting_message' => $tournamentStarted ? 'Turnuva başladı.' : $availability['waiting_message'],
             'min_participants' => $minParticipants,
-            'current_participants' => $tournament->current_participants,
-            'ready_to_start' => $tournament->current_participants >= $minParticipants
+            'current_participants' => $currentParticipants,
+            'ready_to_start' => $currentParticipants >= $minParticipants,
+            'starts_at' => optional($this->getTournamentStartAt($tournament))->toIso8601String(),
+            'can_join' => false,
         ]);
     }
 
@@ -346,17 +353,6 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
-        // Socket bağlantısı kontrolü - turnuvaya katılmak için socket bağlantısı zorunlu
-        $webhookService = app(\App\Http\Services\WebhookService::class);
-        $isSocketConnected = $webhookService->checkUserConnection($user->id);
-
-        if (!$isSocketConnected) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Turnuvaya katılmak için socket bağlantısı gereklidir. Lütfen uygulamayı yeniden başlatın.'
-            ], 400);
-        }
-
         // Yeni turnuva oluştur
         $startTime = now();
         $endTime = $request->type === 'time_based'
@@ -494,71 +490,11 @@ class TournamentQuizController extends Controller
         if (empty($connectedParticipants)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Turnuva başlatılamıyor. Hiçbir katılımcı socket bağlantısında değil.'
+                'message' => 'Turnuva başlatılamıyor. Şu anda bağlı katılımcı bulunmuyor.'
             ], 400);
         }
 
-        // Turnuva durumunu güncelle
-        $tournament->update([
-            'status' => 'active',
-            'start_time' => now()
-        ]);
-
-        // Sadece bağlı katılımcıları aktif yap (enum kolonu için model üzerinden güncelle)
-        $connectedUserIds = collect($connectedParticipants)->pluck('user_id');
-        TournamentUser::where('tournament_id', $tournament->id)
-            ->whereIn('user_id', $connectedUserIds)
-            ->get()
-            ->each(function($tournamentUser) {
-                $tournamentUser->status = 'active';
-                $tournamentUser->save();
-            });
-
-        // Bağlantısı olmayan katılımcıları elenmiş olarak işaretle
-        if (!empty($disconnectedParticipants)) {
-            $disconnectedUserIds = collect($disconnectedParticipants)->pluck('user_id');
-            TournamentUser::where('tournament_id', $tournament->id)
-                ->whereIn('user_id', $disconnectedUserIds)
-                ->get()
-                ->each(function($tournamentUser) {
-                    $tournamentUser->status = 'eliminated';  // Enum'da 'eliminated' var, 'disqualified' yok
-                    $tournamentUser->eliminated_at = now();
-                    $tournamentUser->elimination_reason = 'disconnected';
-                    $tournamentUser->save();
-                });
-        }
-
-        // İlk soruyu hazırla (herkes aynı soruyu görecek)
-        $firstQuestion = $this->getTournamentQuestion($tournament, $tournament->id);
-
-        // Turnuva ayarlarını güncelle
-        $settings = $tournament->settings ?? [];
-        $answeredQuestionIds = [];
-
-        // İlk soruyu answered_question_ids listesine ekle (bir daha gelmesin diye)
-        if ($firstQuestion) {
-            $answeredQuestionIds[] = $firstQuestion->id;
-        }
-
-        $tournament->update([
-            'settings' => array_merge($settings, [
-                'current_question_number' => 1,
-                'current_question_id' => $firstQuestion->id ?? null,
-                'question_start_time' => now(),
-                'connected_participants' => count($connectedParticipants),
-                'disconnected_participants' => count($disconnectedParticipants),
-                'answered_question_ids' => $answeredQuestionIds // İlk soruyu listeye ekle
-            ])
-        ]);
-
-        // Socket ile bildirim gönder
-        $this->broadcastTournamentStart($tournament, $firstQuestion);
-
-        // FCM ve Email bildirimleri gönder
-        $this->sendTournamentStartNotifications($tournament);
-
-        // Socket.IO webhook ile turnuva başlatma bildirimi
-        $this->sendTournamentStartWebhook($tournament, $firstQuestion);
+        $activation = $this->activateTournament($tournament, $connectedParticipants, $disconnectedParticipants);
 
         // İsteği yapan kullanıcının joker durumunu al
         $currentUser = Auth::user();
@@ -605,10 +541,10 @@ class TournamentQuizController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Turnuva başlatıldı.',
-            'tournament' => $tournament,
-            'first_question' => $this->formatQuestionMultilingual($firstQuestion),
-            'connected_participants' => count($connectedParticipants),
-            'disconnected_participants' => count($disconnectedParticipants),
+            'tournament' => $activation['tournament'],
+            'first_question' => $this->formatQuestionMultilingual($activation['first_question']),
+            'connected_participants' => $activation['connected_participants'],
+            'disconnected_participants' => $activation['disconnected_participants'],
             'jokers' => $jokers
         ]);
     }
@@ -740,7 +676,7 @@ class TournamentQuizController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Socket bağlantınız kesildi. Turnuvadan elendiniz.'
+                'message' => 'Bağlantınız kesildi. Turnuvadan elendiniz.'
             ], 400);
         }
 
@@ -2282,17 +2218,13 @@ class TournamentQuizController extends Controller
         try {
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
 
-            // Tüm kayıtlı katılımcıları say (waiting, active durumları)
-            $currentParticipants = TournamentUser::where('tournament_id', $tournament->id)
-                ->whereIn('status', ['waiting', 'active'])  // Enum değerleri
-                ->count();
+            // Tüm kayıtlı katılımcıları say
+            $currentParticipants = $this->countRegisteredParticipants($tournament);
 
             $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
-            $readyToStart = $currentParticipants >= $minParticipants;
-
-            $waitingMessage = $readyToStart
-                ? "Turnuva başlamaya hazır! ({$currentParticipants}/{$minParticipants})"
-                : "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
+            $readyToStart = $tournament->status === 'upcoming'
+                && $currentParticipants >= $minParticipants;
+            $waitingMessage = $this->buildWaitingMessage($tournament, $currentParticipants);
 
             // Kullanıcının avatar URL'ini al
             $user->load('avatarModel');
@@ -2306,6 +2238,7 @@ class TournamentQuizController extends Controller
                 'current_participants' => $currentParticipants,
                 'min_participants' => $minParticipants,
                 'ready_to_start' => $readyToStart,
+                'allow_auto_start' => false,
                 'waiting_message' => $waitingMessage,
                 'timestamp' => now()->toISOString()
             ]);
@@ -2460,26 +2393,34 @@ class TournamentQuizController extends Controller
             ], 404);
         }
 
-        $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
-        $currentParticipants = $tournament->current_participants;
+        $this->autoStartTournamentIfReady($tournament);
+        $tournament = $tournament->fresh();
 
-        $waitingMessage = null;
-        $canStart = false;
-
-        if ($currentParticipants < $minParticipants) {
-            $waitingMessage = "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
-        } else {
-            $canStart = true;
-            $waitingMessage = "Yeterli katılımcı var. Turnuva başlatılabilir.";
+        if ($tournament->status !== 'upcoming') {
+            return response()->json([
+                'success' => true,
+                'tournament_id' => $tournament->id,
+                'tournament_started' => true,
+                'status' => $tournament->status,
+                'message' => 'Turnuva başladı.',
+                'can_join' => false,
+            ]);
         }
+
+        $minParticipants = $tournament->min_participants ?? config('app.tournament_min_participants', 2);
+        $currentParticipants = $this->countRegisteredParticipants($tournament);
+        $availability = $this->buildTournamentAvailability($tournament, $currentParticipants, Auth::id());
+        $canStart = $currentParticipants >= $minParticipants;
 
         return response()->json([
             'success' => true,
             'tournament_id' => $tournament->id,
             'current_participants' => $currentParticipants,
             'min_participants' => $minParticipants,
-            'waiting_message' => $waitingMessage,
+            'waiting_message' => $availability['waiting_message'],
             'can_start' => $canStart,
+            'can_join' => $availability['can_join'],
+            'starts_at' => optional($this->getTournamentStartAt($tournament))->toIso8601String(),
             'status' => $tournament->status
         ]);
     }
@@ -2504,32 +2445,14 @@ class TournamentQuizController extends Controller
      */
     public function getActiveMultiplayerTournaments(): JsonResponse
     {
-        // Aktif ve beklemede olan turnuvaları getir (upcoming ve active)
-        $tournaments = Tournament::whereIn('status', ['upcoming', 'active'])
+        // Yalnızca kayıt açık turnuvaları listele
+        $tournaments = Tournament::where('status', 'upcoming')
             ->where('tournament_type', 'time_based')
-            ->with(['participants' => function($query) {
-                $query->whereIn('status', ['waiting', 'upcoming']);
-            }])
-            ->withCount(['participants as current_participants_count' => function($query) {
-                $query->where('status', 'waiting');
-            }])
-            ->orderBy('status', 'asc') // active önce, sonra upcoming
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function($tournament) {
-                $canJoin = $tournament->current_participants_count < $tournament->max_participants &&
-                    in_array($tournament->status, ['upcoming', 'active']);
-
-                $waitingMessage = '';
-                if ($tournament->status === 'upcoming') {
-                    if ($tournament->current_participants_count < $tournament->min_participants) {
-                        $waitingMessage = "Diğer oyuncular bekleniyor... ({$tournament->current_participants_count}/{$tournament->min_participants})";
-                    } else {
-                        $waitingMessage = "Yeterli katılımcı var. Turnuva başlatılabilir.";
-                    }
-                } else if ($tournament->status === 'active') {
-                    $waitingMessage = "Turnuva devam ediyor... ({$tournament->current_participants_count} katılımcı)";
-                }
+                $currentParticipants = $this->countRegisteredParticipants($tournament);
+                $availability = $this->buildTournamentAvailability($tournament, $currentParticipants, Auth::id());
 
                 return [
                     'id' => $tournament->id,
@@ -2540,12 +2463,13 @@ class TournamentQuizController extends Controller
                     'question_count' => $tournament->question_count,
                     'min_participants' => $tournament->min_participants,
                     'max_participants' => $tournament->max_participants,
-                    'current_participants' => $tournament->current_participants_count,
+                    'current_participants' => $currentParticipants,
                     'status' => $tournament->status,
                     'start_time' => $tournament->start_time,
+                    'starts_at' => optional($this->getTournamentStartAt($tournament))->toIso8601String(),
                     'created_at' => $tournament->created_at,
-                    'can_join' => $canJoin,
-                    'waiting_message' => $waitingMessage
+                    'can_join' => $availability['can_join'],
+                    'waiting_message' => $availability['waiting_message']
                 ];
             });
 
@@ -2590,25 +2514,25 @@ class TournamentQuizController extends Controller
      */
     public function getQuestionBasedTournaments(Request $request): JsonResponse
     {
-        $status = $request->get('status');
         $limit = $request->get('limit', 20);
 
         $query = Tournament::where('tournament_type', 'question_based')
-            ->with(['participants' => function($query) {
-                $query->where('status', 'waiting');
-            }])
-            ->withCount(['participants as current_participants_count' => function($query) {
-                $query->whereIn('status', ['waiting', 'upcoming']);
-            }]);
-
-        if ($status) {
-            $query->where('status', $status);
-        }
+            ->where('status', 'upcoming');
 
         $tournaments = $query->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get()
             ->map(function($tournament) {
+                $this->autoStartTournamentIfReady($tournament);
+                $tournament = $tournament->fresh();
+
+                if ($tournament->status !== 'upcoming') {
+                    return null;
+                }
+
+                $currentParticipants = $this->countRegisteredParticipants($tournament);
+                $availability = $this->buildTournamentAvailability($tournament, $currentParticipants, Auth::id());
+
                 return [
                     'id' => $tournament->id,
                     'title' => $tournament->title,
@@ -2618,24 +2542,26 @@ class TournamentQuizController extends Controller
                     'question_count' => $tournament->question_count,
                     'min_participants' => $tournament->min_participants,
                     'max_participants' => $tournament->max_participants,
-                    'current_participants' => $tournament->current_participants_count,
+                    'current_participants' => $currentParticipants,
                     'status' => $tournament->status,
                     'start_time' => $tournament->start_time,
+                    'start_date' => $tournament->start_date,
+                    'starts_at' => optional($this->getTournamentStartAt($tournament))->toIso8601String(),
                     'end_time' => $tournament->end_time,
                     'created_at' => $tournament->created_at,
-                    'can_join' => $tournament->current_participants_count < $tournament->max_participants && $tournament->status === 'upcoming',
-                    'waiting_message' => $tournament->current_participants_count < $tournament->min_participants
-                        ? "Diğer oyuncular bekleniyor... ({$tournament->current_participants_count}/{$tournament->min_participants})"
-                        : "Yeterli katılımcı var. Turnuva başlatılabilir."
+                    'can_join' => $availability['can_join'],
+                    'waiting_message' => $availability['waiting_message'],
                 ];
-            });
+            })
+            ->filter()
+            ->values();
 
         return response()->json([
             'success' => true,
             'tournaments' => $tournaments,
             'total' => $tournaments->count(),
             'filters' => [
-                'status' => $status,
+                'status' => 'upcoming',
                 'limit' => $limit
             ]
         ]);
@@ -2900,5 +2826,159 @@ class TournamentQuizController extends Controller
     private function formatQuestionForSocket(?Question $question): ?array
     {
         return $this->formatQuestionMultilingual($question);
+    }
+
+    private function countRegisteredParticipants(Tournament $tournament): int
+    {
+        return TournamentUser::where('tournament_id', $tournament->id)
+            ->whereIn('status', ['waiting', 'active'])
+            ->count();
+    }
+
+    private function getTournamentStartAt(Tournament $tournament): ?Carbon
+    {
+        if (!$tournament->start_date) {
+            return null;
+        }
+
+        $startAt = Carbon::parse($tournament->start_date)->startOfDay();
+
+        if ($tournament->start_time) {
+            $time = Carbon::parse($tournament->start_time);
+            $startAt->setTime($time->hour, $time->minute, $time->second);
+        }
+
+        return $startAt;
+    }
+
+    private function autoStartTournamentIfReady(Tournament $tournament): bool
+    {
+        $tournament = $tournament->fresh();
+
+        if ($tournament->status !== 'upcoming') {
+            return false;
+        }
+
+        $minParticipants = (int) ($tournament->min_participants ?? config('app.tournament_min_participants', 2));
+
+        if ($this->countRegisteredParticipants($tournament) < $minParticipants) {
+            return false;
+        }
+
+        $participants = TournamentUser::where('tournament_id', $tournament->id)
+            ->whereIn('status', ['waiting', 'active'])
+            ->get();
+
+        $this->activateTournament($tournament, $participants->all(), []);
+
+        return true;
+    }
+
+    /**
+     * @param  array<int, TournamentUser>  $connectedParticipants
+     * @param  array<int, TournamentUser>  $disconnectedParticipants
+     * @return array{tournament: Tournament, first_question: ?Question, connected_participants: int, disconnected_participants: int}
+     */
+    private function activateTournament(
+        Tournament $tournament,
+        array $connectedParticipants,
+        array $disconnectedParticipants
+    ): array {
+        $tournament->update([
+            'status' => 'active',
+            'start_time' => now(),
+        ]);
+
+        $connectedUserIds = collect($connectedParticipants)->pluck('user_id');
+        TournamentUser::where('tournament_id', $tournament->id)
+            ->whereIn('user_id', $connectedUserIds)
+            ->get()
+            ->each(function ($tournamentUser) {
+                $tournamentUser->status = 'active';
+                $tournamentUser->save();
+            });
+
+        if (!empty($disconnectedParticipants)) {
+            $disconnectedUserIds = collect($disconnectedParticipants)->pluck('user_id');
+            TournamentUser::where('tournament_id', $tournament->id)
+                ->whereIn('user_id', $disconnectedUserIds)
+                ->get()
+                ->each(function ($tournamentUser) {
+                    $tournamentUser->status = 'eliminated';
+                    $tournamentUser->eliminated_at = now();
+                    $tournamentUser->elimination_reason = 'disconnected';
+                    $tournamentUser->save();
+                });
+        }
+
+        $firstQuestion = $this->getTournamentQuestion($tournament, $tournament->id);
+        $settings = $tournament->settings ?? [];
+        $answeredQuestionIds = $firstQuestion ? [$firstQuestion->id] : [];
+
+        $tournament->update([
+            'settings' => array_merge($settings, [
+                'current_question_number' => 1,
+                'current_question_id' => $firstQuestion->id ?? null,
+                'question_start_time' => now(),
+                'connected_participants' => count($connectedParticipants),
+                'disconnected_participants' => count($disconnectedParticipants),
+                'answered_question_ids' => $answeredQuestionIds,
+            ]),
+        ]);
+
+        $tournament = $tournament->fresh();
+
+        $this->broadcastTournamentStart($tournament, $firstQuestion);
+        $this->sendTournamentStartNotifications($tournament);
+        $this->sendTournamentStartWebhook($tournament, $firstQuestion);
+
+        return [
+            'tournament' => $tournament,
+            'first_question' => $firstQuestion,
+            'connected_participants' => count($connectedParticipants),
+            'disconnected_participants' => count($disconnectedParticipants),
+        ];
+    }
+
+    private function buildTournamentAvailability(Tournament $tournament, int $currentParticipants, ?int $userId = null): array
+    {
+        return [
+            'can_join' => $this->canJoinTournament($tournament, $currentParticipants, $userId),
+            'waiting_message' => $this->buildWaitingMessage($tournament, $currentParticipants),
+        ];
+    }
+
+    private function buildWaitingMessage(Tournament $tournament, int $currentParticipants): string
+    {
+        $minParticipants = (int) ($tournament->min_participants ?? config('app.tournament_min_participants', 2));
+
+        if ($currentParticipants < $minParticipants) {
+            return "Diğer oyuncular bekleniyor... ({$currentParticipants}/{$minParticipants})";
+        }
+
+        return "Turnuva başlamaya hazır! ({$currentParticipants}/{$minParticipants})";
+    }
+
+    private function canJoinTournament(Tournament $tournament, int $currentParticipants, ?int $userId = null): bool
+    {
+        if ($tournament->status !== 'upcoming') {
+            return false;
+        }
+
+        if ($currentParticipants >= (int) $tournament->max_participants) {
+            return false;
+        }
+
+        if ($userId) {
+            $alreadyJoined = TournamentUser::where('tournament_id', $tournament->id)
+                ->where('user_id', $userId)
+                ->exists();
+
+            if ($alreadyJoined) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

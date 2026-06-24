@@ -625,7 +625,7 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
     try {
         console.log('📥 Webhook alındı: user-joined-tournament', JSON.stringify(req.body));
 
-        const { tournament_id, user_id, user_name, user_avatar, current_participants, min_participants, waiting_message, ready_to_start } = req.body;
+        const { tournament_id, user_id, user_name, user_avatar, current_participants, min_participants, waiting_message, ready_to_start, allow_auto_start, is_scheduled, starts_at } = req.body;
 
         if (!tournament_id || !user_id) {
             console.error('❌ Webhook: tournament_id veya user_id eksik', req.body);
@@ -655,6 +655,9 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
             current_participants: parseInt(current_participants) || 0,
             min_participants: parseInt(min_participants) || 2,
             ready_to_start: ready_to_start === true || ready_to_start === 'true' || ready_to_start === 1,
+            allow_auto_start: allow_auto_start !== false && allow_auto_start !== 'false' && allow_auto_start !== 0,
+            is_scheduled: is_scheduled === true || is_scheduled === 'true' || is_scheduled === 1,
+            starts_at: starts_at || null,
             waiting_message: waiting_message || null,
             timestamp: new Date().toISOString()
         };
@@ -689,11 +692,15 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
         });
 
         // Her zaman waiting-players event'i gönder (ready_to_start durumu ile birlikte)
-        const isReady = ready_to_start || (current_participants >= min_participants);
+        const isScheduled = is_scheduled === true || is_scheduled === 'true' || is_scheduled === 1;
+        const canAutoStart = allow_auto_start !== false && allow_auto_start !== 'false' && allow_auto_start !== 0;
+        const isReady = !isScheduled && (ready_to_start || (current_participants >= min_participants));
         const waitingMsg = waiting_message || (
-            isReady
-                ? `Turnuva başlamaya hazır! (${current_participants}/${min_participants})`
-                : `Diğer oyuncular bekleniyor... (${current_participants}/${min_participants})`
+            isScheduled && starts_at
+                ? `Turnuva ${new Date(starts_at).toLocaleString('tr-TR')} tarihinde başlayacak.`
+                : isReady
+                    ? `Turnuva başlamaya hazır! (${current_participants}/${min_participants})`
+                    : `Diğer oyuncular bekleniyor... (${current_participants}/${min_participants})`
         );
 
         const waitingData = {
@@ -701,6 +708,8 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
             current_participants: current_participants || 0,
             min_participants: min_participants || 2,
             ready_to_start: isReady,
+            is_scheduled: isScheduled,
+            starts_at: starts_at || null,
             waiting_message: waitingMsg,
             timestamp: new Date().toISOString()
         };
@@ -708,7 +717,7 @@ app.post('/socket-webhooks/webhook/user-joined-tournament', (req, res) => {
         console.log('📤 waiting-players event gönderiliyor:', JSON.stringify(waitingData));
         io.to(roomName).emit('waiting-players', waitingData);
 
-        if (isReady) {
+        if (isReady && canAutoStart) {
             const usersInRoom = getUsersInTournamentRoom(roomName);
             const startPayload = {
                 tournament_id: parseInt(tournament_id),
