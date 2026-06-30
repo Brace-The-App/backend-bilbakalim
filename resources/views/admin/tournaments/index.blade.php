@@ -137,7 +137,7 @@
                                                     data-status="{{ $tournament->status }}"
                                                     data-featured="{{ $tournament->is_featured }}"
                                                     data-participants="{{ $tournament->tournament_users_count ?? 0 }}"
-                                                    data-image="{{ $tournament->image }}">Görüntüle</button>
+                                                    data-image="{{ $tournament->image ? asset('storage/' . $tournament->image) : '' }}">Görüntüle</button>
                                         @endcan
                                         @can('edit tournaments')
                                             <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#tournamentEditModal"
@@ -156,7 +156,8 @@
                                                     data-featured="{{ $tournament->is_featured }}"
                                                     data-tournament-type="{{ $tournament->tournament_type ?? 'question_based' }}"
                                                     data-min-participants="{{ $tournament->min_participants ?? 1 }}"
-                                                    data-awards="{{ json_encode($tournament->awards) }}">Düzenle</button>
+                                                    data-awards="{{ json_encode($tournament->awards) }}"
+                                                    data-image="{{ $tournament->image ? asset('storage/' . $tournament->image) : '' }}">Düzenle</button>
                                         @endcan
                                         @can('delete tournaments')
                                             <button type="button" class="btn btn-sm btn-danger" onclick="deleteTournament({{ $tournament->id }})">Sil</button>
@@ -241,18 +242,18 @@
                                     <input type="number" class="form-control" id="min_participants" name="min_participants" min="1" value="1" required>
                                 </div>
                             </div>
-            <div class="col-md-6" id="questionCountGroup">
-                                 <div class="mb-3">
-                                     <label for="question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
-                                     <input type="number" class="form-control" id="question_count" name="question_count" min="1" placeholder="Soru sayısı">
-                                 </div>
-                             </div>
-                             <div class="col-md-6" id="durationGroup" style="display: none;">
-                                 <div class="mb-3">
-                                     <label for="duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
-                                     <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
-                                 </div>
-                             </div>
+                            <div class="col-md-6" id="questionCountGroup">
+                                <div class="mb-3">
+                                    <label for="question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="question_count" name="question_count" min="1" placeholder="Soru sayısı">
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="durationGroup" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
+                                </div>
+                            </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="entry_fee" class="form-label">Giriş Tokeni (₺) <span class="text-danger">*</span></label>
@@ -392,18 +393,18 @@
                                     <input type="number" class="form-control" id="edit-min_participants" name="min_participants" min="1" value="1" required>
                                 </div>
                             </div>
-                             <div class="col-md-6" id="editQuestionCountGroup">
-                                 <div class="mb-3">
-                                     <label for="edit-question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
-                                     <input type="number" class="form-control" id="edit-question_count" name="question_count" min="1" placeholder="Soru sayısı">
-                                 </div>
-                             </div>
-                             <div class="col-md-6" id="editDurationGroup" style="display: none;">
-                                 <div class="mb-3">
-                                     <label for="edit-duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
-                                     <input type="number" class="form-control" id="edit-duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
-                                 </div>
-                             </div>
+                            <div class="col-md-6" id="editQuestionCountGroup">
+                                <div class="mb-3">
+                                    <label for="edit-question_count" class="form-label">Soru Sayısı (Question Based) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="edit-question_count" name="question_count" min="1" placeholder="Soru sayısı">
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="editDurationGroup" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="edit-duration_minutes" class="form-label">Süre (Time Based - Dakika) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="edit-duration_minutes" name="duration_minutes" min="1" placeholder="Dakika">
+                                </div>
+                            </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="edit-entry_fee" class="form-label">Giriş Tokeni (₺) <span class="text-danger">*</span></label>
@@ -437,6 +438,12 @@
                                 <div class="mb-3">
                                     <label for="edit-image" class="form-label">Resim</label>
                                     <input type="file" class="form-control" id="edit-image" name="image" accept="image/*">
+                                    <div id="edit-current-image" class="mt-2" style="display: none;">
+                                        <label class="form-label small text-muted">Mevcut Resim</label>
+                                        <div>
+                                            <img id="edit-current-image-preview" src="" alt="Mevcut turnuva resmi" class="rounded" style="max-width: 120px; max-height: 120px; object-fit: cover;">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -757,9 +764,10 @@
 
                 // Image
                 if (image) {
-                    $('#show-image').html('<img src="' + image + '" class="img-fluid rounded" style="max-width: 300px;" alt="Tournament Image">');
+                    $('#show-image').html('<img src="' + image + '" class="img-fluid rounded" style="max-width: 300px;" alt="Turnuva resmi">');
                 } else {
                     $('#show-image').html('<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 300px; height: 200px; margin: 0 auto;"><i data-feather="award" class="text-muted" style="width: 48px; height: 48px;"></i></div>');
+                    if (typeof feather !== 'undefined') feather.replace();
                 }
             });
 
@@ -782,6 +790,10 @@
                 var tournamentType = button.data('tournament-type') || 'question_based';
                 var minParticipants = button.data('min-participants') || 1;
                 var awards = button.data('awards');
+                var image = button.data('image');
+
+                // Önceki seçilen dosyayı temizle; aksi halde başka turnuvaya da aynı resim gider
+                $('#edit-image').val('');
 
                 $('#edit-title').val(title);
                 $('#edit-description').val(description);
@@ -807,8 +819,22 @@
                     }
                 }
 
+                if (image) {
+                    $('#edit-current-image-preview').attr('src', image);
+                    $('#edit-current-image').show();
+                } else {
+                    $('#edit-current-image-preview').attr('src', '');
+                    $('#edit-current-image').hide();
+                }
+
                 updateEditTournamentSettings(); // Tür seçimine göre alanları göster/gizle
                 $('#tournamentEditForm').attr('action', '/admin/tournaments/' + id);
+            });
+
+            $('#tournamentEditModal').on('hidden.bs.modal', function () {
+                $('#edit-image').val('');
+                $('#edit-current-image-preview').attr('src', '');
+                $('#edit-current-image').hide();
             });
 
             // Update Tournament
