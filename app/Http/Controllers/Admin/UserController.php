@@ -77,7 +77,7 @@ class UserController extends Controller
         $user->phone = $request->phone;
         $user->package_id = $request->package_id;
         $user->account_status = 'active';
-        $user->total_coins = 0;
+        $user->coins = 0;
         $user->save();
 
         $user->assignRole($request->role);
@@ -104,20 +104,20 @@ class UserController extends Controller
             'role' => 'required|exists:roles,name',
             'phone' => 'nullable|string|max:20',
             'account_status' => 'required|in:active,suspended,pending',
-            'total_coins' => 'required|integer|min:0',
+            'coins' => 'required|integer|min:0',
         ]);
 
         $user->name = $request->name;
         $user->email = $request->email;
-        
+
         if ($request->filled('password')) {
             $user->password = Hash::make($request->password);
         }
-        
+
         $user->phone = $request->phone;
         $user->package_id = $request->package_id;
         $user->account_status = $request->account_status;
-        $user->total_coins = $request->total_coins;
+        $user->coins = $request->coins;
         $user->save();
 
         $user->syncRoles([$request->role]);

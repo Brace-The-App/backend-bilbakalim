@@ -91,7 +91,7 @@
                                         {{ $user->getRoleNames()->first() ?? 'Rol Yok' }}
                                     </span>
                                 </td>
-                                <td>{{ $user->total_coins ?? 0 }}</td>
+                                <td>{{ $user->coins ?? 0 }}</td>
                                 <td>
                                     @switch($user->account_status)
                                         @case('active')
@@ -111,10 +111,10 @@
                                 <td>
                                     <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#userShowModal"
                                             data-id="{{ $user->id }}" data-name="{{ $user->name }}" data-email="{{ $user->email }}"
-                                            data-phone="{{ $user->phone }}" data-coins="{{ $user->total_coins ?? 0 }}" data-status="{{ $user->account_status }}">Görüntüle</button>
+                                            data-phone="{{ $user->phone }}" data-coins="{{ $user->coins ?? 0 }}" data-status="{{ $user->account_status }}">Görüntüle</button>
                                     <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#userEditModal"
                                             data-id="{{ $user->id }}" data-name="{{ $user->name }}" data-email="{{ $user->email }}"
-                                            data-phone="{{ $user->phone }}" data-coins="{{ $user->total_coins ?? 0 }}" data-status="{{ $user->account_status }}"
+                                            data-phone="{{ $user->phone }}" data-coins="{{ $user->coins ?? 0 }}" data-status="{{ $user->account_status }}"
                                             data-role="{{ $user->roles->first()->name ?? '' }}" data-package="{{ $user->package_id }}">Düzenle</button>
                                     @can('delete users')
                                     @if($user->id !== auth()->id())
@@ -252,7 +252,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label">Toplam Coin</label>
-            <input type="number" min="0" name="total_coins" id="edit-coins" class="form-control">
+            <input type="number" min="0" name="coins" id="edit-coins" class="form-control">
           </div>
           <div class="col-md-6">
             <label class="form-label">Rol</label>
