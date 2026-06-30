@@ -119,8 +119,8 @@ class AuthController extends Controller
             $phone = $request->phone;
             $user = User::where(function($query) use ($phone) {
                 $query->where('phone', $phone)
-                      ->orWhere('phone', '+' . $phone) // +90 veya +05 formatı
-                      ->orWhere('phone', ltrim($phone, '0')); // 05 ise 5 ile başlayan format
+                    ->orWhere('phone', '+' . $phone) // +90 veya +05 formatı
+                    ->orWhere('phone', ltrim($phone, '0')); // 05 ise 5 ile başlayan format
 
                 // 90 ile başlıyorsa 0 ekleyerek de ara
                 if (strpos($phone, '90') === 0) {
@@ -169,21 +169,21 @@ class AuthController extends Controller
      *                 @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
      *                 @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
      *                 @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
-                *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
-                *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
-                *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
-                *                 @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
-                *             )
-                *         ),
-                *         @OA\JsonContent(
-                *             @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
-                *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
-                *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
-                *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
-                *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
-                *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
-                *             @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
-                *         )
+     *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+     *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+     *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
+     *                 @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
+     *             )
+     *         ),
+     *         @OA\JsonContent(
+     *             @OA\Property(property="phone", type="string", description="Telefon numarası (zorunlu)", example="05551234567"),
+     *             @OA\Property(property="name", type="string", description="İsim (opsiyonel)", example="John"),
+     *             @OA\Property(property="email", type="string", format="email", description="E-posta (opsiyonel)", example="john@example.com"),
+     *             @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
+     *             @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
+     *             @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
+     *         )
      *     ),
      *     @OA\Response(
      *         response=200,
@@ -215,7 +215,8 @@ class AuthController extends Controller
         $user->phone = $request->phone;
         $user->role_id = 3;
         $user->account_status = 'active';
-        $user->coins = 2000;
+        $registrationBonus = 2000;
+        $user->coins = $registrationBonus;
 
         // Unique referral kodu oluştur
         $user->referral_code = User::generateReferralCode();
@@ -239,6 +240,19 @@ class AuthController extends Controller
         }
 
         $user->save();
+
+        \App\Models\CoinHistory::create([
+            'user_id' => $user->id,
+            'coin_amount' => $registrationBonus,
+            'transaction_type' => 'bonus',
+            'status' => 'completed',
+            'description' => 'Kayıt bonusu',
+            'metadata' => [
+                'reward_type' => 'registration_bonus',
+            ],
+            'balance_before' => 0,
+            'balance_after' => $registrationBonus,
+        ]);
 
         // Referral kod kontrolü ve coin ekleme
         if ($request->has('referral_code') && $request->referral_code) {
@@ -467,12 +481,13 @@ class AuthController extends Controller
                 ])
                 ->get("https://api.revenuecat.com/v1/subscribers/{$appUserId}");
 
+
             if (!$response->successful()) {
                 return [
                     'checked' => false,
                     'is_premium' => (bool) $user->is_premium,
                     'entitlements' => [],
-                    'error' => 'RevenueCat response status: ' . $response->status(),
+                    'error' => 'RevenueCat response status: ' . $response->json(),
                 ];
             }
 

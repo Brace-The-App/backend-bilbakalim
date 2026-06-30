@@ -168,7 +168,7 @@ class CoinHistoryController extends Controller
 
         // Metadata'dan oyun tipini al
         $metadata = $item->metadata ?? [];
-        
+
         if (isset($metadata['game_type'])) {
             $gameType = $metadata['game_type'];
             $gameTypeNames = [
@@ -193,6 +193,10 @@ class CoinHistoryController extends Controller
 
         if (isset($metadata['reward_type']) && $metadata['reward_type'] === 'ad_watch') {
             return 'Reklam İzleme Ödülü';
+        }
+
+        if (isset($metadata['reward_type']) && $metadata['reward_type'] === 'registration_bonus') {
+            return 'Kayıt Bonusu';
         }
 
         return $typeDescriptions[$item->transaction_type] ?? $description;
@@ -232,7 +236,7 @@ class CoinHistoryController extends Controller
 
             // Başlangıç bakiyesi: Oyun başlangıcından önceki son bakiyeyi al
             $startBalance = $startCoinHistory ? $startCoinHistory->balance_after : 0;
-            
+
             // Bitiş bakiyesi: Oyun bitişinden sonraki ilk bakiyeyi al, yoksa oyun bitişinden önceki son bakiyeyi al
             if ($endCoinHistory) {
                 $endBalance = $endCoinHistory->balance_before;
