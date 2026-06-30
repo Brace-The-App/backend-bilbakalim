@@ -31,6 +31,9 @@
             <div class="card-body">
                 <!-- Filters -->
                 <form method="GET" class="row g-2 align-items-end mb-3">
+                    @if(request('sort_coins'))
+                        <input type="hidden" name="sort_coins" value="{{ request('sort_coins') }}">
+                    @endif
                     <div class="col-md-4 col-lg-3">
                         <label class="form-label small text-muted">Ara</label>
                         <div class="input-group">
@@ -67,13 +70,29 @@
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
+                            @php
+                                $coinSort = request('sort_coins');
+                                $nextCoinSort = $coinSort === 'desc' ? 'asc' : 'desc';
+                                $coinSortUrl = request()->fullUrlWithQuery(['sort_coins' => $nextCoinSort, 'page' => null]);
+                            @endphp
                             <tr>
                                 <th>ID</th>
                                 <th>İsim</th>
                                 <th>Email</th>
                                 <th>Telefon</th>
                                 <th>Rol</th>
-                                <th>Coin</th>
+                                <th>
+                                    <a href="{{ $coinSortUrl }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                                        Coin
+                                        @if($coinSort === 'desc')
+                                            <span class="text-primary" title="Yüksekten düşüğe">↓</span>
+                                        @elseif($coinSort === 'asc')
+                                            <span class="text-primary" title="Düşükten yükseğe">↑</span>
+                                        @else
+                                            <span class="text-muted" title="Sıralamak için tıklayın">⇅</span>
+                                        @endif
+                                    </a>
+                                </th>
                                 <th>Durum</th>
                                 <th>Kayıt Tarihi</th>
                                 <th>İşlemler</th>
@@ -428,10 +447,11 @@ $(document).ready(function() {
 
     // Load Users Function
     function loadUsers(page = 1) {
+        var params = new URLSearchParams(window.location.search);
+        params.set('page', page);
+
         $.ajax({
-            url: '/admin/users',
-            type: 'GET',
-            data: { page: page },
+            url: '/admin/users?' + params.toString(),
             success: function(response) {
                 // Extract table body and pagination from response
                 var tableBody = $(response).find('tbody').html();

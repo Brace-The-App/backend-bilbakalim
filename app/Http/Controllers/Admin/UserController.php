@@ -47,7 +47,13 @@ class UserController extends Controller
             $query->where('package_id', $request->package_id);
         }
 
-        $users = $query->latest()->paginate(10);
+        if ($request->filled('sort_coins') && in_array($request->sort_coins, ['asc', 'desc'], true)) {
+            $query->orderBy('coins', $request->sort_coins);
+        } else {
+            $query->latest();
+        }
+
+        $users = $query->paginate(10);
         $roles = Role::all();
         $packages = Package::active()->get();
 
