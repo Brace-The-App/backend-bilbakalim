@@ -30,10 +30,11 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
 });
 
-// AI Question ingest (no sanctum, manual token header + strict throttling)
-Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-questions'])->group(function () {
-    Route::post('questions', [AiQuestionController::class, 'store']);
-});
+// TODO: AI dışarıdan soru girişini geçici olarak kapattık.
+// Yeniden açmak için bu satırları yorumdan kaldırın.
+// Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-questions'])->group(function () {
+//     Route::post('questions', [AiQuestionController::class, 'store']);
+// });
 
 // Referral routes (auth required)
 Route::middleware('auth:sanctum')->group(function () {
