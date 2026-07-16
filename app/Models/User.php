@@ -7,6 +7,7 @@ namespace App\Models;
 use Abbasudo\Purity\Traits\Filterable;
 use Abbasudo\Purity\Traits\Sortable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -15,7 +16,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPermissions;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPermissions, SoftDeletes;
     use ModelTrait;
     use Filterable;
     use Sortable;
@@ -49,7 +50,6 @@ class User extends Authenticatable
         'device_id',
         'account_status',
         'is_premium',
-        'premium_expires_at',
         'fifty_fifty_jokers',
         'double_answer_jokers',
         'hint_jokers',
@@ -87,7 +87,6 @@ class User extends Authenticatable
         'last_login_at' => 'datetime',
         'account_status' => 'string',
         'is_premium' => 'boolean',
-        'premium_expires_at' => 'datetime',
         'fifty_fifty_jokers' => 'integer',
         'double_answer_jokers' => 'integer',
         'hint_jokers' => 'integer',
@@ -199,8 +198,6 @@ class User extends Authenticatable
      */
     public function routeNotificationForFcm()
     {
-        // Bu projede FCM token pratikte `device_id` alanında tutuluyor.
-        // Geriye dönük uyumluluk için `device_token`'a da fallback yap.
         return $this->device_id ?: $this->device_token;
     }
 
