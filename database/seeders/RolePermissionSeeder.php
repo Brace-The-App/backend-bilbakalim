@@ -61,6 +61,8 @@ class RolePermissionSeeder extends Seeder
             // Reports and analytics
             'view reports',
             'view analytics',
+            'view answer statistics',
+            'edit answer statistics',
             
             // System settings
             'manage settings',
@@ -105,6 +107,8 @@ class RolePermissionSeeder extends Seeder
             'edit awards',
             'view reports',
             'view analytics',
+            'view answer statistics',
+            'edit answer statistics',
             'manage translations',
         ]);
 

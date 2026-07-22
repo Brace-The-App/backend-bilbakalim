@@ -38,6 +38,10 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'edit notifications']);
         Permission::firstOrCreate(['name' => 'delete notifications']);
 
+        // Kullanıcı cevap istatistikleri
+        Permission::firstOrCreate(['name' => 'view answer statistics']);
+        Permission::firstOrCreate(['name' => 'edit answer statistics']);
+
         // Assign permissions to roles
         $adminRole = Role::findByName('admin');
         $personelRole = Role::findByName('personel');
@@ -47,13 +51,15 @@ class PermissionSeeder extends Seeder
             'view tournaments', 'create tournaments', 'edit tournaments', 'delete tournaments',
             'view general settings', 'create general settings', 'edit general settings', 'delete general settings',
             'view permissions', 'create permissions', 'edit permissions', 'delete permissions',
-            'view notifications', 'create notifications', 'edit notifications', 'delete notifications'
+            'view notifications', 'create notifications', 'edit notifications', 'delete notifications',
+            'view answer statistics', 'edit answer statistics',
         ]);
 
         // Personel gets tournament and notification permissions
         $personelRole->givePermissionTo([
             'view tournaments', 'create tournaments', 'edit tournaments', 'delete tournaments',
-            'view notifications', 'create notifications', 'edit notifications', 'delete notifications'
+            'view notifications', 'create notifications', 'edit notifications', 'delete notifications',
+            'view answer statistics', 'edit answer statistics',
         ]);
     }
 }

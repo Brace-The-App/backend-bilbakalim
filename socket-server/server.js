@@ -82,7 +82,13 @@ io.on('connection', (socket) => {
 
     // Kullanıcı girişi
     socket.on('user_join', (data) => {
-        const { userId, userName } = data;
+        const userId = parseInt(data?.userId, 10);
+        const userName = data?.userName;
+
+        if (!userId) {
+            console.warn('⚠️ user_join: geçersiz userId', data);
+            return;
+        }
 
         connectedUsers.set(socket.id, { userId, userName });
         userSocketMap.set(userId, socket.id);
@@ -1168,7 +1174,7 @@ app.get('/socket-webhooks/health', (req, res) => {
 
 // Kullanıcı bağlantı durumu kontrolü
 app.post('/socket-webhooks/check-user-connection', (req, res) => {
-    const { userId } = req.body;
+    const userId = parseInt(req.body?.userId, 10);
 
     if (!userId) {
         return res.status(400).json({
@@ -1178,7 +1184,7 @@ app.post('/socket-webhooks/check-user-connection', (req, res) => {
     }
 
     const socketId = userSocketMap.get(userId);
-    const isConnected = socketId && connectedUsers.has(socketId);
+    const isConnected = !!(socketId && connectedUsers.has(socketId));
 
     res.json({
         success: true,
@@ -1201,9 +1207,10 @@ app.post('/socket-webhooks/check-users-connection', (req, res) => {
 
     const connectionStatus = {};
 
-    userIds.forEach(userId => {
+    userIds.forEach(rawUserId => {
+        const userId = parseInt(rawUserId, 10);
         const socketId = userSocketMap.get(userId);
-        const isConnected = socketId && connectedUsers.has(socketId);
+        const isConnected = !!(socketId && connectedUsers.has(socketId));
         connectionStatus[userId] = {
             isConnected: isConnected,
             socketId: socketId || null

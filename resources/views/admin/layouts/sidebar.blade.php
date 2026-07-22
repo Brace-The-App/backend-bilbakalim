@@ -71,6 +71,19 @@
                     @endif
                     @endcan
 
+                    @can('view answer statistics')
+                    @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.question-answer-stats.*') ? 'active' : '' }}"
+                           href="{{ route('admin.question-answer-stats.index') }}">
+                            <i data-feather="bar-chart-2"></i>
+                            <span>Kullanıcı Cevap İstatistikleri</span>
+                        </a>
+                    </li>
+                    @endif
+                    @endcan
+
                     @can('view tournaments')
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
                     <li class="sidebar-list">

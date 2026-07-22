@@ -15,8 +15,14 @@ class Kernel extends ConsoleKernel
         // $schedule->command('inspire')->hourly();
         
         // Test mail gönderme - her dakika çalışır (test amaçlı)
-        $schedule->command('mail:send-test eyupinan08@gmail.com')
-                 ->everyMinute()
+       // $schedule->command('mail:send-test eyupinan08@gmail.com')
+         //        ->everyMinute()
+           //      ->withoutOverlapping()
+           //      ->runInBackground();
+
+        // Kullanıcı cevap istatistiklerini periyodik güncelle
+        $schedule->command('questions:refresh-answer-stats')
+                 ->hourly()
                  ->withoutOverlapping()
                  ->runInBackground();
     }

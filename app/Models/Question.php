@@ -25,6 +25,7 @@ class Question extends Model
         'coin_value',
         'image',
         'is_active',
+        'admin_status',
         'check'
     ];
 
@@ -46,6 +47,16 @@ class Question extends Model
     public function answers(): HasMany
     {
         return $this->hasMany(Answer::class);
+    }
+
+    public function answerStat(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(QuestionAnswerStat::class);
+    }
+
+    public function adminLogs(): HasMany
+    {
+        return $this->hasMany(QuestionAdminLog::class);
     }
 
     // Scopes

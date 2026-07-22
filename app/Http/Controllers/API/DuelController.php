@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\RevealsCorrectAnswerWhenWrong;
 use App\Models\Duel;
 use App\Models\DuelAnswer;
-use App\Models\Diamond;
 use App\Models\Question;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -23,7 +22,7 @@ class DuelController extends Controller
      * @OA\Post(
      *     path="/api/duel/question-multiplier/{duel_id}",
      *     summary="Soru Bazlı 2x/3x Teklif Et",
-     *     description="Aktif düellodaki mevcut soru için 2x/3x elmas çarpanı teklifi gönderir. Teklif rakibe socket üzerinden iletilir.",
+     *     description="Aktif düellodaki mevcut soru için 2x/3x coin çarpanı teklifi gönderir. Teklif rakibe socket üzerinden iletilir.",
      *     tags={"Duel"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -332,7 +331,7 @@ class DuelController extends Controller
      *         description="Hata",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="message", type="string", example="Düello için elmas paketi gereklidir.")
+     *             @OA\Property(property="message", type="string", example="Düello için yeterli coin gereklidir.")
      *         )
      *     )
      * )
@@ -344,12 +343,11 @@ class DuelController extends Controller
         ]);
         $user = Auth::user();
 
-        // Elmas paketi kontrolü
-        $diamond = Diamond::where('user_id', $user->id)->first();
-        if (!$diamond || $diamond->balance <= 0) {
+        // Coin bakiyesi kontrolü
+        if ((int) $user->coins <= 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Düello için elmas paketi gereklidir. Lütfen elmas satın alın.'
+                'message' => 'Düello için yeterli coin gereklidir.'
             ], 400);
         }
 
@@ -371,28 +369,24 @@ class DuelController extends Controller
 
         DB::beginTransaction();
         try {
-            // Aktif düellosu olmayan rastgele rakip seç (elmas bakiyesi > 0 olanlar arasından)
-            $opponent = User::where('id', '!=', $user->id)
-                ->whereHas('diamond', function($query) {
-                    $query->where('balance', '>', 0);
-                })
-                ->whereDoesntHave('duelsAsChallenger', function($query) {
-                    $query->whereIn('status', ['waiting', 'active']);
-                })
-                ->whereDoesntHave('duelsAsOpponent', function($query) {
-                    $query->whereIn('status', ['waiting', 'active']);
-                })
-                ->inRandomOrder()
-                ->first();
+            // 1) Önce aynı çarpanda bekleyen açık düelloya katıl (gerçek PvP kuyruğu)
+            $joined = $this->joinOldestWaitingDuel($user, $request->multiplier);
+            if ($joined !== null) {
+                DB::commit();
+                return $joined;
+            }
 
-            // Eğer uygun rakip bulunamazsa, açık düello oluştur ve katılımcı bekle
+            // 2) Online gerçek oyuncu bul (socket bağlı); offline/bot'a zorla eşleştirme
+            $opponent = $this->findOnlineOpponent($user);
+
+            // 3) Uygun online rakip yoksa kuyruğa gir, katılımcı bekle
             if (!$opponent) {
                 $duel = Duel::create([
                     'challenger_id' => $user->id,
                     'opponent_id' => null,
                     'multiplier' => $request->multiplier,
                     'status' => 'waiting',
-                    'challenger_diamonds_before' => $diamond->balance,
+                    'challenger_coins_before' => (int) $user->coins,
                 ]);
 
                 $this->sendDuelCreatedWebhook($duel);
@@ -408,16 +402,14 @@ class DuelController extends Controller
                 ]);
             }
 
-            $opponentDiamond = Diamond::where('user_id', $opponent->id)->first();
-
             // Düello oluştur
             $duel = Duel::create([
                 'challenger_id' => $user->id,
                 'opponent_id' => $opponent->id,
                 'multiplier' => $request->multiplier,
                 'status' => 'waiting',
-                'challenger_diamonds_before' => $diamond->balance,
-                'opponent_diamonds_before' => $opponentDiamond->balance,
+                'challenger_coins_before' => (int) $user->coins,
+                'opponent_coins_before' => (int) $opponent->coins,
             ]);
 
             // X1 ise otomatik başlat, X2/X4/X8 ise karşı tarafa istek gönder
@@ -527,9 +519,6 @@ class DuelController extends Controller
             ], 403);
         }
 
-        $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-        $opponentDiamond = Diamond::where('user_id', $duel->opponent_id)->first();
-
         $currentQuestion = null;
         if ($duel->current_question_id) {
             $currentQuestion = $this->formatQuestionMultilingual($duel->currentQuestion);
@@ -547,17 +536,17 @@ class DuelController extends Controller
                     'id' => $duel->challenger->id,
                     'name' => $duel->challenger->name,
                     'avatar' => $duel->challenger->avatar,
-                    'diamonds_before' => $duel->challenger_diamonds_before,
-                    'diamonds_after' => $duel->challenger_diamonds_after,
-                    'current_diamonds' => $challengerDiamond->balance ?? 0,
+                    'coins_before' => $duel->challenger_coins_before,
+                    'coins_after' => $duel->challenger_coins_after,
+                    'current_coins' => (int) ($duel->challenger->coins ?? 0),
                 ],
                 'opponent' => $duel->opponent ? [
                     'id' => $duel->opponent->id,
                     'name' => $duel->opponent->name,
                     'avatar' => $duel->opponent->avatar,
-                    'diamonds_before' => $duel->opponent_diamonds_before,
-                    'diamonds_after' => $duel->opponent_diamonds_after,
-                    'current_diamonds' => $opponentDiamond->balance ?? 0,
+                    'coins_before' => $duel->opponent_coins_before,
+                    'coins_after' => $duel->opponent_coins_after,
+                    'current_coins' => (int) ($duel->opponent->coins ?? 0),
                 ] : null,
                 'current_question' => $currentQuestion,
                 'winner_id' => $duel->winner_id,
@@ -812,12 +801,11 @@ class DuelController extends Controller
             ], 400);
         }
 
-        // Kullanıcının elmas bakiyesi kontrolü
-        $diamond = Diamond::where('user_id', $user->id)->first();
-        if (!$diamond || $diamond->balance <= 0) {
+        // Kullanıcının coin bakiyesi kontrolü
+        if ((int) $user->coins <= 0) {
             return response()->json([
                 'success' => false,
-                'message' => 'Düelloya katılmak için elmas paketi gereklidir.'
+                'message' => 'Düelloya katılmak için yeterli coin gereklidir.'
             ], 400);
         }
 
@@ -825,7 +813,7 @@ class DuelController extends Controller
         try {
             // Opponent bilgilerini güncelle
             $duel->opponent_id = $user->id;
-            $duel->opponent_diamonds_before = $diamond->balance;
+            $duel->opponent_coins_before = (int) $user->coins;
             $duel->status = 'active';
             $duel->started_at = now();
             $duel->save();
@@ -887,7 +875,7 @@ class DuelController extends Controller
      *             @OA\Property(property="message", type="string", example="Düello reddedildi. İsteği gönderen kazandı."),
      *             @OA\Property(property="duel", type="object"),
      *             @OA\Property(property="winner_id", type="integer", example=1),
-     *             @OA\Property(property="diamonds_transferred", type="integer", example=18)
+     *             @OA\Property(property="coins_transferred", type="integer", example=18)
      *         )
      *     ),
      *     @OA\Response(
@@ -930,22 +918,16 @@ class DuelController extends Controller
 
         DB::beginTransaction();
         try {
-            $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-            $opponentDiamond = Diamond::where('user_id', $duel->opponent_id)->first();
+            $challenger = User::findOrFail($duel->challenger_id);
+            $opponent = User::findOrFail($duel->opponent_id);
 
             // Soru değeri (multiplier ile çarpılmış)
             $questionValue = $duel->question_value; // 10 * multiplier
 
             // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır
-            $opponentLoss = min($questionValue, $opponentDiamond->balance);
-
-            if ($opponentLoss > 0) {
-                $opponentDiamond->subtract($opponentLoss);
-                $challengerDiamond->add($opponentLoss);
-            }
+            $opponentLoss = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
 
             // Düello bitir - challenger kazandı
-            // Kazananın elmaslarından %10 komisyon kes (finishDuel metodunda)
             $this->finishDuel($duel, $duel->challenger_id);
 
             // Socket bildirimi gönder
@@ -958,7 +940,9 @@ class DuelController extends Controller
                 'message' => 'Düello reddedildi. İsteği gönderen kazandı.',
                 'duel' => $duel->load(['challenger', 'opponent', 'winner']),
                 'winner_id' => $duel->challenger_id,
-                'diamonds_transferred' => $opponentLoss - $commission
+                'coins_transferred' => $opponentLoss['received'],
+                'coins_taken' => $opponentLoss['taken'],
+                'commission' => $opponentLoss['commission'],
             ]);
 
         } catch (\Exception $e) {
@@ -1069,7 +1053,7 @@ class DuelController extends Controller
      * @OA\Post(
      *     path="/api/duel/answer/{duel_id}",
      *     summary="Cevap Gönder",
-     *     description="Düello sorusuna cevap gönderir. Her iki oyuncu da cevap verdiğinde elmas transferi yapılır.",
+     *     description="Düello sorusuna cevap gönderir. Her iki oyuncu da cevap verdiğinde coin transferi yapılır.",
      *     tags={"Duel"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -1173,10 +1157,7 @@ class DuelController extends Controller
             $baseQuestionValue = $duel->question_value;
             $questionValue = $baseQuestionValue * $currentMultiplier;
 
-            $userDiamond = Diamond::where('user_id', $user->id)->first();
-            $diamondsBefore = $userDiamond->balance;
-
-            // Cevap kaydı oluştur (henüz elmas transferi yapma)
+            // Cevap kaydı oluştur (henüz coin transferi yapma)
             $answer = DuelAnswer::create([
                 'duel_id' => $duel->id,
                 'user_id' => $user->id,
@@ -1184,7 +1165,7 @@ class DuelController extends Controller
                 'selected_answer' => $request->selected_answer,
                 'is_correct' => $isCorrect,
                 'question_value' => $questionValue,
-                'diamonds_before' => $diamondsBefore,
+                'coins_before' => (int) $user->coins,
                 'answered_at' => now(),
             ]);
 
@@ -1202,7 +1183,7 @@ class DuelController extends Controller
             $bothAnswered = $challengerAnswer && $opponentAnswer;
 
             if ($bothAnswered) {
-                // Her iki oyuncu da cevap verdi, elmas transferi yap
+                // Her iki oyuncu da cevap verdi, coin transferi yap
                 $this->processAnswers($duel, $challengerAnswer, $opponentAnswer, $question, $questionValue);
 
                 // Sonraki soruya geç veya düello bitir
@@ -1237,132 +1218,100 @@ class DuelController extends Controller
     }
 
     /**
-     * Cevapları işle ve elmas transferi yap
+     * Cevapları işle ve coin transferi yap
      */
     private function processAnswers(Duel $duel, DuelAnswer $challengerAnswer, DuelAnswer $opponentAnswer, Question $question, int $questionValue): void
     {
-        $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-        $opponentDiamond = Diamond::where('user_id', $duel->opponent_id)->first();
+        $challenger = User::findOrFail($duel->challenger_id);
+        $opponent = User::findOrFail($duel->opponent_id);
 
         $challengerCorrect = $challengerAnswer->is_correct;
         $opponentCorrect = $opponentAnswer->is_correct;
 
-        // Temel soru değeri (duel bazlı) ve gerçek soru değeri (soru bazlı çarpan ile)
         $baseQuestionValue = $duel->question_value;
         $effectiveQuestionValue = $questionValue;
 
         // Senaryo 1: Her ikisi de doğru
         if ($challengerCorrect && $opponentCorrect) {
-            // Eğer soru bazlı çarpan uygulanmışsa (ör: 2x/3x) ve her iki oyuncu da doğruysa,
-            // daha hızlı cevap veren, diğerinden soru değeri kadar elmas alır.
             if ($effectiveQuestionValue > $baseQuestionValue &&
                 $challengerAnswer->answered_at &&
                 $opponentAnswer->answered_at &&
                 $challengerAnswer->answered_at != $opponentAnswer->answered_at) {
 
-                $challengerTime = $challengerAnswer->answered_at;
-                $opponentTime = $opponentAnswer->answered_at;
-
-                $winnerId = $challengerTime < $opponentTime ? $duel->challenger_id : $duel->opponent_id;
-                $loserId = $winnerId === $duel->challenger_id ? $duel->opponent_id : $duel->challenger_id;
-
-                $winnerDiamond = $winnerId === $duel->challenger_id ? $challengerDiamond : $opponentDiamond;
-                $loserDiamond = $loserId === $duel->challenger_id ? $challengerDiamond : $opponentDiamond;
-
-                $transferAmount = min($effectiveQuestionValue, $loserDiamond->balance);
-                if ($transferAmount > 0) {
-                    $loserDiamond->subtract($transferAmount);
-                    $winnerDiamond->add($transferAmount);
-                }
+                $winnerId = $challengerAnswer->answered_at < $opponentAnswer->answered_at
+                    ? $duel->challenger_id
+                    : $duel->opponent_id;
 
                 if ($winnerId === $duel->challenger_id) {
+                    $result = $this->transferCoins($opponent, $challenger, $effectiveQuestionValue, $duel);
                     $challengerAnswer->update([
-                        'diamonds_change' => $transferAmount,
-                        'diamonds_after' => $challengerDiamond->balance,
+                        'coins_change' => $result['received'],
+                        'coins_after' => (int) $challenger->coins,
                     ]);
                     $opponentAnswer->update([
-                        'diamonds_change' => -$transferAmount,
-                        'diamonds_after' => $opponentDiamond->balance,
+                        'coins_change' => -$result['taken'],
+                        'coins_after' => (int) $opponent->coins,
                     ]);
                 } else {
+                    $result = $this->transferCoins($challenger, $opponent, $effectiveQuestionValue, $duel);
                     $challengerAnswer->update([
-                        'diamonds_change' => -$transferAmount,
-                        'diamonds_after' => $challengerDiamond->balance,
+                        'coins_change' => -$result['taken'],
+                        'coins_after' => (int) $challenger->coins,
                     ]);
                     $opponentAnswer->update([
-                        'diamonds_change' => $transferAmount,
-                        'diamonds_after' => $opponentDiamond->balance,
+                        'coins_change' => $result['received'],
+                        'coins_after' => (int) $opponent->coins,
                     ]);
                 }
             } else {
-                // Normal durumda (soru bazlı çarpan yoksa) bakiye değişmez
-                $challengerAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $challengerDiamond->balance]);
-                $opponentAnswer->update(['diamonds_change' => 0, 'diamonds_after' => $opponentDiamond->balance]);
+                $challengerAnswer->update(['coins_change' => 0, 'coins_after' => (int) $challenger->coins]);
+                $opponentAnswer->update(['coins_change' => 0, 'coins_after' => (int) $opponent->coins]);
             }
 
             return;
         }
 
-        // Senaryo 2: Her ikisi de yanlış → Bakiyeler düşer, uygulama kasasına aktarılır
+        // Senaryo 2: Her ikisi de yanlış → Bakiyeler düşer, tamamı uygulama kasasına aktarılır
         if (!$challengerCorrect && !$opponentCorrect) {
-            $challengerLoss = min($questionValue, $challengerDiamond->balance);
-            $opponentLoss = min($questionValue, $opponentDiamond->balance);
+            $challengerLoss = $this->subtractCoins($challenger, $questionValue);
+            $opponentLoss = $this->subtractCoins($opponent, $questionValue);
             $totalLoss = $challengerLoss + $opponentLoss;
 
-            if ($challengerLoss > 0) {
-                $challengerDiamond->subtract($challengerLoss);
+            if ($totalLoss > 0) {
+                $duel->increment('app_commission', $totalLoss);
             }
-            if ($opponentLoss > 0) {
-                $opponentDiamond->subtract($opponentLoss);
-            }
-
-            // Uygulama komisyonu (her iki oyuncu yanlış cevap verdiğinde)
-            $commission = (int) ($totalLoss * 0.1); // %10 komisyon
-            $duel->increment('app_commission', $commission);
 
             $challengerAnswer->update([
-                'diamonds_change' => -$challengerLoss,
-                'diamonds_after' => $challengerDiamond->balance
+                'coins_change' => -$challengerLoss,
+                'coins_after' => (int) $challenger->coins,
             ]);
             $opponentAnswer->update([
-                'diamonds_change' => -$opponentLoss,
-                'diamonds_after' => $opponentDiamond->balance
+                'coins_change' => -$opponentLoss,
+                'coins_after' => (int) $opponent->coins,
             ]);
             return;
         }
 
-        // Senaryo 3: Biri doğru, diğeri yanlış → Yanlış cevap verenin elması doğru cevap verene aktarılır
+        // Senaryo 3: Biri doğru, diğeri yanlış → Kazanan net %90 alır (%10 komisyon)
         if ($challengerCorrect && !$opponentCorrect) {
-            // Rakip yanlış, meydan okuyan doğru
-            $opponentLoss = min($questionValue, $opponentDiamond->balance);
-            if ($opponentLoss > 0) {
-                $opponentDiamond->subtract($opponentLoss);
-                $challengerDiamond->add($opponentLoss);
-            }
-
+            $result = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
             $challengerAnswer->update([
-                'diamonds_change' => $opponentLoss,
-                'diamonds_after' => $challengerDiamond->balance
+                'coins_change' => $result['received'],
+                'coins_after' => (int) $challenger->coins,
             ]);
             $opponentAnswer->update([
-                'diamonds_change' => -$opponentLoss,
-                'diamonds_after' => $opponentDiamond->balance
+                'coins_change' => -$result['taken'],
+                'coins_after' => (int) $opponent->coins,
             ]);
         } elseif (!$challengerCorrect && $opponentCorrect) {
-            // Meydan okuyan yanlış, rakip doğru
-            $challengerLoss = min($questionValue, $challengerDiamond->balance);
-            if ($challengerLoss > 0) {
-                $challengerDiamond->subtract($challengerLoss);
-                $opponentDiamond->add($challengerLoss);
-            }
-
+            $result = $this->transferCoins($challenger, $opponent, $questionValue, $duel);
             $challengerAnswer->update([
-                'diamonds_change' => -$challengerLoss,
-                'diamonds_after' => $challengerDiamond->balance
+                'coins_change' => -$result['taken'],
+                'coins_after' => (int) $challenger->coins,
             ]);
             $opponentAnswer->update([
-                'diamonds_change' => $challengerLoss,
-                'diamonds_after' => $opponentDiamond->balance
+                'coins_change' => $result['received'],
+                'coins_after' => (int) $opponent->coins,
             ]);
         }
     }
@@ -1372,21 +1321,17 @@ class DuelController extends Controller
      */
     private function moveToNextQuestion(Duel $duel): void
     {
-        $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-        $opponentDiamond = Diamond::where('user_id', $duel->opponent_id)->first();
+        $challenger = User::findOrFail($duel->challenger_id);
+        $opponent = User::findOrFail($duel->opponent_id);
 
-        // Bakiye kontrolü - biri sıfırlandı mı?
-        if ($challengerDiamond->balance <= 0 || $opponentDiamond->balance <= 0) {
-            // Düello bitir
-            $winnerId = $challengerDiamond->balance > 0 ? $duel->challenger_id : $duel->opponent_id;
+        if ((int) $challenger->coins <= 0 || (int) $opponent->coins <= 0) {
+            $winnerId = (int) $challenger->coins > 0 ? $duel->challenger_id : $duel->opponent_id;
             $this->finishDuel($duel, $winnerId);
             return;
         }
 
-        // Sonraki soruya geç
         $nextQuestion = $this->getNextQuestion($duel);
         if ($nextQuestion) {
-            // Bir önceki soruya ait soru bazlı çarpan / bahis bilgilerini sıfırla
             $settings = $duel->settings ?? [];
             unset($settings['current_question_multiplier'], $settings['current_bet']);
 
@@ -1396,11 +1341,9 @@ class DuelController extends Controller
                 'settings' => $settings,
             ]);
 
-            // Socket bildirimi gönder
             $this->sendDuelNextQuestionWebhook($duel, $nextQuestion);
         } else {
-            // Soru kalmadı, düello bitir (daha fazla elması olan kazanır)
-            $winnerId = $challengerDiamond->balance >= $opponentDiamond->balance
+            $winnerId = (int) $challenger->coins >= (int) $opponent->coins
                 ? $duel->challenger_id
                 : $duel->opponent_id;
             $this->finishDuel($duel, $winnerId);
@@ -1409,36 +1352,20 @@ class DuelController extends Controller
 
     /**
      * Düello bitir
-     * Kazanan varsa elmaslarından %10 komisyon kesilir. Kazanan yoksa (açık düello iptal) sadece kapatılır.
+     * Kazanan yoksa (açık düello iptal) sadece kapatılır.
+     * Not: %10 komisyon transfer anında kesilir; burada tekrar kesilmez.
      */
     private function finishDuel(Duel $duel, ?int $winnerId): void
     {
-        $challengerDiamond = Diamond::where('user_id', $duel->challenger_id)->first();
-        $opponentDiamond = $duel->opponent_id
-            ? Diamond::where('user_id', $duel->opponent_id)->first()
-            : null;
+        $challenger = User::find($duel->challenger_id);
+        $opponent = $duel->opponent_id ? User::find($duel->opponent_id) : null;
 
-        if ($winnerId !== null) {
-            // Kazanan var: komisyon kes
-            $winnerDiamond = Diamond::where('user_id', $winnerId)->first();
-            if ($winnerDiamond) {
-                $winnerBalance = $winnerDiamond->balance;
-                $commission = (int) ($winnerBalance * 0.1);
-                $finalBalance = $winnerBalance - $commission;
-                if ($commission > 0) {
-                    $winnerDiamond->update(['balance' => $finalBalance]);
-                    $duel->increment('app_commission', $commission);
-                }
-            }
-        }
-
-        // Düello bitiş bilgilerini güncelle
         $duel->update([
             'status' => 'finished',
             'winner_id' => $winnerId,
             'finished_at' => now(),
-            'challenger_diamonds_after' => $challengerDiamond?->balance ?? 0,
-            'opponent_diamonds_after' => $opponentDiamond?->balance ?? $duel->opponent_diamonds_after ?? 0,
+            'challenger_coins_after' => (int) ($challenger?->fresh()->coins ?? 0),
+            'opponent_coins_after' => (int) ($opponent?->fresh()->coins ?? $duel->opponent_coins_after ?? 0),
         ]);
     }
 
@@ -1685,5 +1612,179 @@ class DuelController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Kaybedenden kazanana coin aktar.
+     * Kaybeden full tutarı kaybeder; kazanan %90 alır, %10 uygulama komisyonu.
+     * Örnek: 100 → kazanan +90, kaybeden -100, komisyon 10.
+     *
+     * @return array{taken:int, received:int, commission:int}
+     */
+    private function transferCoins(User $from, User $to, int $amount, ?Duel $duel = null): array
+    {
+        $taken = $this->subtractCoins($from, $amount);
+        if ($taken <= 0) {
+            return ['taken' => 0, 'received' => 0, 'commission' => 0];
+        }
+
+        $commission = (int) floor($taken * 0.1);
+        $received = $taken - $commission;
+
+        if ($received > 0) {
+            $this->addCoins($to, $received);
+        }
+
+        if ($duel && $commission > 0) {
+            $duel->increment('app_commission', $commission);
+        }
+
+        return [
+            'taken' => $taken,
+            'received' => $received,
+            'commission' => $commission,
+        ];
+    }
+
+    /**
+     * Aynı çarpanda bekleyen en eski açık düelloya katıl (FIFO kuyruk).
+     */
+    private function joinOldestWaitingDuel(User $user, string $multiplier): ?JsonResponse
+    {
+        $waitingDuel = Duel::where('status', 'waiting')
+            ->whereNull('opponent_id')
+            ->where('multiplier', $multiplier)
+            ->where('challenger_id', '!=', $user->id)
+            ->whereHas('challenger', function ($query) {
+                $query->where('coins', '>', 0);
+            })
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+
+        if (!$waitingDuel) {
+            return null;
+        }
+
+        $waitingDuel->opponent_id = $user->id;
+        $waitingDuel->opponent_coins_before = (int) $user->coins;
+        $waitingDuel->status = 'active';
+        $waitingDuel->started_at = now();
+        $waitingDuel->save();
+
+        $firstQuestion = $this->getNextQuestion($waitingDuel);
+        if ($firstQuestion) {
+            $waitingDuel->update([
+                'current_question_id' => $firstQuestion->id,
+                'current_question_number' => 1,
+            ]);
+        }
+
+        $this->sendDuelStartedWebhook($waitingDuel, $firstQuestion);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Düello başladı!',
+            'duel' => $waitingDuel->load(['challenger', 'opponent', 'currentQuestion']),
+            'question' => $firstQuestion ? $this->formatQuestionMultilingual($firstQuestion) : null,
+            'auto_started' => true,
+            'matched_from_queue' => true,
+        ]);
+    }
+
+    /**
+     * Socket'e bağlı, aktif düellosu olmayan rastgele rakip bul.
+     * Son 5 rakibi tekrar seçmemeye çalışır.
+     */
+    private function findOnlineOpponent(User $user): ?User
+    {
+        $recentOpponentIds = Duel::where('status', 'finished')
+            ->where(function ($query) use ($user) {
+                $query->where('challenger_id', $user->id)
+                    ->orWhere('opponent_id', $user->id);
+            })
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(function (Duel $duel) use ($user) {
+                return $duel->challenger_id === $user->id
+                    ? $duel->opponent_id
+                    : $duel->challenger_id;
+            })
+            ->filter()
+            ->unique()
+            ->take(5)
+            ->values()
+            ->all();
+
+        $candidates = User::where('id', '!=', $user->id)
+            ->where('coins', '>', 0)
+            ->whereDoesntHave('duelsAsChallenger', function ($query) {
+                $query->whereIn('status', ['waiting', 'active']);
+            })
+            ->whereDoesntHave('duelsAsOpponent', function ($query) {
+                $query->whereIn('status', ['waiting', 'active']);
+            })
+            ->when(!empty($recentOpponentIds), function ($query) use ($recentOpponentIds) {
+                $query->whereNotIn('id', $recentOpponentIds);
+            })
+            ->inRandomOrder()
+            ->limit(40)
+            ->get();
+
+        // Recent filter sonrası aday kalmadıysa recent hariç tutmadan tekrar dene
+        if ($candidates->isEmpty() && !empty($recentOpponentIds)) {
+            $candidates = User::where('id', '!=', $user->id)
+                ->where('coins', '>', 0)
+                ->whereDoesntHave('duelsAsChallenger', function ($query) {
+                    $query->whereIn('status', ['waiting', 'active']);
+                })
+                ->whereDoesntHave('duelsAsOpponent', function ($query) {
+                    $query->whereIn('status', ['waiting', 'active']);
+                })
+                ->inRandomOrder()
+                ->limit(40)
+                ->get();
+        }
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $webhookService = app(\App\Http\Services\WebhookService::class);
+        $connectionStatus = $webhookService->checkUsersConnection($candidates->pluck('id')->all());
+
+        $onlineCandidates = $candidates->filter(function (User $candidate) use ($connectionStatus) {
+            $status = $connectionStatus[$candidate->id]
+                ?? $connectionStatus[(string) $candidate->id]
+                ?? null;
+
+            return ($status['isConnected'] ?? false) === true;
+        })->values();
+
+        if ($onlineCandidates->isEmpty()) {
+            return null;
+        }
+
+        return $onlineCandidates->random();
+    }
+
+    private function addCoins(User $user, int $amount): void
+    {
+        if ($amount > 0) {
+            $user->increment('coins', $amount);
+            $user->refresh();
+        }
+    }
+
+    private function subtractCoins(User $user, int $amount): int
+    {
+        $amount = min(max(0, $amount), (int) $user->coins);
+        if ($amount > 0) {
+            $user->decrement('coins', $amount);
+            $user->refresh();
+        }
+
+        return $amount;
     }
 }

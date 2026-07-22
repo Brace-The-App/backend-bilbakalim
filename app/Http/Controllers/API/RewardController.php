@@ -4,9 +4,12 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\CoinHistory;
+use App\Models\Duel;
+use App\Models\IndividualGame;
 use App\Models\RewardRequest;
 use App\Models\Tournament;
 use App\Models\TournamentUser;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -59,6 +62,21 @@ class RewardController extends Controller
                 'success' => false,
                 'message' => 'Geçersiz ödül tipi.'
             ], 400);
+        }
+
+        $claimGate = $this->validateGiftClaimRequirements($user);
+        if (!$claimGate['eligible']) {
+            return response()->json([
+                'success' => true,
+                'eligible' => false,
+                'rank' => null,
+                'coins_earned' => 0,
+                'current_coins' => $claimGate['current_coins'],
+                'games_played' => $claimGate['games_played'],
+                'min_coins' => $claimGate['min_coins'],
+                'min_games' => $claimGate['min_games'],
+                'message' => $claimGate['message'],
+            ]);
         }
 
         $eligible = false;
@@ -314,6 +332,10 @@ class RewardController extends Controller
             'eligible' => $eligible,
             'rank' => $rank,
             'coins_earned' => $coinsEarned,
+            'current_coins' => $claimGate['current_coins'],
+            'games_played' => $claimGate['games_played'],
+            'min_coins' => $claimGate['min_coins'],
+            'min_games' => $claimGate['min_games'],
             'message' => $message
         ];
 
@@ -358,6 +380,18 @@ class RewardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Geçersiz ödül tipi.'
+            ], 400);
+        }
+
+        $claimGate = $this->validateGiftClaimRequirements($user);
+        if (!$claimGate['eligible']) {
+            return response()->json([
+                'success' => false,
+                'message' => $claimGate['message'],
+                'current_coins' => $claimGate['current_coins'],
+                'games_played' => $claimGate['games_played'],
+                'min_coins' => $claimGate['min_coins'],
+                'min_games' => $claimGate['min_games'],
             ], 400);
         }
 
@@ -426,5 +460,69 @@ class RewardController extends Controller
             'success' => true,
             'message' => 'Ödül talebi başarıyla oluşturuldu.'
         ]);
+    }
+
+    /**
+     * Hediye / ödül talep şartları:
+     * - Minimum 100 jeton
+     * - En az 3 tamamlanmış oyun
+     */
+    private function validateGiftClaimRequirements(User $user): array
+    {
+        $minCoins = (int) config('app.gift_claim_min_coins', 100);
+        $minGames = (int) config('app.gift_claim_min_games', 3);
+        $currentCoins = (int) $user->coins;
+        $gamesPlayed = $this->countCompletedGames($user->id);
+
+        if ($currentCoins < $minCoins) {
+            return [
+                'eligible' => false,
+                'message' => "Hediye talep etmek için en az {$minCoins} jeton gereklidir. Mevcut jetonunuz: {$currentCoins}.",
+                'current_coins' => $currentCoins,
+                'games_played' => $gamesPlayed,
+                'min_coins' => $minCoins,
+                'min_games' => $minGames,
+            ];
+        }
+
+        if ($gamesPlayed < $minGames) {
+            return [
+                'eligible' => false,
+                'message' => "Hediye talep etmek için en az {$minGames} oyun oynamış olmanız gerekir. Oynanan oyun: {$gamesPlayed}.",
+                'current_coins' => $currentCoins,
+                'games_played' => $gamesPlayed,
+                'min_coins' => $minCoins,
+                'min_games' => $minGames,
+            ];
+        }
+
+        return [
+            'eligible' => true,
+            'message' => 'Hediye talep şartları karşılanıyor.',
+            'current_coins' => $currentCoins,
+            'games_played' => $gamesPlayed,
+            'min_coins' => $minCoins,
+            'min_games' => $minGames,
+        ];
+    }
+
+    private function countCompletedGames(int $userId): int
+    {
+        $individualGames = IndividualGame::where('user_id', $userId)
+            ->where('status', 'completed')
+            ->count();
+
+        $tournamentGames = TournamentUser::where('user_id', $userId)
+            ->whereIn('status', ['completed', 'eliminated'])
+            ->count();
+
+        $duelGames = Duel::where(function ($query) use ($userId) {
+                $query->where('challenger_id', $userId)
+                    ->orWhere('opponent_id', $userId);
+            })
+            ->where('status', 'finished')
+            ->count();
+
+        return $individualGames + $tournamentGames + $duelGames;
     }
 }

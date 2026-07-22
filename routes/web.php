@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\QuestionController;
+use App\Http\Controllers\Admin\QuestionAnswerStatsController;
 use App\Http\Controllers\Admin\TournamentController;
 use App\Http\Controllers\Admin\GeneralSettingController;
 use App\Http\Controllers\Admin\PermissionController;
@@ -57,6 +58,13 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     // Questions management
     Route::post('questions/{question}/toggle-check', [QuestionController::class, 'toggleCheck'])->name('questions.toggle-check');
     Route::resource('questions', QuestionController::class);
+
+    // Kullanıcı cevap istatistikleri
+    Route::get('question-answer-stats', [QuestionAnswerStatsController::class, 'index'])->name('question-answer-stats.index');
+    Route::post('question-answer-stats/refresh', [QuestionAnswerStatsController::class, 'refresh'])->name('question-answer-stats.refresh');
+    Route::patch('question-answer-stats/{question}/level', [QuestionAnswerStatsController::class, 'updateLevel'])->name('question-answer-stats.update-level');
+    Route::patch('question-answer-stats/{question}/status', [QuestionAnswerStatsController::class, 'updateStatus'])->name('question-answer-stats.update-status');
+    Route::get('question-answer-stats/{question}/logs', [QuestionAnswerStatsController::class, 'showLogs'])->name('question-answer-stats.logs');
 
     // Tournaments management
     Route::resource('tournaments', TournamentController::class);

@@ -13,18 +13,18 @@ class DuelAnswer extends Model
         'question_id',
         'selected_answer',
         'is_correct',
-        'diamonds_change',
-        'diamonds_before',
-        'diamonds_after',
+        'coins_change',
+        'coins_before',
+        'coins_after',
         'question_value',
         'answered_at'
     ];
 
     protected $casts = [
         'is_correct' => 'boolean',
-        'diamonds_change' => 'integer',
-        'diamonds_before' => 'integer',
-        'diamonds_after' => 'integer',
+        'coins_change' => 'integer',
+        'coins_before' => 'integer',
+        'coins_after' => 'integer',
         'question_value' => 'integer',
         'answered_at' => 'datetime',
     ];

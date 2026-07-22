@@ -282,4 +282,13 @@ return [
     'reward_high_accuracy_double_answer' => 3,
     'reward_high_accuracy_hint' => 3,
 
+    // Hediye / ödül talep şartları
+    'gift_claim_min_coins' => env('GIFT_CLAIM_MIN_COINS', 100),
+    'gift_claim_min_games' => env('GIFT_CLAIM_MIN_GAMES', 3),
+
+    // Soru cevap istatistikleri
+    'question_stats_min_answers' => env('QUESTION_STATS_MIN_ANSWERS', 20),
+    'question_stats_easy_min_percent' => env('QUESTION_STATS_EASY_MIN_PERCENT', 70),
+    'question_stats_medium_min_percent' => env('QUESTION_STATS_MEDIUM_MIN_PERCENT', 40),
+
 ];
