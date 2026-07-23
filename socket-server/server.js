@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const fs = require('fs');
 const https = require('https');
+const axios = require('axios');
 
 const app = express();
 
@@ -40,6 +41,337 @@ app.use(express.json());
 const connectedUsers = new Map(); // socketId -> { userId, userName }
 const userRooms = new Map(); // socketId -> roomName
 const userSocketMap = new Map(); // userId -> socketId mapping
+
+// Düello eşleşme kuyruğu: multiplier -> [{ userId, socketId, multiplier, joinedAt }]
+const duelMatchQueues = new Map();
+const duelMatchLocks = new Map(); // multiplier -> Promise chain (serial match)
+const duelMatchCancelled = new Set(); // ready iptal / disconnect (in-flight match öncesi)
+const LARAVEL_API_URL = (process.env.LARAVEL_API_URL || 'https://bil-bakalim.com').replace(/\/$/, '');
+const SOCKET_INTERNAL_SECRET = process.env.SOCKET_INTERNAL_SECRET || 'bilbakalim-socket-secret';
+const VALID_MULTIPLIERS = new Set(['x1', 'x2', 'x4', 'x8']);
+
+function getMatchQueue(multiplier) {
+    if (!duelMatchQueues.has(multiplier)) {
+        duelMatchQueues.set(multiplier, []);
+    }
+    return duelMatchQueues.get(multiplier);
+}
+
+function removeUserFromMatchQueues(userId) {
+    const uid = parseInt(userId, 10);
+    // Diziyi yerinde mutate et (yeni dizi set etme).
+    // Aksi halde eşleşme await sırasında cancel/ready eski referansı bozar.
+    for (const [multiplier, queue] of duelMatchQueues.entries()) {
+        let removed = false;
+        for (let i = queue.length - 1; i >= 0; i--) {
+            if (queue[i].userId === uid) {
+                queue.splice(i, 1);
+                removed = true;
+            }
+        }
+        if (removed) {
+            console.log(`🗑️ Kullanıcı ${uid} eşleşme kuyruğundan çıkarıldı (${multiplier})`);
+        }
+    }
+}
+
+function refreshUserSocketInMatchQueues(userId, socketId) {
+    const uid = parseInt(userId, 10);
+    for (const queue of duelMatchQueues.values()) {
+        for (const entry of queue) {
+            if (entry.userId === uid) {
+                entry.socketId = socketId;
+            }
+        }
+    }
+}
+
+function markMatchCancelled(userId) {
+    const uid = parseInt(userId, 10);
+    if (uid) {
+        duelMatchCancelled.add(uid);
+    }
+}
+
+function clearMatchCancelled(userId) {
+    const uid = parseInt(userId, 10);
+    if (uid) {
+        duelMatchCancelled.delete(uid);
+    }
+}
+
+function consumeMatchCancelled(userId) {
+    const uid = parseInt(userId, 10);
+    if (duelMatchCancelled.has(uid)) {
+        duelMatchCancelled.delete(uid);
+        return true;
+    }
+    return false;
+}
+
+function requeueIfStillReady(entry, queue) {
+    const liveSocketId = userSocketMap.get(entry.userId);
+    if (!liveSocketId || duelMatchCancelled.has(entry.userId)) {
+        return;
+    }
+    entry.socketId = liveSocketId;
+    queue.unshift(entry);
+}
+
+async function createDuelMatchOnLaravel(challengerId, opponentId, multiplier) {
+    const url = `${LARAVEL_API_URL}/api/duel/socket-match`;
+    const response = await axios.post(url, {
+        challenger_id: challengerId,
+        opponent_id: opponentId,
+        multiplier,
+        secret: SOCKET_INTERNAL_SECRET,
+    }, {
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+    });
+
+    const data = response.data || {};
+    if (response.status >= 400 || !data.success) {
+        const message = data.message || `HTTP ${response.status}`;
+        throw new Error(message);
+    }
+    return data;
+}
+
+function emitToUser(userId, eventName, payload) {
+    const uid = parseInt(userId, 10);
+    io.to(`user_${uid}`).emit(eventName, payload);
+    // snake_case alias
+    const snake = eventName.replace(/-/g, '_');
+    if (snake !== eventName) {
+        io.to(`user_${uid}`).emit(snake, payload);
+    }
+}
+
+async function tryMatchDuelQueue(multiplier) {
+    const prev = duelMatchLocks.get(multiplier) || Promise.resolve();
+    const run = prev
+        .catch(() => {})
+        .then(() => tryMatchDuelQueueLocked(multiplier));
+    duelMatchLocks.set(multiplier, run);
+    return run;
+}
+
+function joinUserSocketToDuelRoom(userId, duelId) {
+    const socketId = userSocketMap.get(parseInt(userId, 10));
+    if (!socketId || !duelId) {
+        return;
+    }
+    const sock = io.sockets.sockets.get(socketId);
+    if (sock) {
+        sock.join(`duel_${duelId}`);
+    }
+}
+
+async function tryMatchDuelQueueLocked(multiplier) {
+    const queue = getMatchQueue(multiplier);
+    while (queue.length >= 2) {
+        const first = queue.shift();
+        const second = queue.shift();
+
+        if (!first || !second) {
+            break;
+        }
+
+        // Aynı kullanıcı iki kez kuyruğa girmişse atla
+        if (first.userId === second.userId) {
+            queue.unshift(first);
+            continue;
+        }
+
+        // Reconnect sonrası socketId güncel mi? Map'teki canlı socket yeterli.
+        const firstSocketId = userSocketMap.get(first.userId);
+        const secondSocketId = userSocketMap.get(second.userId);
+
+        if (!firstSocketId && secondSocketId) {
+            second.socketId = secondSocketId;
+            queue.unshift(second);
+            continue;
+        }
+        if (firstSocketId && !secondSocketId) {
+            first.socketId = firstSocketId;
+            queue.unshift(first);
+            continue;
+        }
+        if (!firstSocketId && !secondSocketId) {
+            continue;
+        }
+
+        first.socketId = firstSocketId;
+        second.socketId = secondSocketId;
+
+        // Kuyruktan çıktıktan sonra cancel/disconnect olduysa Laravel'e gitme
+        const firstCancelled = consumeMatchCancelled(first.userId);
+        const secondCancelled = consumeMatchCancelled(second.userId);
+        if (firstCancelled || secondCancelled) {
+            if (!firstCancelled) {
+                requeueIfStillReady(first, queue);
+            }
+            if (!secondCancelled) {
+                requeueIfStillReady(second, queue);
+            }
+            continue;
+        }
+
+        console.log(`⚔️ Eşleşme denemesi: ${first.userId} vs ${second.userId} (${multiplier})`);
+
+        try {
+            const result = await createDuelMatchOnLaravel(first.userId, second.userId, multiplier);
+
+            // Create sonrası biri ayrıldıysa yine de matched yayınla (düello DB'de oluştu)
+            clearMatchCancelled(first.userId);
+            clearMatchCancelled(second.userId);
+
+            const duel = result.duel || {};
+            const payload = {
+                duelId: duel.duelId,
+                challengerId: duel.challengerId,
+                opponentId: duel.opponentId,
+                multiplier: duel.multiplier || multiplier,
+                status: 'matched',
+                question: result.question || null,
+                challenger: result.challenger || null,
+                opponent: result.opponent || null,
+                timestamp: new Date().toISOString(),
+            };
+
+            if (payload.duelId) {
+                joinUserSocketToDuelRoom(first.userId, payload.duelId);
+                joinUserSocketToDuelRoom(second.userId, payload.duelId);
+            }
+
+            emitToUser(first.userId, 'duel-matched', payload);
+            emitToUser(second.userId, 'duel-matched', payload);
+
+            if (payload.duelId) {
+                io.to(`duel_${payload.duelId}`).emit('duel-matched', payload);
+                io.to(`duel_${payload.duelId}`).emit('duel_matched', payload);
+            }
+
+            console.log('✅ duel-matched gönderildi:', JSON.stringify(payload));
+        } catch (error) {
+            console.error('❌ Laravel socket-match hatası:', error.message);
+            const errorPayload = {
+                success: false,
+                message: error.message || 'Eşleşme oluşturulamadı',
+                multiplier,
+                timestamp: new Date().toISOString(),
+            };
+            emitToUser(first.userId, 'duel-match-error', errorPayload);
+            emitToUser(second.userId, 'duel-match-error', errorPayload);
+
+            // Başarısız: yeniden kuyruğa alma (sonsuz loop riski). Mobil tekrar duel-ready göndersin.
+        }
+    }
+}
+
+function handleDuelReady(socket, data) {
+    console.log('📥 duel-ready event alındı:', JSON.stringify(data));
+
+    const userId = parseInt(data?.userId ?? data?.user_id, 10);
+    const multiplier = String(data?.multiplier || 'x1').toLowerCase();
+
+    if (!userId) {
+        socket.emit('duel-ready-error', {
+            success: false,
+            message: 'userId gereklidir',
+        });
+        socket.emit('duel_ready_error', {
+            success: false,
+            message: 'userId gereklidir',
+        });
+        return;
+    }
+
+    if (!VALID_MULTIPLIERS.has(multiplier)) {
+        const err = {
+            success: false,
+            message: 'Geçersiz multiplier. x1, x2, x4, x8 olmalı.',
+        };
+        socket.emit('duel-ready-error', err);
+        socket.emit('duel_ready_error', err);
+        return;
+    }
+
+    // user_join yapılmamışsa bu event ile map'e yaz
+    connectedUsers.set(socket.id, {
+        userId,
+        userName: data?.userName || data?.user_name || connectedUsers.get(socket.id)?.userName,
+    });
+    userSocketMap.set(userId, socket.id);
+    socket.join(`user_${userId}`);
+    clearMatchCancelled(userId);
+
+    // Önce diğer kuyruklardan çıkar, sonra bu çarpana ekle
+    removeUserFromMatchQueues(userId);
+
+    const queue = getMatchQueue(multiplier);
+    queue.push({
+        userId,
+        socketId: socket.id,
+        multiplier,
+        joinedAt: Date.now(),
+    });
+
+    const ack = {
+        success: true,
+        queued: true,
+        userId,
+        multiplier,
+        position: queue.length,
+        message: queue.length === 1
+            ? 'Eşleşme kuyruğuna alındınız. Rakip bekleniyor.'
+            : 'Eşleşme kuyruğuna alındınız.',
+        timestamp: new Date().toISOString(),
+    };
+
+    socket.emit('duel-ready-ack', ack);
+    socket.emit('duel_ready_ack', ack);
+    console.log(`✅ Kullanıcı ${userId} kuyruğa girdi (${multiplier}), sıra: ${queue.length}`);
+
+    tryMatchDuelQueue(multiplier);
+}
+
+function handleDuelCancelReady(socket, data) {
+    console.log('📥 duel-cancel-ready event alındı:', JSON.stringify(data));
+
+    const userId = parseInt(
+        data?.userId ?? data?.user_id ?? connectedUsers.get(socket.id)?.userId,
+        10
+    );
+
+    if (!userId) {
+        const err = {
+            success: false,
+            message: 'userId gereklidir',
+        };
+        socket.emit('duel-cancel-ready-ack', err);
+        socket.emit('duel_cancel_ready_ack', err);
+        return;
+    }
+
+    removeUserFromMatchQueues(userId);
+    markMatchCancelled(userId);
+
+    const ack = {
+        success: true,
+        userId,
+        message: 'Eşleşme kuyruğundan çıktınız.',
+        timestamp: new Date().toISOString(),
+    };
+    socket.emit('duel-cancel-ready-ack', ack);
+    socket.emit('duel_cancel_ready_ack', ack);
+}
 
 function getUsersInTournamentRoom(roomName) {
     const room = io.sockets.adapter.rooms.get(roomName);
@@ -93,6 +425,7 @@ io.on('connection', (socket) => {
         connectedUsers.set(socket.id, { userId, userName });
         userSocketMap.set(userId, socket.id);
         socket.join(`user_${userId}`);
+        refreshUserSocketInMatchQueues(userId, socket.id);
 
         console.log(`👤 Kullanıcı girişi: ${userName} (${userId})`);
 
@@ -115,6 +448,14 @@ io.on('connection', (socket) => {
         console.log(`✅ Socket ${socket.id} odaya katıldı: ${room}`);
         socket.emit('room_joined', { success: true, room });
     });
+
+    // Düello match ekranı: eşleşmeye hazır
+    socket.on('duel-ready', (data) => handleDuelReady(socket, data));
+    socket.on('duel_ready', (data) => handleDuelReady(socket, data));
+
+    // Match ekranından çıkış
+    socket.on('duel-cancel-ready', (data) => handleDuelCancelReady(socket, data));
+    socket.on('duel_cancel_ready', (data) => handleDuelCancelReady(socket, data));
 
     // Düello odasına katılma
     socket.on('join_duel', (data) => {
@@ -615,11 +956,17 @@ io.on('connection', (socket) => {
         }
 
         if (user) {
+            // Eşleşme kuyruğundan çıkar + in-flight match'i iptal bayrağı
+            removeUserFromMatchQueues(user.userId);
+            markMatchCancelled(user.userId);
+
             // Kullanıcı odasından çık
             socket.leave(`user_${user.userId}`);
-            userRooms.delete(user.userId);
             connectedUsers.delete(socket.id);
-            userSocketMap.delete(user.userId);
+            // Başka cihaz/socket aynı userId ile bağlıysa map'i bozma
+            if (userSocketMap.get(user.userId) === socket.id) {
+                userSocketMap.delete(user.userId);
+            }
             console.log(`Kullanıcı bağlantısı kesildi: ${user.userId}`);
         }
     });

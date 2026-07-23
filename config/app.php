@@ -291,4 +291,7 @@ return [
     'question_stats_easy_min_percent' => env('QUESTION_STATS_EASY_MIN_PERCENT', 70),
     'question_stats_medium_min_percent' => env('QUESTION_STATS_MEDIUM_MIN_PERCENT', 40),
 
+    // Socket sunucusundan gelen internal istekler
+    'socket_internal_secret' => env('SOCKET_INTERNAL_SECRET', 'bilbakalim-socket-secret'),
+
 ];

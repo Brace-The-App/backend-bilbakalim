@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Services\QuestionAnswerStatsService;
 use App\Models\Category;
 use App\Models\Question;
 use App\Models\QuestionAdminLog;
 use App\Models\QuestionAnswerStat;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -72,8 +72,8 @@ class QuestionAnswerStatsController extends Controller
             });
         }
 
-        $sort = $request->get('sort', 'correct_percentage');
-        $dir = $request->get('dir', 'asc') === 'desc' ? 'desc' : 'asc';
+        $sort = $request->get('sort', 'total_answers');
+        $dir = $request->get('dir', 'desc') === 'asc' ? 'asc' : 'desc';
 
         $allowedSorts = [
             'id' => 'questions.id',
@@ -82,8 +82,11 @@ class QuestionAnswerStatsController extends Controller
             'last_calculated_at' => 'qas.last_calculated_at',
         ];
 
-        $sortColumn = $allowedSorts[$sort] ?? 'qas.correct_percentage';
-        $query->orderByRaw($sortColumn . ' IS NULL')
+        $sortColumn = $allowedSorts[$sort] ?? 'qas.total_answers';
+
+        // Önce yeterli verisi olanlar, sonra veri yetersiz olanlar
+        $query->orderByRaw('CASE WHEN qas.data_sufficient = 1 THEN 0 ELSE 1 END')
+            ->orderByRaw('CASE WHEN COALESCE(qas.total_answers, 0) > 0 THEN 0 ELSE 1 END')
             ->orderBy($sortColumn, $dir)
             ->orderBy('questions.id', 'desc');
 
@@ -161,11 +164,16 @@ class QuestionAnswerStatsController extends Controller
         return back()->with('success', "Soru #{$question->id} durumu güncellendi.");
     }
 
-    public function refresh(QuestionAnswerStatsService $service)
+    public function refresh()
     {
-        $count = $service->refreshAll();
+        dispatch(function () {
+            Artisan::call('questions:refresh-answer-stats');
+        })->afterResponse();
 
-        return back()->with('success', "{$count} sorunun istatistikleri yenilendi.");
+        return back()->with(
+            'success',
+            'İstatistik yenileme arka planda başlatıldı. Birkaç dakika sonra sayfayı yenileyin.'
+        );
     }
 
     public function showLogs(Question $question)

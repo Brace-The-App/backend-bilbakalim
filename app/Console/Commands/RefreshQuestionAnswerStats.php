@@ -13,6 +13,9 @@ class RefreshQuestionAnswerStats extends Command
 
     public function handle(QuestionAnswerStatsService $service): int
     {
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+
         $questionId = $this->option('question');
 
         if ($questionId) {

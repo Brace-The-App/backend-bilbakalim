@@ -95,55 +95,110 @@ trait VerificationTrait
     {
         $rateLimitKey = "rate_limit_{$type}_{$identifier}";
         $lastRequest = Cache::get($rateLimitKey);
-        
+
         // Check if there's an existing verification code that hasn't expired
         $cacheKey = "verification_code_{$type}_{$identifier}";
         $existingCode = Cache::get($cacheKey);
-        
-        if ($existingCode && $existingCode['created_at'] > now()->subMinutes(15)) {
-            $expiryTime = $existingCode['created_at']->copy()->addMinutes(15);
-            $remainingSeconds = max(0, now()->diffInSeconds($expiryTime, false));
-            $remainingMinutes = floor($remainingSeconds / 60);
-            $remainingSecondsOnly = $remainingSeconds % 60;
-            
-            if ($remainingMinutes >= 1) {
-                $message = "Mevcut kod henüz geçerli. Yeni kod talep etmek için {$remainingMinutes} dakika {$remainingSecondsOnly} saniye bekleyin.";
-            } else {
-                $message = "Mevcut kod henüz geçerli. Yeni kod talep etmek için {$remainingSeconds} saniye bekleyin.";
+
+        if ($existingCode && isset($existingCode['created_at'])) {
+            $createdAt = $existingCode['created_at'] instanceof \Carbon\Carbon
+                ? $existingCode['created_at']
+                : \Carbon\Carbon::parse($existingCode['created_at']);
+
+            if ($createdAt->gt(now()->subMinutes(15))) {
+                $expiryTime = $createdAt->copy()->addMinutes(15);
+                $remainingSeconds = $this->secondsUntil($expiryTime);
+
+                return [
+                    'can_request' => false,
+                    'message' => 'Mevcut kod henüz geçerli. Yeni kod talep etmek için ' . $this->formatWaitDuration($remainingSeconds) . ' bekleyin.',
+                    'remaining_seconds' => (int) $remainingSeconds,
+                    'remaining_formatted' => $this->formatWaitClock($remainingSeconds),
+                ];
             }
-            
-            return [
-                'can_request' => false,
-                'message' => $message,
-                'remaining_seconds' => $remainingSeconds
-            ];
         }
-        
+
         // Check rate limit (2 minutes between requests)
-        if ($lastRequest && $lastRequest > now()->subMinutes(2)) {
-            $nextAllowedTime = $lastRequest->copy()->addMinutes(2);
-            $remainingSeconds = max(0, now()->diffInSeconds($nextAllowedTime, false));
-            $remainingMinutes = floor($remainingSeconds / 60);
-            $remainingSecondsOnly = $remainingSeconds % 60;
-            
-            if ($remainingMinutes >= 1) {
-                $message = "Yeni kod talep etmek için {$remainingMinutes} dakika {$remainingSecondsOnly} saniye bekleyin.";
-            } else {
-                $message = "Yeni kod talep etmek için {$remainingSeconds} saniye bekleyin.";
+        if ($lastRequest) {
+            $lastRequestAt = $lastRequest instanceof \Carbon\Carbon
+                ? $lastRequest
+                : \Carbon\Carbon::parse($lastRequest);
+
+            if ($lastRequestAt->gt(now()->subMinutes(2))) {
+                $nextAllowedTime = $lastRequestAt->copy()->addMinutes(2);
+                $remainingSeconds = $this->secondsUntil($nextAllowedTime);
+
+                return [
+                    'can_request' => false,
+                    'message' => 'Yeni kod talep etmek için ' . $this->formatWaitDuration($remainingSeconds) . ' bekleyin.',
+                    'remaining_seconds' => (int) $remainingSeconds,
+                    'remaining_formatted' => $this->formatWaitClock($remainingSeconds),
+                ];
             }
-            
-            return [
-                'can_request' => false,
-                'message' => $message,
-                'remaining_seconds' => $remainingSeconds
-            ];
         }
-        
+
         return [
             'can_request' => true,
             'message' => 'Yeni kod talep edilebilir.',
-            'remaining_seconds' => 0
+            'remaining_seconds' => 0,
+            'remaining_formatted' => '00:00',
         ];
+    }
+
+    /**
+     * Kalan süreyi tam saniye (int) olarak hesapla.
+     */
+    protected function secondsUntil(\DateTimeInterface $target): int
+    {
+        $diff = $target->getTimestamp() - now()->getTimestamp();
+
+        return (int) max(0, (int) ceil((float) $diff));
+    }
+
+    /**
+     * Rate-limit cevap alanlarını normalize et.
+     */
+    protected function normalizeRateLimitPayload(array $rateLimitCheck): array
+    {
+        $seconds = (int) round((float) ($rateLimitCheck['remaining_seconds'] ?? 0));
+
+        return [
+            'success' => false,
+            'message' => (string) ($rateLimitCheck['message'] ?? 'Lütfen bekleyin.'),
+            'code' => 429,
+            'remaining_seconds' => $seconds,
+            'remaining_formatted' => (string) ($rateLimitCheck['remaining_formatted'] ?? $this->formatWaitClock($seconds)),
+        ];
+    }
+
+    /**
+     * İnsan okunabilir bekleme süresi: "36 saniye" / "1 dakika 36 saniye"
+     */
+    protected function formatWaitDuration(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        $minutes = intdiv($seconds, 60);
+        $secs = $seconds % 60;
+
+        if ($minutes >= 1) {
+            if ($secs === 0) {
+                return $minutes === 1 ? '1 dakika' : "{$minutes} dakika";
+            }
+
+            return "{$minutes} dakika {$secs} saniye";
+        }
+
+        return $seconds === 1 ? '1 saniye' : "{$seconds} saniye";
+    }
+
+    /**
+     * Saat formatı: 01:36 veya 00:18
+     */
+    protected function formatWaitClock(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+
+        return sprintf('%02d:%02d', intdiv($seconds, 60), $seconds % 60);
     }
 
     /**
@@ -182,28 +237,23 @@ trait VerificationTrait
         $cacheKey = "reset_token_{$type}_{$identifier}";
         Cache::put($cacheKey, [
             'token' => $token,
-            'created_at' => now()
-        ], now()->addMinutes(15)); // 15 minutes expiry
+            'created_at' => now()->toIso8601String(),
+        ], now()->addMinutes(15));
     }
 
     /**
      * Verify reset token
-     *
-     * @param string $identifier
-     * @param string $token
-     * @param string $type
-     * @return bool
      */
     protected function verifyResetToken(string $identifier, string $token, string $type = 'email'): bool
     {
         $cacheKey = "reset_token_{$type}_{$identifier}";
         $cachedData = Cache::get($cacheKey);
-        
-        if (!$cachedData || $cachedData['token'] !== $token) {
+
+        if (!$cachedData || empty($cachedData['token'])) {
             return false;
         }
-        
-        return true;
+
+        return hash_equals((string) $cachedData['token'], (string) $token);
     }
 
     /**

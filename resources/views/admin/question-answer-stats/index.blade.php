@@ -15,12 +15,6 @@
         </div>
     </div>
 
-    @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-    @endif
-    @if(session('info'))
-        <div class="alert alert-info">{{ session('info') }}</div>
-    @endif
     @if($errors->any())
         <div class="alert alert-danger">
             <ul class="mb-0">
@@ -58,11 +52,11 @@
                 </div>
                 <div class="card-body">
                     <form method="GET" action="{{ route('admin.question-answer-stats.index') }}" class="row g-2 align-items-end mb-3">
-                        <div class="col-md-2">
+                        <div class="col-12 col-md-6 col-lg-2">
                             <label class="form-label small text-muted">Ara</label>
                             <input type="text" name="search" class="form-control" placeholder="ID veya metin" value="{{ request('search') }}">
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-3 col-lg-2">
                             <label class="form-label small text-muted">Kategori</label>
                             <select name="category_id" class="form-select">
                                 <option value="">Tümü</option>
@@ -73,7 +67,7 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-6 col-md-3 col-lg-1">
                             <label class="form-label small text-muted">Zorluk</label>
                             <select name="level" class="form-select">
                                 <option value="">Tümü</option>
@@ -82,7 +76,7 @@
                                 <option value="hard" {{ request('level') === 'hard' ? 'selected' : '' }}>Zor</option>
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-3 col-lg-2">
                             <label class="form-label small text-muted">Durum</label>
                             <select name="admin_status" class="form-select">
                                 <option value="">Tümü</option>
@@ -91,7 +85,7 @@
                                 <option value="maintenance" {{ request('admin_status') === 'maintenance' ? 'selected' : '' }}>Bakım</option>
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-3 col-lg-2">
                             <label class="form-label small text-muted">Gözlenen zorluk</label>
                             <select name="observed_difficulty" class="form-select">
                                 <option value="">Tümü</option>
@@ -101,16 +95,16 @@
                                 <option value="insufficient" {{ request('observed_difficulty') === 'insufficient' ? 'selected' : '' }}>Veri yetersiz</option>
                             </select>
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-4 col-md-2 col-lg-1">
                             <label class="form-label small text-muted">Başarı ≥</label>
                             <input type="number" step="0.1" min="0" max="100" name="success_min" class="form-control" value="{{ request('success_min') }}" placeholder="%">
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-4 col-md-2 col-lg-1">
                             <label class="form-label small text-muted">Başarı ≤</label>
                             <input type="number" step="0.1" min="0" max="100" name="success_max" class="form-control" value="{{ request('success_max') }}" placeholder="%">
                         </div>
-                        <div class="col-md-1">
-                            <button type="submit" class="btn btn-primary w-100">Filtrele</button>
+                        <div class="col-4 col-md-2 col-lg-auto">
+                            <button type="submit" class="btn btn-primary text-nowrap px-3">Filtrele</button>
                         </div>
                     </form>
 
@@ -239,7 +233,7 @@
                         </table>
                     </div>
 
-                    {{ $questions->links() }}
+                    {{ $questions->links('pagination::bootstrap-4') }}
                 </div>
             </div>
         </div>

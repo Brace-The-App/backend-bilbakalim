@@ -39,12 +39,7 @@ class VerificationCodeService
             // Check rate limit
             $rateLimitCheck = $this->canRequestNewCode($email, 'email');
             if (!$rateLimitCheck['can_request']) {
-                return [
-                    'success' => false,
-                    'message' => $rateLimitCheck['message'],
-                    'code' => 429,
-                    'remaining_seconds' => $rateLimitCheck['remaining_seconds']
-                ];
+                return $this->normalizeRateLimitPayload($rateLimitCheck);
             }
 
             // Generate verification code
@@ -113,12 +108,7 @@ class VerificationCodeService
             // Check rate limit
             $rateLimitCheck = $this->canRequestNewCode($phone, 'phone');
             if (!$rateLimitCheck['can_request']) {
-                return [
-                    'success' => false,
-                    'message' => $rateLimitCheck['message'],
-                    'code' => 429,
-                    'remaining_seconds' => $rateLimitCheck['remaining_seconds']
-                ];
+                return $this->normalizeRateLimitPayload($rateLimitCheck);
             }
 
             // Generate verification code
@@ -177,7 +167,14 @@ class VerificationCodeService
     public function verifyCode(string $identifier, string $code, string $type = 'email', string $purpose = 'registration'): array
     {
         try {
+            // Telefon format farkı için hem ham hem normalize dene
             $verificationResult = $this->verifyCodeFromTrait($identifier, $code, $type);
+            if (!$verificationResult['success'] && $type === 'phone') {
+                $normalizedPhone = $this->normalizePhoneDigits($identifier);
+                if ($normalizedPhone !== $identifier) {
+                    $verificationResult = $this->verifyCodeFromTrait($normalizedPhone, $code, $type);
+                }
+            }
 
             if (!$verificationResult['success']) {
                 return [
@@ -188,9 +185,37 @@ class VerificationCodeService
                 ];
             }
 
-            // Store verification success for specific purpose
             $verificationKey = "verified_{$type}_{$purpose}_{$identifier}";
-            Cache::put($verificationKey, true, now()->addMinutes(15)); // 15 minutes validity
+            Cache::put($verificationKey, true, now()->addMinutes(15));
+
+            $verificationToken = $this->generateSecureToken();
+            $tokenSaved = false;
+            $userId = null;
+
+            $user = $type === 'email'
+                ? User::where('email', strtolower(trim($identifier)))->first()
+                : $this->findUserByPhoneFlexible($identifier);
+
+            if ($user) {
+                $userId = (int) $user->id;
+            }
+
+            // Token her zaman identifier ile kaydedilir (registration dahil)
+            // Böylece verify → password-reset/reset akışı çalışır
+            app(PasswordResetService::class)->persistResetToken(
+                $verificationToken,
+                $userId,
+                $type,
+                $identifier
+            );
+            $tokenSaved = true;
+
+            Log::info('Verification token persisted', [
+                'user_id' => $userId,
+                'purpose' => $purpose,
+                'type' => $type,
+                'identifier' => $identifier,
+            ]);
 
             Log::info("Verification successful for {$type}: {$identifier} purpose: {$purpose}");
 
@@ -198,15 +223,21 @@ class VerificationCodeService
                 'success' => true,
                 'message' => 'Doğrulama başarılı.',
                 'code' => 200,
-                'verification_token' => $this->generateSecureToken()
+                'verification_token' => $verificationToken,
+                'reset_token' => $verificationToken,
+                'token_saved' => $tokenSaved,
+                'user_id' => $userId,
+                'purpose_received' => $purpose,
             ];
 
         } catch (\Exception $e) {
-            Log::error("Code verification failed: " . $e->getMessage());
+            Log::error("Code verification failed: " . $e->getMessage(), [
+                'exception' => $e,
+            ]);
 
             return [
                 'success' => false,
-                'message' => 'Doğrulama sırasında bir hata oluştu.',
+                'message' => 'Doğrulama sırasında bir hata oluştu: ' . $e->getMessage(),
                 'code' => 500
             ];
         }
@@ -224,6 +255,34 @@ class VerificationCodeService
     {
         $verificationKey = "verified_{$type}_{$purpose}_{$identifier}";
         return Cache::has($verificationKey);
+    }
+
+    private function findUserByPhoneFlexible(string $phone): ?User
+    {
+        $digits = $this->normalizePhoneDigits($phone);
+
+        $variants = array_values(array_unique(array_filter([
+            $phone,
+            $digits,
+            '+' . $digits,
+            strlen($digits) >= 12 ? '0' . substr($digits, 2) : null,
+            strlen($digits) >= 12 ? substr($digits, 2) : null,
+        ])));
+
+        return User::whereIn('phone', $variants)->first();
+    }
+
+    private function normalizePhoneDigits(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        if (str_starts_with($digits, '0') && strlen($digits) === 11) {
+            $digits = '90' . substr($digits, 1);
+        }
+        if (strlen($digits) === 10 && str_starts_with($digits, '5')) {
+            $digits = '90' . $digits;
+        }
+
+        return $digits;
     }
 
     /**

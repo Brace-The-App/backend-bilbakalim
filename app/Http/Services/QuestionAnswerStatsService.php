@@ -8,41 +8,76 @@ use App\Models\Question;
 use App\Models\QuestionAnswerStat;
 use App\Models\TournamentUser;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class QuestionAnswerStatsService
 {
     public function refreshAll(): int
     {
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+
         $bucket = [];
 
-        $this->mergeGroupedAnswers(
-            GameAnswer::query()
-                ->select('question_id', 'selected_option', 'is_correct', DB::raw('COUNT(*) as cnt'))
-                ->groupBy('question_id', 'selected_option', 'is_correct')
-                ->get(),
-            'selected_option',
-            $bucket
-        );
+        try {
+            $this->mergeGroupedAnswers(
+                GameAnswer::query()
+                    ->select('question_id', 'selected_option', 'is_correct', DB::raw('COUNT(*) as cnt'))
+                    ->groupBy('question_id', 'selected_option', 'is_correct')
+                    ->get(),
+                'selected_option',
+                $bucket
+            );
 
-        $this->mergeGroupedAnswers(
-            DuelAnswer::query()
-                ->select('question_id', 'selected_answer', 'is_correct', DB::raw('COUNT(*) as cnt'))
-                ->groupBy('question_id', 'selected_answer', 'is_correct')
-                ->get(),
-            'selected_answer',
-            $bucket
-        );
+            $this->mergeGroupedAnswers(
+                DuelAnswer::query()
+                    ->select('question_id', 'selected_answer', 'is_correct', DB::raw('COUNT(*) as cnt'))
+                    ->groupBy('question_id', 'selected_answer', 'is_correct')
+                    ->get(),
+                'selected_answer',
+                $bucket
+            );
 
-        $this->mergeTournamentAnswersAll($bucket);
+            $this->mergeTournamentAnswersAll($bucket);
+        } catch (\Throwable $e) {
+            Log::error('Question answer stats aggregation failed: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+            throw $e;
+        }
 
-        $questionIds = Question::query()->pluck('id');
-        $now = now();
+        $now = now()->toDateTimeString();
+        $minAnswers = (int) config('app.question_stats_min_answers', 20);
+        $easyMin = (float) config('app.question_stats_easy_min_percent', 70);
+        $mediumMin = (float) config('app.question_stats_medium_min_percent', 40);
+
         $updated = 0;
+        $rows = [];
 
-        foreach ($questionIds as $questionId) {
-            $totals = $bucket[$questionId] ?? $this->emptyTotals();
-            $this->persistStats((int) $questionId, $totals, $now);
-            $updated++;
+        Question::query()->orderBy('id')->chunkById(500, function ($questions) use (
+            &$bucket,
+            &$rows,
+            &$updated,
+            $now,
+            $minAnswers,
+            $easyMin,
+            $mediumMin
+        ) {
+            foreach ($questions as $question) {
+                $totals = $bucket[$question->id] ?? $this->emptyTotals();
+                $rows[] = $this->buildUpsertRow((int) $question->id, $totals, $now, $minAnswers, $easyMin, $mediumMin);
+                $updated++;
+                unset($bucket[$question->id]);
+            }
+
+            if (count($rows) >= 500) {
+                $this->upsertChunk($rows);
+                $rows = [];
+            }
+        });
+
+        if (!empty($rows)) {
+            $this->upsertChunk($rows);
         }
 
         return $updated;
@@ -72,12 +107,14 @@ class QuestionAnswerStatsService
         ];
     }
 
-    private function persistStats(int $questionId, array $totals, $calculatedAt): QuestionAnswerStat
-    {
-        $minAnswers = (int) config('app.question_stats_min_answers', 20);
-        $easyMin = (float) config('app.question_stats_easy_min_percent', 70);
-        $mediumMin = (float) config('app.question_stats_medium_min_percent', 40);
-
+    private function buildUpsertRow(
+        int $questionId,
+        array $totals,
+        string $calculatedAt,
+        int $minAnswers,
+        float $easyMin,
+        float $mediumMin
+    ): array {
         $percentage = $totals['total'] > 0
             ? round(($totals['correct'] / $totals['total']) * 100, 2)
             : 0.0;
@@ -94,22 +131,64 @@ class QuestionAnswerStatsService
             $observed = 'hard';
         }
 
-        return QuestionAnswerStat::updateOrCreate(
-            ['question_id' => $questionId],
+        return [
+            'question_id' => $questionId,
+            'total_answers' => $totals['total'],
+            'correct_count' => $totals['correct'],
+            'wrong_count' => $totals['wrong'],
+            'option_1_count' => $totals['1'],
+            'option_2_count' => $totals['2'],
+            'option_3_count' => $totals['3'],
+            'option_4_count' => $totals['4'],
+            'correct_percentage' => $percentage,
+            'observed_difficulty' => $observed,
+            'data_sufficient' => $dataSufficient ? 1 : 0,
+            'last_calculated_at' => $calculatedAt,
+            'created_at' => $calculatedAt,
+            'updated_at' => $calculatedAt,
+        ];
+    }
+
+    private function upsertChunk(array $rows): void
+    {
+        QuestionAnswerStat::upsert(
+            $rows,
+            ['question_id'],
             [
-                'total_answers' => $totals['total'],
-                'correct_count' => $totals['correct'],
-                'wrong_count' => $totals['wrong'],
-                'option_1_count' => $totals['1'],
-                'option_2_count' => $totals['2'],
-                'option_3_count' => $totals['3'],
-                'option_4_count' => $totals['4'],
-                'correct_percentage' => $percentage,
-                'observed_difficulty' => $observed,
-                'data_sufficient' => $dataSufficient,
-                'last_calculated_at' => $calculatedAt,
+                'total_answers',
+                'correct_count',
+                'wrong_count',
+                'option_1_count',
+                'option_2_count',
+                'option_3_count',
+                'option_4_count',
+                'correct_percentage',
+                'observed_difficulty',
+                'data_sufficient',
+                'last_calculated_at',
+                'updated_at',
             ]
         );
+    }
+
+    private function persistStats(int $questionId, array $totals, $calculatedAt): QuestionAnswerStat
+    {
+        $minAnswers = (int) config('app.question_stats_min_answers', 20);
+        $easyMin = (float) config('app.question_stats_easy_min_percent', 70);
+        $mediumMin = (float) config('app.question_stats_medium_min_percent', 40);
+
+        $row = $this->buildUpsertRow(
+            $questionId,
+            $totals,
+            $calculatedAt instanceof \DateTimeInterface ? $calculatedAt->format('Y-m-d H:i:s') : (string) $calculatedAt,
+            $minAnswers,
+            $easyMin,
+            $mediumMin
+        );
+
+        $this->upsertChunk([$row]);
+
+        return QuestionAnswerStat::where('question_id', $questionId)->firstOrFail();
     }
 
     private function mergeGroupedAnswers($rows, string $optionField, array &$bucket): void
@@ -141,7 +220,7 @@ class QuestionAnswerStatsService
         TournamentUser::query()
             ->whereNotNull('answers_detail')
             ->orderBy('id')
-            ->chunkById(200, function ($rows) use (&$bucket) {
+            ->chunkById(100, function ($rows) use (&$bucket) {
                 foreach ($rows as $row) {
                     $details = $row->answers_detail;
                     if (!is_array($details)) {
@@ -228,7 +307,7 @@ class QuestionAnswerStatsService
         TournamentUser::query()
             ->whereNotNull('answers_detail')
             ->orderBy('id')
-            ->chunkById(200, function ($rows) use ($questionId, &$totals) {
+            ->chunkById(100, function ($rows) use ($questionId, &$totals) {
                 foreach ($rows as $row) {
                     $details = $row->answers_detail;
                     if (!is_array($details)) {

@@ -75,6 +75,8 @@ services:
         environment:
             NODE_ENV: production
             PORT: 3001
+            LARAVEL_API_URL: '${APP_URL:-http://laravel.test}'
+            SOCKET_INTERNAL_SECRET: '${SOCKET_INTERNAL_SECRET:-bilbakalim-socket-secret}'
         volumes:
             - './socket-server:/app'
             - /app/node_modules   # <--- node_modules host'a yazılmasın

@@ -72,6 +72,12 @@ class VerificationController extends Controller
             );
         }
 
+        if (array_key_exists('remaining_seconds', $result)) {
+            $result['remaining_seconds'] = (int) round((float) $result['remaining_seconds']);
+            $result['remaining_formatted'] = $result['remaining_formatted']
+                ?? sprintf('%02d:%02d', intdiv($result['remaining_seconds'], 60), $result['remaining_seconds'] % 60);
+        }
+
         return response()->json($result, $result['code']);
     }
 
@@ -178,6 +184,12 @@ class VerificationController extends Controller
             $data['type'],
             $data['purpose']
         );
+
+        if (array_key_exists('remaining_seconds', $result)) {
+            $result['remaining_seconds'] = (int) round((float) $result['remaining_seconds']);
+            $result['remaining_formatted'] = $result['remaining_formatted']
+                ?? sprintf('%02d:%02d', intdiv($result['remaining_seconds'], 60), $result['remaining_seconds'] % 60);
+        }
 
         return response()->json($result, $result['code']);
     }

@@ -30,6 +30,9 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
 });
 
+// Socket sunucusundan düello eşleşme (internal)
+Route::post('duel/socket-match', [DuelController::class, 'socketMatch']);
+
 // TODO: AI dışarıdan soru girişini geçici olarak kapattık.
 // Yeniden açmak için bu satırları yorumdan kaldırın.
 // Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-questions'])->group(function () {
