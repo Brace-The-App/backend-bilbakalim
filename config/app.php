@@ -52,7 +52,7 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'http://localhost'),
+    'url' => env('APP_URL', 'https://bilbakalim.online'),
 
     /*
     |--------------------------------------------------------------------------
@@ -91,7 +91,8 @@ return [
     'quiz_normal_time_limit' => env('QUIZ_NORMAL_TIME_LIMIT', 600),
     'quiz_premium_question_count' => env('QUIZ_PREMIUM_QUESTION_COUNT', 15),
     'quiz_premium_time_limit' => env('QUIZ_PREMIUM_TIME_LIMIT', 1800),
-    'quiz_answer_time_limit' => env('QUIZ_ANSWER_TIME_LIMIT', 20), // Soru başına cevap süresi (saniye)
+   // 'quiz_answer_time_limit' => env('QUIZ_ANSWER_TIME_LIMIT', 20),
+    'quiz_answer_time_limit' => (int) env('QUIZ_ANSWER_TIME_LIMIT', 20),
     'tournament_min_participants' => env('TOURNAMENT_MIN_PARTICIPANTS', 2),
     'tournament_max_participants' => env('TOURNAMENT_MAX_PARTICIPANTS', 100),
     'quiz_dev_mode' => env('QUIZ_DEV_MODE', false),
@@ -240,7 +241,7 @@ return [
     | Quiz System Configuration
     |--------------------------------------------------------------------------
     */
-    
+
     // Coin değerleri
     'coin_values' => [
         'easy' => [
@@ -276,7 +277,7 @@ return [
     'reward_perfect_score_fifty_fifty' => 10,
     'reward_perfect_score_double_answer' => 10,
     'reward_perfect_score_hint' => 10,
-    
+
     'reward_high_accuracy_coins' => 2000,
     'reward_high_accuracy_fifty_fifty' => 3,
     'reward_high_accuracy_double_answer' => 3,
@@ -287,8 +288,10 @@ return [
     'gift_claim_min_games' => env('GIFT_CLAIM_MIN_GAMES', 3),
 
     // Soru cevap istatistikleri
-    'question_stats_min_answers' => env('QUESTION_STATS_MIN_ANSWERS', 20),
+    'question_stats_min_answers' => env('QUESTION_STATS_MIN_ANSWERS', 1),
     'question_stats_easy_min_percent' => env('QUESTION_STATS_EASY_MIN_PERCENT', 70),
     'question_stats_medium_min_percent' => env('QUESTION_STATS_MEDIUM_MIN_PERCENT', 40),
 
+    // Socket sunucusundan gelen internal istekler
+    'socket_internal_secret' => env('SOCKET_INTERNAL_SECRET', 'bilbakalim-socket-secret'),
 ];

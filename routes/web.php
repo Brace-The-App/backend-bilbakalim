@@ -64,6 +64,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('question-answer-stats/refresh', [QuestionAnswerStatsController::class, 'refresh'])->name('question-answer-stats.refresh');
     Route::patch('question-answer-stats/{question}/level', [QuestionAnswerStatsController::class, 'updateLevel'])->name('question-answer-stats.update-level');
     Route::patch('question-answer-stats/{question}/status', [QuestionAnswerStatsController::class, 'updateStatus'])->name('question-answer-stats.update-status');
+    Route::get('question-answer-stats/{question}/detail', [QuestionAnswerStatsController::class, 'showDetail'])->name('question-answer-stats.detail');
     Route::get('question-answer-stats/{question}/logs', [QuestionAnswerStatsController::class, 'showLogs'])->name('question-answer-stats.logs');
 
     // Tournaments management
