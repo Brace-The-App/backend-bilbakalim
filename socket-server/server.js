@@ -270,7 +270,7 @@ async function tryMatchDuelQueueLocked(multiplier) {
             emitToUser(first.userId, 'duel-match-error', errorPayload);
             emitToUser(second.userId, 'duel-match-error', errorPayload);
 
-            // Başarısız: yeniden kuyruğa alma (sonsuz loop riski). Mobil tekrar duel-ready göndersin.
+            // Yeniden kuyruğa alma — kalıcı hatalarda sonsuz loop olur; mobil tekrar duel-ready göndersin.
         }
     }
 }
@@ -1484,22 +1484,39 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
-        const { duel_id, winner_id, challenger_id, opponent_id } = req.body;
+        const body = req.body || {};
+        const duelId = parseInt(body.duel_id ?? body.duelId, 10);
+        const challengerId = body.challenger_id ?? body.challengerId;
+        const opponentId = body.opponent_id ?? body.opponentId;
 
-        if (!duel_id) {
+        if (!duelId) {
             return res.status(400).json({ success: false, message: 'duel_id gerekli' });
         }
 
-        const roomName = `duel_${duel_id}`;
+        const roomName = `duel_${duelId}`;
         const data = {
-            duel_id: parseInt(duel_id),
-            winner_id: winner_id ? parseInt(winner_id) : null,
-            timestamp: new Date().toISOString()
+            ...body,
+            duel_id: duelId,
+            duelId,
+            winner_id: body.winner_id ?? body.winnerId ?? null,
+            winnerId: body.winner_id ?? body.winnerId ?? null,
+            challenger_id: challengerId ? parseInt(challengerId, 10) : null,
+            challengerId: challengerId ? parseInt(challengerId, 10) : null,
+            opponent_id: opponentId ? parseInt(opponentId, 10) : null,
+            opponentId: opponentId ? parseInt(opponentId, 10) : null,
+            timestamp: body.timestamp || new Date().toISOString(),
         };
 
         io.to(roomName).emit('duel-finished', data);
-        if (challenger_id) io.to(`user_${challenger_id}`).emit('duel-finished', data);
-        if (opponent_id) io.to(`user_${opponent_id}`).emit('duel-finished', data);
+        io.to(roomName).emit('duel_finished', data);
+        if (data.challenger_id) {
+            io.to(`user_${data.challenger_id}`).emit('duel-finished', data);
+            io.to(`user_${data.challenger_id}`).emit('duel_finished', data);
+        }
+        if (data.opponent_id) {
+            io.to(`user_${data.opponent_id}`).emit('duel-finished', data);
+            io.to(`user_${data.opponent_id}`).emit('duel_finished', data);
+        }
 
         console.log('✅ duel-finished event gönderildi');
         res.json({ success: true });

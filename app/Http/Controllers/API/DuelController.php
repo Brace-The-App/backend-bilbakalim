@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\RevealsCorrectAnswerWhenWrong;
+use App\Http\Services\DuelQuestionForeignKeyFixer;
 use App\Models\Duel;
 use App\Models\DuelAnswer;
 use App\Models\Question;
@@ -380,6 +381,46 @@ class DuelController extends Controller
             'multiplier' => 'required|in:x1,x2,x4,x8',
         ]);
 
+        // questions_old FK kalıntısını otomatik düzelt (sıra bağımsız eşleşme için kritik)
+        app(DuelQuestionForeignKeyFixer::class)->ensure();
+
+        try {
+            return $this->createSocketMatchedDuel($validated);
+        } catch (\Throwable $e) {
+            if ($this->isQuestionForeignKeyError($e)) {
+                $fixer = app(DuelQuestionForeignKeyFixer::class);
+                $fixer->forceClearCache();
+                $fixer->ensure();
+
+                try {
+                    return $this->createSocketMatchedDuel($validated);
+                } catch (\Throwable $retryError) {
+                    Log::error('Socket duel match retry error', [
+                        'error' => $retryError->getMessage(),
+                        'challenger_id' => $validated['challenger_id'] ?? null,
+                        'opponent_id' => $validated['opponent_id'] ?? null,
+                    ]);
+                }
+            }
+
+            Log::error('Socket duel match error', [
+                'error' => $e->getMessage(),
+                'challenger_id' => $validated['challenger_id'] ?? null,
+                'opponent_id' => $validated['opponent_id'] ?? null,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Eşleşme oluşturulamadı.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Socket kuyruğundan gelen iki kullanıcı için tek active düello oluştur.
+     */
+    private function createSocketMatchedDuel(array $validated): JsonResponse
+    {
         $challenger = User::query()->find($validated['challenger_id']);
         $opponent = User::query()->find($validated['opponent_id']);
 
@@ -399,35 +440,34 @@ class DuelController extends Controller
 
         DB::beginTransaction();
         try {
-            // Eski açık waiting kayıtlarını temizle (çift create kalıntısı)
-            Duel::where('status', 'waiting')
-                ->whereNull('opponent_id')
+            // Her iki kullanıcının açık/yarım kalmış düellolarını kapat (sıra bağımsız rematch)
+            Duel::whereIn('status', ['waiting', 'active'])
                 ->where(function ($q) use ($challenger, $opponent) {
                     $q->where('challenger_id', $challenger->id)
-                        ->orWhere('challenger_id', $opponent->id);
+                        ->orWhere('opponent_id', $challenger->id)
+                        ->orWhere('challenger_id', $opponent->id)
+                        ->orWhere('opponent_id', $opponent->id);
                 })
-                ->update([
-                    'status' => 'finished',
-                    'finished_at' => now(),
-                ]);
+                ->lockForUpdate()
+                ->get()
+                ->each(function (Duel $old) {
+                    $old->update([
+                        'status' => 'finished',
+                        'finished_at' => now(),
+                    ]);
+                });
 
-            foreach ([$challenger->id, $opponent->id] as $uid) {
-                // Temizleme sonrası hâlâ waiting/active varsa engelle
-                $busy = Duel::where(function ($q) use ($uid) {
-                    $q->where('challenger_id', $uid)->orWhere('opponent_id', $uid);
-                })
-                    ->whereIn('status', ['waiting', 'active'])
-                    ->lockForUpdate()
-                    ->exists();
+            $firstQuestion = Question::query()
+                ->where('is_active', true)
+                ->inRandomOrder()
+                ->first();
 
-                if ($busy) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Oyuncunun aktif düellosu var.',
-                        'user_id' => $uid,
-                    ], 400);
-                }
+            if (!$firstQuestion) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aktif soru bulunamadı.',
+                ], 400);
             }
 
             $duel = Duel::create([
@@ -438,21 +478,14 @@ class DuelController extends Controller
                 'started_at' => now(),
                 'challenger_coins_before' => (int) $challenger->coins,
                 'opponent_coins_before' => (int) $opponent->coins,
+                'current_question_id' => $firstQuestion->id,
+                'current_question_number' => 1,
             ]);
-
-            $firstQuestion = $this->getNextQuestion($duel);
-            if ($firstQuestion) {
-                $duel->update([
-                    'current_question_id' => $firstQuestion->id,
-                    'current_question_number' => 1,
-                ]);
-            }
 
             $duel->load(['challenger', 'opponent', 'currentQuestion']);
 
             DB::commit();
 
-            // Oyun socket odası için started da gönder (mevcut oyun akışı)
             $this->sendDuelStartedWebhook($duel, $firstQuestion);
 
             return response()->json([
@@ -466,7 +499,7 @@ class DuelController extends Controller
                     'status' => 'matched',
                     'db_status' => $duel->status,
                 ],
-                'question' => $firstQuestion ? $this->formatQuestionMultilingual($firstQuestion) : null,
+                'question' => $this->formatQuestionMultilingual($firstQuestion),
                 'challenger' => [
                     'id' => $duel->challenger->id,
                     'name' => $duel->challenger->name,
@@ -480,17 +513,18 @@ class DuelController extends Controller
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error('Socket duel match error', [
-                'error' => $e->getMessage(),
-                'challenger_id' => $validated['challenger_id'] ?? null,
-                'opponent_id' => $validated['opponent_id'] ?? null,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Eşleşme oluşturulamadı.',
-            ], 500);
+            throw $e;
         }
+    }
+
+    private function isQuestionForeignKeyError(\Throwable $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, '1452')
+            || str_contains($message, 'questions_old')
+            || str_contains($message, 'duels_current_question_id_foreign')
+            || str_contains($message, 'Integrity constraint violation');
     }
 
     /**
@@ -1122,6 +1156,8 @@ class DuelController extends Controller
             'selected_answer' => 'required|in:0,1,2,3,4',
         ]);
 
+        app(DuelQuestionForeignKeyFixer::class)->ensure();
+
         $user = Auth::user();
         $duel = Duel::with('currentQuestion')->findOrFail($duel_id);
 
@@ -1341,8 +1377,8 @@ class DuelController extends Controller
      */
     private function moveToNextQuestion(Duel $duel): void
     {
-        $challenger = User::findOrFail($duel->challenger_id);
-        $opponent = User::findOrFail($duel->opponent_id);
+        $challenger = User::query()->findOrFail($duel->challenger_id);
+        $opponent = User::query()->findOrFail($duel->opponent_id);
 
         if ((int) $challenger->coins <= 0 || (int) $opponent->coins <= 0) {
             $winnerId = (int) $challenger->coins > 0 ? $duel->challenger_id : $duel->opponent_id;
@@ -1355,11 +1391,26 @@ class DuelController extends Controller
             $settings = $duel->settings ?? [];
             unset($settings['current_question_multiplier'], $settings['current_bet']);
 
-            $duel->update([
-                'current_question_id' => $nextQuestion->id,
-                'current_question_number' => $duel->current_question_number + 1,
-                'settings' => $settings,
-            ]);
+            try {
+                $duel->update([
+                    'current_question_id' => $nextQuestion->id,
+                    'current_question_number' => $duel->current_question_number + 1,
+                    'settings' => $settings,
+                ]);
+            } catch (\Throwable $e) {
+                if ($this->isQuestionForeignKeyError($e)) {
+                    $fixer = app(DuelQuestionForeignKeyFixer::class);
+                    $fixer->forceClearCache();
+                    $fixer->ensure();
+                    $duel->update([
+                        'current_question_id' => $nextQuestion->id,
+                        'current_question_number' => $duel->current_question_number + 1,
+                        'settings' => $settings,
+                    ]);
+                } else {
+                    throw $e;
+                }
+            }
 
             $this->sendDuelNextQuestionWebhook($duel, $nextQuestion);
         } else {
@@ -1572,17 +1623,115 @@ class DuelController extends Controller
     private function sendDuelFinishedWebhook(Duel $duel): void
     {
         try {
+            $duel->refresh()->load(['challenger', 'opponent', 'answers']);
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
-            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-finished", [
-                'duel_id' => $duel->id,
-                'winner_id' => $duel->winner_id,
-                'challenger_id' => $duel->challenger_id,
-                'opponent_id' => $duel->opponent_id,
-                'timestamp' => now()->toISOString()
-            ]);
+            Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-finished", array_merge(
+                $this->buildDuelFinishedPayload($duel),
+                ['timestamp' => now()->toISOString()]
+            ));
         } catch (\Exception $e) {
             Log::error('Failed to send duel finished webhook', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Düello bitiş popup'ı için özet istatistikler (duel_answers + duels).
+     */
+    private function buildDuelFinishedPayload(Duel $duel): array
+    {
+        $answers = $duel->answers;
+
+        $challengerStats = $this->buildDuelPlayerStats(
+            $duel->challenger_id,
+            $answers,
+            (int) $duel->challenger_coins_before,
+            (int) $duel->challenger_coins_after
+        );
+
+        $opponentStats = $duel->opponent_id
+            ? $this->buildDuelPlayerStats(
+                $duel->opponent_id,
+                $answers,
+                (int) $duel->opponent_coins_before,
+                (int) $duel->opponent_coins_after
+            )
+            : null;
+
+        $players = [$challengerStats];
+        if ($opponentStats) {
+            $players[] = $opponentStats;
+        }
+
+        return [
+            'duel_id' => $duel->id,
+            'duelId' => $duel->id,
+            'winner_id' => $duel->winner_id,
+            'winnerId' => $duel->winner_id,
+            'challenger_id' => $duel->challenger_id,
+            'challengerId' => $duel->challenger_id,
+            'opponent_id' => $duel->opponent_id,
+            'opponentId' => $duel->opponent_id,
+            'multiplier' => $duel->multiplier,
+            'total_questions' => (int) $duel->current_question_number,
+            'totalQuestions' => (int) $duel->current_question_number,
+            'challenger' => array_merge(
+                $this->formatDuelPlayerIdentity($duel->challenger),
+                $challengerStats
+            ),
+            'opponent' => $duel->opponent
+                ? array_merge(
+                    $this->formatDuelPlayerIdentity($duel->opponent),
+                    $opponentStats
+                )
+                : null,
+            'players' => collect($players)->keyBy('userId')->all(),
+        ];
+    }
+
+    private function formatDuelPlayerIdentity(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'avatar' => $user->avatar,
+        ];
+    }
+
+    private function buildDuelPlayerStats(
+        int $userId,
+        $answers,
+        int $coinsBefore,
+        int $coinsAfter
+    ): array {
+        $userAnswers = $answers->where('user_id', $userId);
+        $totalAnswered = $userAnswers->count();
+        $correctCount = $userAnswers->where('is_correct', true)->count();
+        $wrongCount = $totalAnswered - $correctCount;
+
+        $coinsGained = (int) $userAnswers->where('coins_change', '>', 0)->sum('coins_change');
+        $coinsLost = (int) abs($userAnswers->where('coins_change', '<', 0)->sum('coins_change'));
+        $netCoinsChange = (int) $userAnswers->sum('coins_change');
+
+        return [
+            'userId' => $userId,
+            'user_id' => $userId,
+            'total_answered' => $totalAnswered,
+            'totalAnswered' => $totalAnswered,
+            'correct_count' => $correctCount,
+            'correctCount' => $correctCount,
+            'wrong_count' => $wrongCount,
+            'wrongCount' => $wrongCount,
+            'coins_gained' => $coinsGained,
+            'coinsGained' => $coinsGained,
+            'coins_lost' => $coinsLost,
+            'coinsLost' => $coinsLost,
+            'net_coins_change' => $netCoinsChange,
+            'netCoinsChange' => $netCoinsChange,
+            'coins_before' => $coinsBefore,
+            'coinsBefore' => $coinsBefore,
+            'coins_after' => $coinsAfter,
+            'coinsAfter' => $coinsAfter,
+        ];
     }
 
     /**
