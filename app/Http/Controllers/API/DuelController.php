@@ -382,15 +382,13 @@ class DuelController extends Controller
         ]);
 
         // questions_old FK kalıntısını otomatik düzelt (sıra bağımsız eşleşme için kritik)
-        app(DuelQuestionForeignKeyFixer::class)->ensure();
+        $this->ensureDuelQuestionForeignKeys();
 
         try {
             return $this->createSocketMatchedDuel($validated);
         } catch (\Throwable $e) {
             if ($this->isQuestionForeignKeyError($e)) {
-                $fixer = app(DuelQuestionForeignKeyFixer::class);
-                $fixer->forceClearCache();
-                $fixer->ensure();
+                $this->ensureDuelQuestionForeignKeys(force: true);
 
                 try {
                     return $this->createSocketMatchedDuel($validated);
@@ -525,6 +523,28 @@ class DuelController extends Controller
             || str_contains($message, 'questions_old')
             || str_contains($message, 'duels_current_question_id_foreign')
             || str_contains($message, 'Integrity constraint violation');
+    }
+
+    /**
+     * FK fixer opsiyonel: sınıf yoksa eşleşmeyi bozma.
+     */
+    private function ensureDuelQuestionForeignKeys(bool $force = false): void
+    {
+        if (!class_exists(DuelQuestionForeignKeyFixer::class)) {
+            Log::warning('DuelQuestionForeignKeyFixer missing; skipping FK ensure');
+            return;
+        }
+
+        try {
+            /** @var DuelQuestionForeignKeyFixer $fixer */
+            $fixer = app(DuelQuestionForeignKeyFixer::class);
+            if ($force) {
+                $fixer->forceClearCache();
+            }
+            $fixer->ensure();
+        } catch (\Throwable $e) {
+            Log::warning('DuelQuestionForeignKeyFixer failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -1156,7 +1176,7 @@ class DuelController extends Controller
             'selected_answer' => 'required|in:0,1,2,3,4',
         ]);
 
-        app(DuelQuestionForeignKeyFixer::class)->ensure();
+        $this->ensureDuelQuestionForeignKeys();
 
         $user = Auth::user();
         $duel = Duel::with('currentQuestion')->findOrFail($duel_id);
@@ -1399,9 +1419,7 @@ class DuelController extends Controller
                 ]);
             } catch (\Throwable $e) {
                 if ($this->isQuestionForeignKeyError($e)) {
-                    $fixer = app(DuelQuestionForeignKeyFixer::class);
-                    $fixer->forceClearCache();
-                    $fixer->ensure();
+                    $this->ensureDuelQuestionForeignKeys(force: true);
                     $duel->update([
                         'current_question_id' => $nextQuestion->id,
                         'current_question_number' => $duel->current_question_number + 1,
