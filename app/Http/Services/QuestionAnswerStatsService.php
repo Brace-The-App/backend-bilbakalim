@@ -47,7 +47,7 @@ class QuestionAnswerStatsService
         }
 
         $now = now()->toDateTimeString();
-        $minAnswers = (int) config('app.question_stats_min_answers', 20);
+        $minAnswers = (int) config('app.question_stats_min_answers', 1);
         $easyMin = (float) config('app.question_stats_easy_min_percent', 70);
         $mediumMin = (float) config('app.question_stats_medium_min_percent', 40);
 
@@ -173,7 +173,7 @@ class QuestionAnswerStatsService
 
     private function persistStats(int $questionId, array $totals, $calculatedAt): QuestionAnswerStat
     {
-        $minAnswers = (int) config('app.question_stats_min_answers', 20);
+        $minAnswers = (int) config('app.question_stats_min_answers', 1);
         $easyMin = (float) config('app.question_stats_easy_min_percent', 70);
         $mediumMin = (float) config('app.question_stats_medium_min_percent', 40);
 
