@@ -7,6 +7,7 @@ use App\Models\GameAnswer;
 use App\Models\Question;
 use App\Models\QuestionAnswerStat;
 use App\Models\TournamentUser;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -337,5 +338,209 @@ class QuestionAnswerStatsService
                     }
                 }
             });
+    }
+
+    /**
+     * Belirli bir şıkkı seçen kullanıcıları (oyun + düello + turnuva), en yeniden eskiye, sayfalı.
+     *
+     * @return array{data: array<int, array>, total: int, page: int, per_page: int, last_page: int}
+     */
+    public function optionAnswerers(int $questionId, string $option, int $page = 1, int $perPage = 10): array
+    {
+        $option = (string) $option;
+        if (!in_array($option, ['1', '2', '3', '4'], true)) {
+            return [
+                'data' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'last_page' => 1,
+            ];
+        }
+
+        $page = max(1, $page);
+        $perPage = max(1, min(50, $perPage));
+        $rows = [];
+
+        $gameRows = GameAnswer::query()
+            ->with([
+                'individualGame:id,game_type',
+                'gameSession:id,game_type,individual_game_id',
+            ])
+            ->where('question_id', $questionId)
+            ->where('selected_option', $option)
+            ->get(['user_id', 'is_correct', 'answered_at', 'created_at', 'individual_game_id', 'game_session_id']);
+
+        foreach ($gameRows as $row) {
+            $gameType = $row->individualGame->game_type
+                ?? $row->gameSession->game_type
+                ?? 'normal';
+
+            $rows[] = [
+                'user_id' => (int) $row->user_id,
+                'is_correct' => (bool) $row->is_correct,
+                'answered_at' => $row->answered_at?->toDateTimeString()
+                    ?? $row->created_at?->toDateTimeString(),
+                'source' => 'game',
+                'source_key' => (string) $gameType,
+                'source_label' => $this->sourceLabel('game', (string) $gameType),
+            ];
+        }
+
+        $duelRows = DuelAnswer::query()
+            ->where('question_id', $questionId)
+            ->where('selected_answer', $option)
+            ->get(['user_id', 'is_correct', 'answered_at', 'created_at']);
+
+        foreach ($duelRows as $row) {
+            $rows[] = [
+                'user_id' => (int) $row->user_id,
+                'is_correct' => (bool) $row->is_correct,
+                'answered_at' => $row->answered_at?->toDateTimeString()
+                    ?? $row->created_at?->toDateTimeString(),
+                'source' => 'duel',
+                'source_key' => 'duel',
+                'source_label' => $this->sourceLabel('duel'),
+            ];
+        }
+
+        TournamentUser::query()
+            ->with('tournament:id,title')
+            ->whereNotNull('answers_detail')
+            ->orderBy('id')
+            ->chunkById(200, function ($chunk) use ($questionId, $option, &$rows) {
+                foreach ($chunk as $tu) {
+                    $details = $tu->answers_detail;
+                    if (!is_array($details)) {
+                        continue;
+                    }
+
+                    foreach ($details as $key => $entry) {
+                        if ($key === 'jokers' || !is_array($entry)) {
+                            continue;
+                        }
+                        if (($entry['is_pending'] ?? false) === true) {
+                            continue;
+                        }
+                        if ((int) ($entry['question_id'] ?? 0) !== $questionId) {
+                            continue;
+                        }
+                        if ((string) ($entry['selected_option'] ?? '') !== $option) {
+                            continue;
+                        }
+
+                        $answeredAt = $entry['answered_at']
+                            ?? optional($tu->finished_at)->toDateTimeString()
+                            ?? optional($tu->updated_at)->toDateTimeString();
+
+                        if ($answeredAt instanceof \DateTimeInterface) {
+                            $answeredAt = $answeredAt->format('Y-m-d H:i:s');
+                        } elseif (is_string($answeredAt) && $answeredAt !== '') {
+                            try {
+                                $answeredAt = \Carbon\Carbon::parse($answeredAt)->toDateTimeString();
+                            } catch (\Throwable $e) {
+                                // keep raw
+                            }
+                        } else {
+                            $answeredAt = null;
+                        }
+
+                        $tournamentTitle = null;
+                        if ($tu->tournament) {
+                            $title = $tu->tournament->title;
+                            if (is_array($title)) {
+                                $tournamentTitle = $title['tr'] ?? $title['en'] ?? (reset($title) ?: null);
+                            } elseif (is_string($title) && $title !== '') {
+                                $tournamentTitle = $title;
+                            }
+                        }
+
+                        $rows[] = [
+                            'user_id' => (int) $tu->user_id,
+                            'is_correct' => !empty($entry['is_correct']),
+                            'answered_at' => $answeredAt,
+                            'source' => 'tournament',
+                            'source_key' => 'tournament',
+                            'source_label' => $tournamentTitle
+                                ? ('Turnuva · ' . $tournamentTitle)
+                                : $this->sourceLabel('tournament'),
+                        ];
+                    }
+                }
+            });
+
+        usort($rows, function ($a, $b) {
+            $ta = $a['answered_at'] ?? '';
+            $tb = $b['answered_at'] ?? '';
+            if ($ta === $tb) {
+                return ($b['user_id'] ?? 0) <=> ($a['user_id'] ?? 0);
+            }
+
+            return $tb <=> $ta;
+        });
+
+        $total = count($rows);
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        if ($page > $lastPage) {
+            $page = $lastPage;
+        }
+
+        $slice = array_slice($rows, ($page - 1) * $perPage, $perPage);
+        $userIds = array_values(array_unique(array_filter(array_column($slice, 'user_id'))));
+        $users = User::withTrashed()
+            ->whereIn('id', $userIds)
+            ->get(['id', 'name', 'email', 'deleted_at'])
+            ->keyBy('id');
+
+        $data = array_map(function (array $row) use ($users) {
+            $user = $users->get($row['user_id']);
+            $name = $user ? trim((string) ($user->name ?? '')) : null;
+
+            return [
+                'user_id' => $row['user_id'],
+                'name' => $name !== '' && $name !== null ? $name : ('Kullanıcı #' . $row['user_id']),
+                'email' => $user->email ?? null,
+                'is_deleted' => $user ? ($user->deleted_at !== null) : false,
+                'is_correct' => $row['is_correct'],
+                'answered_at' => $row['answered_at'],
+                'answered_at_label' => $row['answered_at']
+                    ? \Carbon\Carbon::parse($row['answered_at'])->format('d.m.Y H:i')
+                    : '-',
+                'source' => $row['source_key'] ?? $row['source'],
+                'source_label' => $row['source_label']
+                    ?? $this->sourceLabel($row['source'] ?? '', $row['source_key'] ?? null),
+            ];
+        }, $slice);
+
+        return [
+            'data' => $data,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'last_page' => $lastPage,
+        ];
+    }
+
+    private function sourceLabel(string $source, ?string $gameType = null): string
+    {
+        if ($source === 'duel') {
+            return 'Düello';
+        }
+
+        if ($source === 'tournament') {
+            return 'Turnuva';
+        }
+
+        $type = $gameType ?: 'normal';
+        $names = [
+            'normal' => 'Günlük Quiz',
+            'premium' => 'Premium Quiz',
+            'tournament' => 'Turnuva',
+            'daily_challenge' => 'Günlük Mücadele',
+            'individual' => 'Bireysel Oyun',
+            'practice' => 'Alıştırma',
+        ];
+
+        return $names[$type] ?? ('Oyun · ' . $type);
     }
 }

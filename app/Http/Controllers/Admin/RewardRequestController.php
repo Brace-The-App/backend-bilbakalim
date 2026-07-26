@@ -20,7 +20,7 @@ class RewardRequestController extends Controller
         $requests = RewardRequest::with(['user', 'approver'])
             ->orderBy('created_at', 'desc')
             ->paginate(20);
-        
+
         return view('admin.reward-requests.index', compact('requests'));
     }
 
@@ -63,6 +63,16 @@ class RewardRequestController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Ödül talebi reddedildi.'
+        ]);
+    }
+
+    public function destroy(RewardRequest $rewardRequest)
+    {
+        $rewardRequest->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Ödül talebi silindi.'
         ]);
     }
 }

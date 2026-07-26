@@ -34,8 +34,6 @@ class User extends Authenticatable
         'phone',
         'email',
         'password',
-        'password_reset_token',
-        'password_reset_expires_at',
         'status',
         'role',
         'profile_image',
@@ -68,7 +66,6 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
-        'password_reset_token',
     ];
 
     /**
@@ -79,7 +76,6 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'password_reset_expires_at' => 'datetime',
         'auto_question' => 'boolean',
         'game_sound' => 'boolean',
         'face_id' => 'boolean',

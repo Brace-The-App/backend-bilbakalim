@@ -65,6 +65,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::patch('question-answer-stats/{question}/level', [QuestionAnswerStatsController::class, 'updateLevel'])->name('question-answer-stats.update-level');
     Route::patch('question-answer-stats/{question}/status', [QuestionAnswerStatsController::class, 'updateStatus'])->name('question-answer-stats.update-status');
     Route::get('question-answer-stats/{question}/detail', [QuestionAnswerStatsController::class, 'showDetail'])->name('question-answer-stats.detail');
+    Route::get('question-answer-stats/{question}/options/{option}/answers', [QuestionAnswerStatsController::class, 'optionAnswers'])->name('question-answer-stats.option-answers');
     Route::get('question-answer-stats/{question}/logs', [QuestionAnswerStatsController::class, 'showLogs'])->name('question-answer-stats.logs');
 
     // Tournaments management
@@ -96,6 +97,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');
     Route::post('reward-requests/{rewardRequest}/approve', [\App\Http\Controllers\Admin\RewardRequestController::class, 'approve'])->name('reward-requests.approve');
     Route::post('reward-requests/{rewardRequest}/reject', [\App\Http\Controllers\Admin\RewardRequestController::class, 'reject'])->name('reward-requests.reject');
+    Route::delete('reward-requests/{rewardRequest}', [\App\Http\Controllers\Admin\RewardRequestController::class, 'destroy'])->name('reward-requests.destroy');
 
     // Landing - üst grup
     Route::prefix('landing')->name('landing.')->group(function () {

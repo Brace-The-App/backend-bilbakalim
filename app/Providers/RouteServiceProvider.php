@@ -17,7 +17,7 @@ class RouteServiceProvider extends ServiceProvider
      *
      * @var string
      */
-    public const HOME = '/home';
+    public const HOME = '/admin/dashboard';
 
     /**
      * Define your route model bindings, pattern filters, and other route configuration.
@@ -31,6 +31,7 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('ai-questions', function (Request $request) {
             $token = (string) $request->header('X-AI-TOKEN', '');
             $key = $token !== '' ? 'ai:' . sha1($token) : 'ai:' . $request->ip();
+
             return Limit::perMinute((int) env('AI_QUESTIONS_MAX_REQUESTS_PER_MINUTE', 1))->by($key);
         });
 

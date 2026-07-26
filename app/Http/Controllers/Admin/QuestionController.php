@@ -40,12 +40,16 @@ class QuestionController extends Controller
             $query->where('question_level', $request->level);
         }
 
-        // Filtering - Search (translatable field için JSON arama)
+        // Filtering - Search (ID veya soru metni)
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->whereRaw("JSON_EXTRACT(question, '$.tr') LIKE ?", ["%{$search}%"])
-                    ->orWhereRaw("JSON_EXTRACT(question, '$.en') LIKE ?", ["%{$search}%"]);
+            $search = trim((string) $request->search);
+            $query->where(function ($q) use ($search) {
+                if (ctype_digit($search)) {
+                    $q->where('id', (int) $search);
+                } else {
+                    $q->whereRaw("JSON_EXTRACT(question, '$.tr') LIKE ?", ["%{$search}%"])
+                        ->orWhereRaw("JSON_EXTRACT(question, '$.en') LIKE ?", ["%{$search}%"]);
+                }
             });
         }
 
@@ -220,7 +224,10 @@ class QuestionController extends Controller
 
     public function edit(Question $question)
     {
-        return redirect()->route('admin.questions.index');
+        return redirect()->route('admin.questions.index', [
+            'search' => $question->id,
+            'edit' => $question->id,
+        ]);
     }
 
     public function update(Request $request, Question $question)

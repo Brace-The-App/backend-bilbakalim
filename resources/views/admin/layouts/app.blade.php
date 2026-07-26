@@ -183,8 +183,10 @@
 <!-- Theme js-->
 <script src="{{ asset('assets/js/script.js') }}"></script>
 
-<!-- Socket.IO Client -->
-<script src="{{ asset('js/socket-client.js?v=' . time()) }}"></script>
+@if (file_exists(public_path('js/socket-client.js')))
+<!-- Socket.IO Client (yalnızca dosya varsa) -->
+<script src="{{ asset('js/socket-client.js') }}" defer></script>
+@endif
 
 <script>
     // CSRF token setup for AJAX

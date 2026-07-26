@@ -1094,6 +1094,31 @@
             // Initialize question show modal events on page load
             bindQuestionShowModalEvents();
 
+            // Stats / edit URL: ?edit=ID ile geldiyse düzenleme modalını aç
+            (function openEditFromQuery() {
+                var params = new URLSearchParams(window.location.search);
+                var editId = params.get('edit');
+                if (!editId) return;
+
+                var tryOpen = function () {
+                    var btn = document.querySelector('#questionEditModal')
+                        ? document.querySelector('[data-bs-target="#questionEditModal"][data-id="' + editId + '"]')
+                        : null;
+                    if (!btn) return false;
+                    btn.click();
+                    return true;
+                };
+
+                if (!tryOpen()) {
+                    // AJAX tablo yükleniyorsa kısa gecikmeyle tekrar dene
+                    setTimeout(function () {
+                        if (!tryOpen()) {
+                            toastr.warning('Soru #' + editId + ' listede bulunamadı. Arama ile deneyin.');
+                        }
+                    }, 800);
+                }
+            })();
+
             // Anlık soru güncellemeleri
             if (typeof window.socketClient !== 'undefined') {
                 // Socket bağlantısı kurulduğunda soru listesini yükle

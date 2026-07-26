@@ -4,6 +4,10 @@
 
 @push('css')
 <style>
+    .qas-page {
+        padding-top: 2rem;
+        padding-bottom: 1.5rem;
+    }
     .qas-page .qas-hero {
         background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 55%, #3d8ec9 100%);
         border-radius: 14px;
@@ -19,6 +23,30 @@
         color: #ffffff !important;
         opacity: 1;
         font-size: .9rem;
+    }
+    .qas-page .qas-hero .qas-refresh-btn {
+        background: transparent;
+        border: 1.5px solid rgba(255, 255, 255, 0.85);
+        color: #fff !important;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .4rem .9rem;
+        border-radius: 8px;
+        transition: background .15s ease, border-color .15s ease;
+    }
+    .qas-page .qas-hero .qas-refresh-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: #fff;
+        color: #fff !important;
+    }
+    .qas-page .qas-hero .qas-refresh-btn svg,
+    .qas-page .qas-hero .qas-refresh-btn i {
+        width: 15px;
+        height: 15px;
+        color: #fff !important;
+        stroke: #fff !important;
     }
     .qas-page .qas-stat-card {
         border: 0;
@@ -151,46 +179,98 @@
     .qas-page .qas-table-scroll.is-dragging select {
         pointer-events: none;
     }
+    .qas-page .qas-table {
+        width: 100%;
+        min-width: 1220px;
+        table-layout: fixed;
+        margin-bottom: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
     .qas-page .qas-table thead th {
-        font-size: .72rem;
+        font-size: .7rem !important;
         text-transform: uppercase;
-        letter-spacing: .03em;
-        color: #64748b;
-        font-weight: 600;
-        border-bottom-width: 1px;
+        letter-spacing: .02em;
+        color: #64748b !important;
+        font-weight: 600 !important;
+        border-bottom: 1px solid #e2e8f0;
         white-space: nowrap;
         background: #f8fafc;
+        padding: .7rem .55rem !important;
+        height: 44px;
+        vertical-align: middle;
+        line-height: 1.15;
     }
-    .qas-page .qas-table tbody td { vertical-align: middle; font-size: .9rem; }
+    .qas-page .qas-table thead th .sort-link {
+        font-size: .7rem !important;
+        font-weight: 600 !important;
+        color: #64748b !important;
+        text-decoration: none;
+    }
+    .qas-page .qas-table thead th .sort-link:hover {
+        color: #0284c7 !important;
+    }
+    .qas-page .qas-table tbody td {
+        vertical-align: middle !important;
+        font-size: .85rem;
+        padding: .55rem .55rem !important;
+        border-color: #f1f5f9;
+        overflow: hidden;
+    }
+    .qas-page .qas-table .badge {
+        font-size: .68rem !important;
+        font-weight: 600 !important;
+        padding: .25rem .42rem !important;
+        line-height: 1.15 !important;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
     .qas-page .qas-question-cell {
-        max-width: 280px;
+        max-width: 100%;
         color: #0f172a;
         font-weight: 500;
         line-height: 1.35;
     }
-    .qas-page .qas-option-bars { min-width: 140px; }
-    .qas-page .qas-opt-row {
-        display: flex; align-items: center; gap: .4rem;
-        font-size: .72rem; margin-bottom: 3px; color: #475569;
+    .qas-page .qas-q-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        word-break: break-word;
+        width: 100%;
+        cursor: pointer;
     }
-    .qas-page .qas-opt-label { width: 14px; font-weight: 600; }
+    .qas-page .qas-option-bars { min-width: 0; }
+    .qas-page .qas-opt-row {
+        display: flex; align-items: center; gap: .35rem;
+        font-size: .68rem; margin-bottom: 2px; color: #475569;
+    }
+    .qas-page .qas-opt-label { width: 12px; font-weight: 600; flex-shrink: 0; }
     .qas-page .qas-opt-track {
-        flex: 1; height: 6px; background: #e2e8f0; border-radius: 99px; overflow: hidden;
+        flex: 1; height: 5px; background: #e2e8f0; border-radius: 99px; overflow: hidden;
+        min-width: 0;
     }
     .qas-page .qas-opt-fill {
         height: 100%; border-radius: 99px; background: #94a3b8;
     }
     .qas-page .qas-opt-fill.is-correct { background: #16a34a; }
-    .qas-page .qas-opt-pct { width: 38px; text-align: right; color: #64748b; }
+    .qas-page .qas-opt-pct { width: 34px; text-align: right; color: #64748b; flex-shrink: 0; }
     .qas-page .qas-pct-pill {
         display: inline-flex; align-items: center; justify-content: center;
-        min-width: 58px; padding: .2rem .45rem; border-radius: 99px;
-        font-weight: 700; font-size: .8rem;
+        min-width: 52px; padding: .18rem .4rem; border-radius: 99px;
+        font-weight: 700; font-size: .75rem;
     }
     .qas-page .qas-pct-high { background: #dcfce7; color: #15803d; }
     .qas-page .qas-pct-mid { background: #fef3c7; color: #b45309; }
     .qas-page .qas-pct-low { background: #ffe4e6; color: #be123c; }
-    .qas-page .qas-mgmt select.form-select-sm { font-size: .75rem; min-width: 88px; width: 100%; }
+    .qas-page .qas-mgmt select.form-select-sm {
+        font-size: .72rem;
+        min-height: 30px;
+        height: 30px;
+        padding: .2rem .4rem;
+        width: 100%;
+        min-width: 0;
+    }
     .qas-page .qas-mgmt .qas-auto-select {
         margin-bottom: .35rem;
     }
@@ -202,9 +282,7 @@
         box-shadow: 0 0 0 1px #86efac;
     }
     .qas-page .qas-mgmt .qas-detail-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        display: inline-flex !important;
         gap: .35rem;
         width: 100%;
         margin-top: .15rem;
@@ -216,7 +294,13 @@
         font-size: .72rem;
         font-weight: 600;
         line-height: 1.2;
+        text-align: center;
         transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+    .qas-page .qas-mgmt .qas-detail-btn span {
+        display: inline-block;
+        text-align: center;
+        line-height: 1.2;
     }
     .qas-page .qas-mgmt .qas-detail-btn:hover {
         background: linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%);
@@ -234,34 +318,58 @@
         flex-shrink: 0;
     }
     .qas-page #qas-list {
-        scroll-margin-top: 80px;
+        scroll-margin-top: 100px;
     }
     .qas-page .sort-link { color: inherit; text-decoration: none; }
     .qas-page .sort-link:hover { color: #0284c7; }
     .qas-page .qas-conf-weak {
         background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;
         font-size: .68rem; font-weight: 600; padding: .15rem .4rem; border-radius: 99px;
+        display: inline-block;
+        white-space: nowrap;
     }
     .qas-page .qas-conf-medium {
         background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
         font-size: .68rem; font-weight: 600; padding: .15rem .4rem; border-radius: 99px;
+        display: inline-block;
+        white-space: nowrap;
     }
     .qas-page .qas-conf-reliable {
         background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;
         font-size: .68rem; font-weight: 600; padding: .15rem .4rem; border-radius: 99px;
+        display: inline-block;
+        white-space: nowrap;
     }
     .qas-page .qas-question-cell button {
         border: 0; background: none; padding: 0; text-align: left;
         color: #0f172a; font-weight: 500; line-height: 1.35;
+        font-size: .85rem;
+        width: 100%;
     }
     .qas-page .qas-question-cell button:hover { color: #0284c7; }
     #detailModal .qas-choice {
         display: flex; gap: .75rem; align-items: flex-start;
         padding: .65rem .8rem; border-radius: 10px; border: 1px solid #e2e8f0;
         margin-bottom: .5rem; background: #fff;
+        cursor: pointer;
+        transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    #detailModal .qas-choice:hover {
+        border-color: #7dd3fc;
+        box-shadow: 0 2px 10px rgba(14, 165, 233, .12);
+        background: #f8fbff;
     }
     #detailModal .qas-choice.is-correct {
         border-color: #86efac; background: #f0fdf4;
+    }
+    #detailModal .qas-choice.is-correct:hover {
+        border-color: #4ade80;
+        background: #ecfdf5;
+    }
+    #detailModal .qas-choice-hint {
+        font-size: .72rem;
+        color: #0284c7;
+        margin-top: .25rem;
     }
     #detailModal .qas-choice-letter {
         width: 28px; height: 28px; border-radius: 8px; background: #e2e8f0;
@@ -353,7 +461,7 @@
         @can('edit answer statistics')
             <form method="POST" action="{{ route('admin.question-answer-stats.refresh') }}" onsubmit="return confirm('Tüm istatistikler yeniden hesaplansın mı?')">
                 @csrf
-                <button type="submit" class="btn btn-light btn-sm">
+                <button type="submit" class="btn btn-sm qas-refresh-btn">
                     <i data-feather="refresh-cw"></i> Şimdi Yenile
                 </button>
             </form>
@@ -459,14 +567,15 @@
             <div class="card qas-chart-card">
                 <div class="card-header">
                     <h6>En düşük başarı</h6>
-                    <small>Min. 3 cevaplı en zor 8 soru</small>
+                    <small>Min. 3 cevaplı en zor 8 soru · tıkla → detay</small>
                 </div>
                 <div class="qas-chart-wrap">
                     <canvas id="qasHardBar"></canvas>
                 </div>
+                <div class="px-3 pb-2" id="qasHardList"></div>
                 <div class="px-3 pb-3">
                     <p class="qas-chart-footnote mb-0">
-                        En az 3 cevabı olan sorulardan başarı oranı en düşük 8 tanesi. Tek cevaplı gürültü hariç tutulur.
+                        En az 3 cevabı olan sorulardan başarı oranı en düşük 8 tanesi. Tek cevaplı gürültü hariç tutulur. Satıra veya bara tıkla → detay.
                     </p>
                 </div>
             </div>
@@ -475,10 +584,10 @@
 
     <div class="card qas-filter-card">
         <div class="card-body">
-            <form method="GET" action="{{ route('admin.question-answer-stats.index') }}" class="row g-2 align-items-end">
+            <form method="GET" action="{{ route('admin.question-answer-stats.index') }}" class="row g-2 align-items-end" id="qasFilterForm">
                 <div class="col-12 col-md-6 col-lg-2">
                     <label class="form-label small text-muted mb-1">Ara</label>
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="ID veya metin" value="{{ request('search') }}">
+                    <input type="text" name="search" id="qasSearchInput" class="form-control form-control-sm" placeholder="ID veya metin" value="{{ request('search') }}">
                 </div>
                 <div class="col-6 col-md-3 col-lg-2">
                     <label class="form-label small text-muted mb-1">Kategori</label>
@@ -649,6 +758,7 @@
                                     }
                                 }
                             }
+                            $textTr = $question->getTranslation('question', 'tr');
                             $textEn = $question->getTranslation('question', 'en', false);
                             $missingEn = empty($textEn);
                         @endphp
@@ -656,9 +766,12 @@
                             <td class="text-muted">{{ $question->id }}</td>
                             <td>
                                 <div class="qas-question-cell">
-                                    <button type="button" class="view-detail-btn" data-question-id="{{ $question->id }}" title="Detayı aç">
-                                        {{ \Illuminate\Support\Str::limit($question->getTranslation('question', 'tr'), 90) }}
-                                    </button>
+                                    <button
+                                        type="button"
+                                        class="view-detail-btn qas-q-text"
+                                        data-question-id="{{ $question->id }}"
+                                        title="{{ $textTr }}"
+                                    >{{ $textTr }}</button>
                                     <div class="mt-1 d-flex flex-wrap gap-1">
                                         @if($suspicious)
                                             <span class="badge bg-danger">Şüpheli şık</span>
@@ -816,7 +929,7 @@
                         <img id="detailImage" src="" alt="" class="img-fluid rounded border" style="max-height:220px;">
                     </div>
                     <div id="detailMeta" class="mb-3"></div>
-                    <h6 class="mb-2">Şıklar <span class="text-muted fw-normal small">(TR · EN)</span></h6>
+                    <h6 class="mb-2">Şıklar <span class="text-muted fw-normal small">(TR · EN · tıkla → cevaplayanlar)</span></h6>
                     <div id="detailChoices"></div>
                     <h6 class="mt-3 mb-2">Son değişiklikler</h6>
                     <div id="detailLogsEmpty" class="text-muted small d-none">Henüz yönetim değişikliği yok.</div>
@@ -840,14 +953,55 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="optionAnswersModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="optionAnswersTitle">Şık cevaplayanlar</h5>
+                    <small class="text-muted" id="optionAnswersSub"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="optionAnswersLoading" class="text-muted py-4 text-center">Yükleniyor...</div>
+                <div id="optionAnswersError" class="text-danger d-none">Liste yüklenemedi.</div>
+                <div id="optionAnswersEmpty" class="text-muted d-none">Bu şıkkı seçen kullanıcı yok.</div>
+                <div id="optionAnswersContent" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                            <tr>
+                                <th>Kullanıcı</th>
+                                <th>Kaynak</th>
+                                <th>Sonuç</th>
+                                <th>Tarih</th>
+                            </tr>
+                            </thead>
+                            <tbody id="optionAnswersBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3 gap-2 flex-wrap">
+                        <small class="text-muted" id="optionAnswersMeta"></small>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary" id="optionAnswersPrev">Önceki</button>
+                            <button type="button" class="btn btn-outline-secondary" id="optionAnswersNext">Sonraki</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
-{{-- Theme chart.min.js = Chart.js v1 (eski API). Modern grafikler için Chart.js 4 CDN --}}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{{-- Chart.js sayfa etkileşiminden sonra lazy yüklenir --}}
 <script>
     window.qasChartData = @json($chartData);
-
+</script>
+<script>
     document.addEventListener('DOMContentLoaded', function () {
         if (typeof feather !== 'undefined') {
             feather.replace();
@@ -1010,153 +1164,8 @@
             }
         }
 
-        const data = window.qasChartData || {};
-        const observed = data.observed || {};
-        const defined = data.defined || {};
-        const topHard = data.top_hard || { labels: [], values: [], totals: [] };
-        const topHardTotals = topHard.totals || [];
-
-        const pieColors = ['#16a34a', '#f59e0b', '#e11d48', '#94a3b8'];
-
-        if (typeof Chart !== 'undefined') {
-        try {
-            const observedPieEl = document.getElementById('qasObservedPie');
-            if (observedPieEl) {
-                new Chart(observedPieEl, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Kolay', 'Orta', 'Zor', 'Yetersiz'],
-                        datasets: [{
-                            data: [
-                                observed.easy || 0,
-                                observed.medium || 0,
-                                observed.hard || 0,
-                                observed.insufficient || 0
-                            ],
-                            backgroundColor: pieColors,
-                            borderWidth: 0,
-                            hoverOffset: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '62%',
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: { boxWidth: 12, padding: 14, font: { size: 11 } }
-                            }
-                        }
-                    }
-                });
-            }
-
-            const compareEl = document.getElementById('qasCompareBar');
-            if (compareEl) {
-                new Chart(compareEl, {
-                    type: 'bar',
-                    data: {
-                        labels: ['Kolay', 'Orta', 'Zor'],
-                        datasets: [
-                            {
-                                label: 'Tanımlı',
-                                data: [defined.easy || 0, defined.medium || 0, defined.hard || 0],
-                                backgroundColor: '#38bdf8',
-                                borderRadius: 6,
-                                maxBarThickness: 28
-                            },
-                            {
-                                label: 'Gözlenen',
-                                data: [observed.easy || 0, observed.medium || 0, observed.hard || 0],
-                                backgroundColor: '#6366f1',
-                                borderRadius: 6,
-                                maxBarThickness: 28
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: { boxWidth: 12, padding: 14, font: { size: 11 } }
-                            }
-                        },
-                        scales: {
-                            x: { grid: { display: false } },
-                            y: {
-                                beginAtZero: true,
-                                ticks: { precision: 0 },
-                                grid: { color: '#f1f5f9' }
-                            }
-                        }
-                    }
-                });
-            }
-
-            const hardEl = document.getElementById('qasHardBar');
-            if (hardEl) {
-                const hardValues = (topHard.values || []).map(function (v) {
-                    // %0 bar görünmüyordu; görsel için min 2 göster, tooltip gerçek değeri yazar
-                    return Math.max(Number(v) || 0, 2);
-                });
-                new Chart(hardEl, {
-                    type: 'bar',
-                    data: {
-                        labels: topHard.labels || [],
-                        datasets: [{
-                            label: 'Başarı %',
-                            data: hardValues,
-                            backgroundColor: '#fb7185',
-                            borderRadius: 6,
-                            maxBarThickness: 18
-                        }]
-                    },
-                    options: {
-                        indexAxis: 'y',
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (ctx) {
-                                        const real = (topHard.values || [])[ctx.dataIndex];
-                                        const total = topHardTotals[ctx.dataIndex] || '-';
-                                        return ' Başarı: ' + real + '% · ' + total + ' cevap';
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                beginAtZero: true,
-                                max: 100,
-                                grid: { color: '#f1f5f9' },
-                                ticks: { callback: (v) => v + '%' }
-                            },
-                            y: {
-                                grid: { display: false },
-                                ticks: { font: { size: 10 } }
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (err) {
-            console.error('QAS chart init error', err);
-        }
-        } else {
-            console.error('Chart.js yüklenemedi');
-        }
-
         const levelLabel = { easy: 'Kolay', medium: 'Orta', hard: 'Zor', insufficient: 'Yetersiz' };
         const statusLabel = { active: 'Aktif', passive: 'Pasif', maintenance: 'Bakım' };
-        const summary = (window.qasChartData && window.qasChartData.summary) ? window.qasChartData.summary : {};
-        const observedSummary = (window.qasChartData && window.qasChartData.observed) ? window.qasChartData.observed : {};
-        const successBands = (window.qasChartData && window.qasChartData.success_bands) ? window.qasChartData.success_bands : {};
 
         function escapeHtml(str) {
             return String(str ?? '')
@@ -1165,6 +1174,339 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
         }
+
+        function openQuestionDetail(questionId) {
+            if (!questionId) return;
+            const modal = new bootstrap.Modal(document.getElementById('detailModal'));
+            const loading = document.getElementById('detailLoading');
+            const content = document.getElementById('detailContent');
+            const error = document.getElementById('detailError');
+
+            loading.classList.remove('d-none');
+            content.classList.add('d-none');
+            error.classList.add('d-none');
+            document.getElementById('detailModalTitle').textContent = 'Soru #' + questionId;
+            const editBtn = document.getElementById('detailEditBtn');
+            editBtn.classList.add('d-none');
+            editBtn.removeAttribute('href');
+            modal.show();
+
+            fetch(`{{ url('/admin/question-answer-stats') }}/${questionId}/detail`, {
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(r => r.json())
+                .then(payload => {
+                    loading.classList.add('d-none');
+                    if (!payload.success || !payload.question) {
+                        error.classList.remove('d-none');
+                        return;
+                    }
+
+                    const q = payload.question;
+                    if (q.edit_url) {
+                        editBtn.href = q.edit_url;
+                        editBtn.classList.remove('d-none');
+                    }
+
+                    document.getElementById('detailTextTr').textContent = q.text_tr || '-';
+
+                    const enBox = document.getElementById('detailBoxEn');
+                    const enText = document.getElementById('detailTextEn');
+                    if (q.missing_en || !q.text_en) {
+                        enBox.classList.add('is-missing');
+                        enText.className = 'qas-lang-missing';
+                        enText.textContent = 'EN çeviri yok';
+                    } else {
+                        enBox.classList.remove('is-missing');
+                        enText.className = 'qas-lang-text';
+                        enText.textContent = q.text_en;
+                    }
+
+                    const imgWrap = document.getElementById('detailImageWrap');
+                    const img = document.getElementById('detailImage');
+                    if (q.image) {
+                        img.src = q.image;
+                        imgWrap.classList.remove('d-none');
+                    } else {
+                        img.removeAttribute('src');
+                        imgWrap.classList.add('d-none');
+                    }
+
+                    const confClass = q.confidence.key === 'reliable'
+                        ? 'qas-conf-reliable'
+                        : (q.confidence.key === 'medium' ? 'qas-conf-medium' : 'qas-conf-weak');
+
+                    const missingChoiceEn = (q.choices || []).some(function (c) { return c.missing_en; });
+                    document.getElementById('detailMeta').innerHTML = `
+                        <span class="qas-meta-chip">${escapeHtml(q.category || '-')}</span>
+                        <span class="qas-meta-chip">Tanımlı: ${escapeHtml(levelLabel[q.level] || q.level)}</span>
+                        <span class="qas-meta-chip">Gözlenen: ${escapeHtml(levelLabel[q.stats.observed] || q.stats.observed)}</span>
+                        <span class="qas-meta-chip">Durum: ${escapeHtml(statusLabel[q.status] || q.status)}</span>
+                        <span class="qas-meta-chip">Başarı: ${q.stats.percentage}% (${q.stats.correct}/${q.stats.total})</span>
+                        <span class="${confClass}">${escapeHtml(q.confidence.label)} · ${escapeHtml(q.confidence.hint)}</span>
+                        ${(q.missing_en || missingChoiceEn) ? '<span class="qas-meta-chip" style="background:#fff7ed;color:#c2410c;">EN eksik</span>' : ''}
+                        ${q.suspicious ? '<span class="qas-meta-chip" style="background:#ffe4e6;color:#be123c;">Şüpheli şık dağılımı</span>' : ''}
+                    `;
+
+                    const choicesHtml = (q.choices || []).map(function (c) {
+                        const enPart = c.missing_en || !c.text_en
+                            ? '<div class="qas-choice-en is-missing">EN yok</div>'
+                            : `<div class="qas-choice-en">${escapeHtml(c.text_en)}</div>`;
+                        const optKey = escapeHtml(String(c.key || ''));
+                        return `
+                            <div class="qas-choice ${c.is_correct ? 'is-correct' : ''}"
+                                 role="button"
+                                 tabindex="0"
+                                 data-option-key="${optKey}"
+                                 data-option-label="${escapeHtml(c.label || '')}"
+                                 title="Bu şıkkı seçenleri göster">
+                                <div class="qas-choice-letter">${escapeHtml(c.label)}</div>
+                                <div class="flex-grow-1">
+                                    <div class="qas-choice-langs">
+                                        <div>
+                                            <div class="small text-muted mb-1">TR</div>
+                                            <div class="fw-medium">${escapeHtml(c.text_tr || '-')}</div>
+                                        </div>
+                                        <div>
+                                            <div class="small text-muted mb-1">EN</div>
+                                            ${enPart}
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted mt-1">${c.count} cevap · %${c.percent}${c.is_correct ? ' · doğru şık' : ''}</div>
+                                    <div class="qas-choice-hint">Cevaplayanları görmek için tıkla</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    document.getElementById('detailChoices').innerHTML = choicesHtml;
+                    document.querySelectorAll('#detailChoices .qas-choice[data-option-key]').forEach(function (el) {
+                        const open = function () {
+                            openOptionAnswers(q.id, el.dataset.optionKey, el.dataset.optionLabel || '');
+                        };
+                        el.addEventListener('click', open);
+                        el.addEventListener('keydown', function (e) {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                open();
+                            }
+                        });
+                    });
+
+                    const logsWrap = document.getElementById('detailLogsWrap');
+                    const logsEmpty = document.getElementById('detailLogsEmpty');
+                    const logsBody = document.getElementById('detailLogsBody');
+                    logsBody.innerHTML = '';
+                    if (!q.logs || q.logs.length === 0) {
+                        logsWrap.classList.add('d-none');
+                        logsEmpty.classList.remove('d-none');
+                    } else {
+                        logsEmpty.classList.add('d-none');
+                        q.logs.forEach(function (log) {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${escapeHtml(log.created_at)}</td>
+                                <td>${escapeHtml(log.admin)}</td>
+                                <td>${escapeHtml(log.field)}</td>
+                                <td>${escapeHtml(log.old_value)}</td>
+                                <td>${escapeHtml(log.new_value)}</td>
+                            `;
+                            logsBody.appendChild(tr);
+                        });
+                        logsWrap.classList.remove('d-none');
+                    }
+
+                    content.classList.remove('d-none');
+                })
+                .catch(function () {
+                    loading.classList.add('d-none');
+                    error.classList.remove('d-none');
+                });
+        }
+
+        function initQasCharts() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js yüklenemedi');
+                return;
+            }
+
+            const data = window.qasChartData || {};
+            const observed = data.observed || {};
+            const defined = data.defined || {};
+            const topHard = data.top_hard || { labels: [], values: [], totals: [], ids: [] };
+            const topHardTotals = topHard.totals || [];
+            const topHardIds = topHard.ids || [];
+            const pieColors = ['#16a34a', '#f59e0b', '#e11d48', '#94a3b8'];
+
+            try {
+                const observedPieEl = document.getElementById('qasObservedPie');
+                if (observedPieEl) {
+                    new Chart(observedPieEl, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Kolay', 'Orta', 'Zor', 'Yetersiz'],
+                            datasets: [{
+                                data: [
+                                    observed.easy || 0,
+                                    observed.medium || 0,
+                                    observed.hard || 0,
+                                    observed.insufficient || 0
+                                ],
+                                backgroundColor: pieColors,
+                                borderWidth: 0,
+                                hoverOffset: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '62%',
+                            animation: { duration: 450 },
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { boxWidth: 12, padding: 14, font: { size: 11 } }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const compareEl = document.getElementById('qasCompareBar');
+                if (compareEl) {
+                    new Chart(compareEl, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Kolay', 'Orta', 'Zor'],
+                            datasets: [
+                                {
+                                    label: 'Tanımlı',
+                                    data: [defined.easy || 0, defined.medium || 0, defined.hard || 0],
+                                    backgroundColor: '#38bdf8',
+                                    borderRadius: 6,
+                                    maxBarThickness: 28
+                                },
+                                {
+                                    label: 'Gözlenen',
+                                    data: [observed.easy || 0, observed.medium || 0, observed.hard || 0],
+                                    backgroundColor: '#6366f1',
+                                    borderRadius: 6,
+                                    maxBarThickness: 28
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 450 },
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { boxWidth: 12, padding: 10, font: { size: 11 } }
+                                }
+                            },
+                            scales: {
+                                x: { grid: { display: false } },
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: { precision: 0 },
+                                    grid: { color: '#f1f5f9' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const hardEl = document.getElementById('qasHardBar');
+                if (hardEl) {
+                    const hardValues = (topHard.values || []).map(function (v) {
+                        return Math.max(Number(v) || 0, 2);
+                    });
+                    new Chart(hardEl, {
+                        type: 'bar',
+                        data: {
+                            labels: topHard.labels || [],
+                            datasets: [{
+                                label: 'Başarı %',
+                                data: hardValues,
+                                backgroundColor: '#fb7185',
+                                borderRadius: 6,
+                                maxBarThickness: 18
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 450 },
+                            onHover: function (evt, elements) {
+                                const t = evt && evt.native ? evt.native.target : hardEl;
+                                if (t) t.style.cursor = elements.length ? 'pointer' : 'default';
+                            },
+                            onClick: function (evt, elements) {
+                                if (!elements.length) return;
+                                const idx = elements[0].index;
+                                const qid = topHardIds[idx];
+                                if (qid) openQuestionDetail(qid);
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (ctx) {
+                                            const real = (topHard.values || [])[ctx.dataIndex];
+                                            const total = topHardTotals[ctx.dataIndex] || '-';
+                                            return ' Başarı: ' + real + '% · ' + total + ' cevap · tıkla detay';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    grid: { color: '#f1f5f9' },
+                                    ticks: { callback: (v) => v + '%' }
+                                },
+                                y: {
+                                    grid: { display: false },
+                                    ticks: { font: { size: 10 } }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('QAS chart init error', err);
+            }
+        }
+
+        function loadQasChartJs(done) {
+            if (typeof Chart !== 'undefined') {
+                done();
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';
+            s.async = true;
+            s.onload = done;
+            s.onerror = function () { console.error('Chart.js yüklenemedi'); };
+            document.head.appendChild(s);
+        }
+
+        function scheduleQasCharts() {
+            const run = function () { loadQasChartJs(initQasCharts); };
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(run, { timeout: 1200 });
+            } else {
+                setTimeout(run, 80);
+            }
+        }
+
+        scheduleQasCharts();
+
+        const summary = (window.qasChartData && window.qasChartData.summary) ? window.qasChartData.summary : {};
+        const observedSummary = (window.qasChartData && window.qasChartData.observed) ? window.qasChartData.observed : {};
+        const successBands = (window.qasChartData && window.qasChartData.success_bands) ? window.qasChartData.success_bands : {};
 
         function openSummaryModal(key) {
             const titleEl = document.getElementById('summaryModalTitle');
@@ -1250,133 +1592,148 @@
 
         document.querySelectorAll('.view-detail-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                const questionId = this.dataset.questionId;
-                const modal = new bootstrap.Modal(document.getElementById('detailModal'));
-                const loading = document.getElementById('detailLoading');
-                const content = document.getElementById('detailContent');
-                const error = document.getElementById('detailError');
-
-                loading.classList.remove('d-none');
-                content.classList.add('d-none');
-                error.classList.add('d-none');
-                document.getElementById('detailModalTitle').textContent = 'Soru #' + questionId;
-                const editBtn = document.getElementById('detailEditBtn');
-                editBtn.classList.add('d-none');
-                editBtn.removeAttribute('href');
-                modal.show();
-
-                fetch(`{{ url('/admin/question-answer-stats') }}/${questionId}/detail`, {
-                    headers: { 'Accept': 'application/json' }
-                })
-                    .then(r => r.json())
-                    .then(payload => {
-                        loading.classList.add('d-none');
-                        if (!payload.success || !payload.question) {
-                            error.classList.remove('d-none');
-                            return;
-                        }
-
-                        const q = payload.question;
-                        if (q.edit_url) {
-                            editBtn.href = q.edit_url;
-                            editBtn.classList.remove('d-none');
-                        }
-
-                        document.getElementById('detailTextTr').textContent = q.text_tr || '-';
-
-                        const enBox = document.getElementById('detailBoxEn');
-                        const enText = document.getElementById('detailTextEn');
-                        if (q.missing_en || !q.text_en) {
-                            enBox.classList.add('is-missing');
-                            enText.className = 'qas-lang-missing';
-                            enText.textContent = 'EN çeviri yok';
-                        } else {
-                            enBox.classList.remove('is-missing');
-                            enText.className = 'qas-lang-text';
-                            enText.textContent = q.text_en;
-                        }
-
-                        const imgWrap = document.getElementById('detailImageWrap');
-                        const img = document.getElementById('detailImage');
-                        if (q.image) {
-                            img.src = q.image;
-                            imgWrap.classList.remove('d-none');
-                        } else {
-                            img.removeAttribute('src');
-                            imgWrap.classList.add('d-none');
-                        }
-
-                        const confClass = q.confidence.key === 'reliable'
-                            ? 'qas-conf-reliable'
-                            : (q.confidence.key === 'medium' ? 'qas-conf-medium' : 'qas-conf-weak');
-
-                        const missingChoiceEn = (q.choices || []).some(function (c) { return c.missing_en; });
-                        document.getElementById('detailMeta').innerHTML = `
-                            <span class="qas-meta-chip">${escapeHtml(q.category || '-')}</span>
-                            <span class="qas-meta-chip">Tanımlı: ${escapeHtml(levelLabel[q.level] || q.level)}</span>
-                            <span class="qas-meta-chip">Gözlenen: ${escapeHtml(levelLabel[q.stats.observed] || q.stats.observed)}</span>
-                            <span class="qas-meta-chip">Durum: ${escapeHtml(statusLabel[q.status] || q.status)}</span>
-                            <span class="qas-meta-chip">Başarı: ${q.stats.percentage}% (${q.stats.correct}/${q.stats.total})</span>
-                            <span class="${confClass}">${escapeHtml(q.confidence.label)} · ${escapeHtml(q.confidence.hint)}</span>
-                            ${(q.missing_en || missingChoiceEn) ? '<span class="qas-meta-chip" style="background:#fff7ed;color:#c2410c;">EN eksik</span>' : ''}
-                            ${q.suspicious ? '<span class="qas-meta-chip" style="background:#ffe4e6;color:#be123c;">Şüpheli şık dağılımı</span>' : ''}
-                        `;
-
-                        const choicesHtml = (q.choices || []).map(function (c) {
-                            const enPart = c.missing_en || !c.text_en
-                                ? '<div class="qas-choice-en is-missing">EN yok</div>'
-                                : `<div class="qas-choice-en">${escapeHtml(c.text_en)}</div>`;
-                            return `
-                                <div class="qas-choice ${c.is_correct ? 'is-correct' : ''}">
-                                    <div class="qas-choice-letter">${escapeHtml(c.label)}</div>
-                                    <div class="flex-grow-1">
-                                        <div class="qas-choice-langs">
-                                            <div>
-                                                <div class="small text-muted mb-1">TR</div>
-                                                <div class="fw-medium">${escapeHtml(c.text_tr || '-')}</div>
-                                            </div>
-                                            <div>
-                                                <div class="small text-muted mb-1">EN</div>
-                                                ${enPart}
-                                            </div>
-                                        </div>
-                                        <div class="small text-muted mt-1">${c.count} cevap · %${c.percent}${c.is_correct ? ' · doğru şık' : ''}</div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('');
-                        document.getElementById('detailChoices').innerHTML = choicesHtml;
-
-                        const logsWrap = document.getElementById('detailLogsWrap');
-                        const logsEmpty = document.getElementById('detailLogsEmpty');
-                        const logsBody = document.getElementById('detailLogsBody');
-                        logsBody.innerHTML = '';
-                        if (!q.logs || q.logs.length === 0) {
-                            logsWrap.classList.add('d-none');
-                            logsEmpty.classList.remove('d-none');
-                        } else {
-                            logsEmpty.classList.add('d-none');
-                            q.logs.forEach(function (log) {
-                                const tr = document.createElement('tr');
-                                tr.innerHTML = `
-                                    <td>${escapeHtml(log.created_at)}</td>
-                                    <td>${escapeHtml(log.admin)}</td>
-                                    <td>${escapeHtml(log.field)}</td>
-                                    <td>${escapeHtml(log.old_value)}</td>
-                                    <td>${escapeHtml(log.new_value)}</td>
-                                `;
-                                logsBody.appendChild(tr);
-                            });
-                            logsWrap.classList.remove('d-none');
-                        }
-
-                        content.classList.remove('d-none');
-                    })
-                    .catch(function () {
-                        loading.classList.add('d-none');
-                        error.classList.remove('d-none');
-                    });
+                openQuestionDetail(this.dataset.questionId);
             });
+        });
+
+        // ID aranınca diğer filtreleri temizle
+        (function initIdSearchClearsFilters() {
+            const form = document.getElementById('qasFilterForm');
+            const search = document.getElementById('qasSearchInput');
+            if (!form || !search) return;
+
+            const clearOthers = function () {
+                if (!/^\d+$/.test(search.value.trim())) return;
+                form.querySelectorAll('select, input').forEach(function (el) {
+                    if (el === search) return;
+                    if (el.type === 'hidden') return;
+                    if (el.tagName === 'SELECT') el.selectedIndex = 0;
+                    else if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+                    else el.value = '';
+                });
+            };
+
+            search.addEventListener('input', clearOthers);
+            search.addEventListener('change', clearOthers);
+            form.addEventListener('submit', clearOthers);
+        })();
+
+        const optionAnswersState = { questionId: null, option: null, label: '', page: 1 };
+        const optionAnswersModalEl = document.getElementById('optionAnswersModal');
+        let optionAnswersModal = null;
+        if (optionAnswersModalEl && typeof bootstrap !== 'undefined') {
+            optionAnswersModal = bootstrap.Modal.getOrCreateInstance(optionAnswersModalEl);
+        }
+
+        function userShowUrl(userId) {
+            return `{{ url('/admin/users') }}/${userId}`;
+        }
+
+        function renderOptionAnswers(payload) {
+            const loading = document.getElementById('optionAnswersLoading');
+            const error = document.getElementById('optionAnswersError');
+            const empty = document.getElementById('optionAnswersEmpty');
+            const content = document.getElementById('optionAnswersContent');
+            const body = document.getElementById('optionAnswersBody');
+            const meta = document.getElementById('optionAnswersMeta');
+            const prev = document.getElementById('optionAnswersPrev');
+            const next = document.getElementById('optionAnswersNext');
+
+            loading.classList.add('d-none');
+            error.classList.add('d-none');
+            empty.classList.add('d-none');
+            content.classList.add('d-none');
+
+            if (!payload || !payload.success || !payload.answers) {
+                error.classList.remove('d-none');
+                return;
+            }
+
+            const answers = payload.answers;
+            document.getElementById('optionAnswersTitle').textContent =
+                `Şık ${payload.option_label || optionAnswersState.label} · cevaplayanlar`;
+            document.getElementById('optionAnswersSub').textContent =
+                `Soru #${payload.question_id}` +
+                (payload.option_text ? ` · ${payload.option_text}` : '') +
+                (payload.is_correct ? ' · doğru şık' : '');
+
+            if (!answers.total) {
+                empty.classList.remove('d-none');
+                return;
+            }
+
+            body.innerHTML = '';
+            (answers.data || []).forEach(function (row) {
+                const resultBadge = row.is_correct
+                    ? '<span class="badge bg-success">Doğru</span>'
+                    : '<span class="badge bg-secondary">Yanlış</span>';
+                const deleted = row.is_deleted ? ' <span class="badge bg-warning text-dark">Silinmiş</span>' : '';
+                const email = row.email ? `<div class="small text-muted">${escapeHtml(row.email)}</div>` : '';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <a href="${userShowUrl(row.user_id)}" target="_blank" class="fw-medium text-decoration-none">
+                            ${escapeHtml(row.name || ('#' + row.user_id))}
+                        </a>
+                        ${deleted}
+                        ${email}
+                    </td>
+                    <td><span class="badge bg-light text-dark border">${escapeHtml(row.source_label || row.source)}</span></td>
+                    <td>${resultBadge}</td>
+                    <td class="text-nowrap">${escapeHtml(row.answered_at_label || '-')}</td>
+                `;
+                body.appendChild(tr);
+            });
+
+            meta.textContent = `Toplam ${answers.total} · Sayfa ${answers.page}/${answers.last_page}`;
+            prev.disabled = answers.page <= 1;
+            next.disabled = answers.page >= answers.last_page;
+            content.classList.remove('d-none');
+        }
+
+        function loadOptionAnswersPage(page) {
+            if (!optionAnswersState.questionId || !optionAnswersState.option) return;
+
+            optionAnswersState.page = page;
+            const loading = document.getElementById('optionAnswersLoading');
+            const error = document.getElementById('optionAnswersError');
+            const empty = document.getElementById('optionAnswersEmpty');
+            const content = document.getElementById('optionAnswersContent');
+
+            loading.classList.remove('d-none');
+            error.classList.add('d-none');
+            empty.classList.add('d-none');
+            content.classList.add('d-none');
+
+            const url = `{{ url('/admin/question-answer-stats') }}/${optionAnswersState.questionId}/options/${optionAnswersState.option}/answers?page=${page}`;
+            fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(renderOptionAnswers)
+                .catch(function () {
+                    loading.classList.add('d-none');
+                    error.classList.remove('d-none');
+                });
+        }
+
+        function openOptionAnswers(questionId, optionKey, optionLabel) {
+            if (!optionKey) return;
+            optionAnswersState.questionId = questionId;
+            optionAnswersState.option = optionKey;
+            optionAnswersState.label = optionLabel;
+            optionAnswersState.page = 1;
+            if (optionAnswersModal) {
+                optionAnswersModal.show();
+            }
+            loadOptionAnswersPage(1);
+        }
+
+        document.getElementById('optionAnswersPrev')?.addEventListener('click', function () {
+            if (optionAnswersState.page > 1) {
+                loadOptionAnswersPage(optionAnswersState.page - 1);
+            }
+        });
+        document.getElementById('optionAnswersNext')?.addEventListener('click', function () {
+            loadOptionAnswersPage(optionAnswersState.page + 1);
         });
     });
 </script>
