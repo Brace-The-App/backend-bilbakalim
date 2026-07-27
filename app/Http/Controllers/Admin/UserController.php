@@ -43,6 +43,11 @@ class UserController extends Controller
             $query->where('account_status', $request->status);
         }
 
+        // Dashboard "Aktif Kullanıcı": son 1 dk içinde last_login_at
+        if ($request->filled('online') && $request->online == '1') {
+            $query->where('last_login_at', '>=', now()->subMinute());
+        }
+
         if ($request->filled('package_id')) {
             $query->where('package_id', $request->package_id);
         }

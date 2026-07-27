@@ -42,6 +42,7 @@
     <!-- Responsive css-->
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/responsive.css')}}">
     @stack('css')
+    @stack('styles')
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
 

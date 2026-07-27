@@ -52,16 +52,23 @@
                             @endforeach
                         </select>
                     </div>
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label small text-muted">Durum</label>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label small text-muted">Hesap Durumu</label>
                         <select name="status" class="form-select">
-                            <option value="">Tüm Durumlar</option>
-                            <option value="active" {{ request('status') == 'active' ? 'selected' : '' }}>Aktif</option>
+                            <option value="">Tümü</option>
+                            <option value="active" {{ request('status') == 'active' ? 'selected' : '' }}>Hesap Aktif</option>
                             <option value="suspended" {{ request('status') == 'suspended' ? 'selected' : '' }}>Askıya Alınmış</option>
                             <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Beklemede</option>
                         </select>
                     </div>
-                    <div class="col-md-12 col-lg-3 text-md-start text-lg-end">
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label small text-muted">Çevrimiçi</label>
+                        <select name="online" class="form-select">
+                            <option value="">Tümü</option>
+                            <option value="1" {{ request('online') == '1' ? 'selected' : '' }}>Son 1 dk</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12 col-lg-2 text-md-start text-lg-end">
                         <button type="submit" class="btn btn-primary me-2"><i data-feather="filter" class="me-1"></i>Filtrele</button>
                         <a href="{{ route('admin.users.index') }}" class="btn btn-outline-secondary">Temizle</a>
                     </div>
@@ -94,12 +101,16 @@
                                     </a>
                                 </th>
                                 <th>Durum</th>
+                                <th>Son Giriş</th>
                                 <th>Kayıt Tarihi</th>
                                 <th>İşlemler</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($users as $user)
+                            @php
+                                $isOnline = $user->last_login_at && $user->last_login_at->gte(now()->subMinute());
+                            @endphp
                             <tr>
                                 <td>{{ $user->id }}</td>
                                 <td>{{ $user->name }}</td>
@@ -112,9 +123,12 @@
                                 </td>
                                 <td>{{ $user->coins ?? 0 }}</td>
                                 <td>
+                                    @if($isOnline)
+                                        <span class="badge bg-success">Çevrimiçi</span>
+                                    @endif
                                     @switch($user->account_status)
                                         @case('active')
-                                            <span class="badge bg-success">Aktif</span>
+                                            <span class="badge bg-secondary">Hesap Aktif</span>
                                             @break
                                         @case('suspended')
                                             <span class="badge bg-danger">Askıya Alınmış</span>
@@ -125,6 +139,13 @@
                                         @default
                                             <span class="badge bg-secondary">{{ $user->account_status }}</span>
                                     @endswitch
+                                </td>
+                                <td>
+                                    @if($user->last_login_at)
+                                        <span title="{{ $user->last_login_at->format('d.m.Y H:i:s') }}">{{ $user->last_login_at->diffForHumans() }}</span>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
                                 </td>
                                 <td>{{ $user->created_at->format('d.m.Y H:i') }}</td>
                                 <td>
