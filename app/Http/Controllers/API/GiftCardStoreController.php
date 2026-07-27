@@ -13,6 +13,7 @@ class GiftCardStoreController extends Controller
      * @OA\Get(
      *     path="/api/gift-card-stores",
      *     summary="Hediye kartı geçen mağaza ve market logolarını listele",
+     *     description="Her marka için id + image_url döner. Ödül talebinde (POST /api/reward/claim) kullanıcının seçtiği markanın id değeri gift_card_store_id olarak gönderilmelidir.",
      *     tags={"Gift Card Stores"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -31,7 +32,7 @@ class GiftCardStoreController extends Controller
      *                 property="data",
      *                 type="array",
      *                 @OA\Items(
-     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="id", type="integer", example=1, description="Marka id — claim isteğinde gift_card_store_id olarak gönderilir"),
      *                     @OA\Property(property="type", type="string", example="market"),
      *                     @OA\Property(property="image_url", type="string", example="https://example.com/storage/gift-card-stores/store1.jpg"),
      *                     @OA\Property(property="is_active", type="boolean", example=true),

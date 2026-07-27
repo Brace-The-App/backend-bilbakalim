@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\CoinHistory;
 use App\Models\Duel;
+use App\Models\GiftCardStore;
 use App\Models\IndividualGame;
 use App\Models\RewardRequest;
 use App\Models\Tournament;
@@ -351,14 +352,17 @@ class RewardController extends Controller
      * @OA\Post(
      *     path="/api/reward/claim",
      *     summary="Ödül talep et",
-     *     description="Kullanıcı ödül talebinde bulunur",
+     *     description="Kullanıcı ödül talebinde bulunur. Çek/kod seçilen markaya özel üretildiği için gift_card_store_id zorunludur. İsim-soyisim veya telefon hatalıysa kod geçersiz olur; iptal/iade yoktur.",
      *     tags={"Reward"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
+     *             required={"type","gift_card_store_id"},
      *             @OA\Property(property="type", type="string", enum={"daily", "weekly", "tournament"}, example="daily"),
-     *             @OA\Property(property="tournament_id", type="integer", example=1, description="Turnuva ID (type=tournament için gerekli)")
+     *             @OA\Property(property="gift_card_store_id", type="integer", example=1, description="GET /api/gift-card-stores listesinden seçilen marka id"),
+     *             @OA\Property(property="store_id", type="integer", example=1, description="gift_card_store_id alias (opsiyonel)"),
+     *             @OA\Property(property="tournament_id", type="integer", example=1, description="Turnuva ID (type=tournament için opsiyonel)")
      *         )
      *     ),
      *     @OA\Response(
@@ -366,21 +370,48 @@ class RewardController extends Controller
      *         description="Başarılı",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="message", type="string", example="Ödül talebi başarıyla oluşturuldu.")
+     *             @OA\Property(property="message", type="string", example="Ödül talebi başarıyla oluşturuldu."),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="id", type="integer", example=12),
+     *                 @OA\Property(property="gift_card_store_id", type="integer", example=1),
+     *                 @OA\Property(property="gift_card_store", type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="type", type="string", example="mağaza"),
+     *                     @OA\Property(property="image_url", type="string", example="https://example.com/storage/gift-card-stores/store1.jpg")
+     *                 )
+     *             )
      *         )
-     *     )
+     *     ),
+     *     @OA\Response(response=400, description="Geçersiz istek / şartlar karşılanmıyor"),
+     *     @OA\Response(response=404, description="Seçilen marka bulunamadı")
      * )
      */
     public function claim(Request $request): JsonResponse
     {
         $user = Auth::user();
         $type = $request->input('type');
+        $storeId = $request->input('gift_card_store_id', $request->input('store_id'));
 
         if (!in_array($type, ['daily', 'weekly', 'tournament'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Geçersiz ödül tipi.'
             ], 400);
+        }
+
+        if (!$storeId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Çek kullanılacak marka seçilmelidir (gift_card_store_id).'
+            ], 400);
+        }
+
+        $store = GiftCardStore::active()->find($storeId);
+        if (!$store) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Seçilen marka bulunamadı veya aktif değil.'
+            ], 404);
         }
 
         $claimGate = $this->validateGiftClaimRequirements($user);
@@ -418,7 +449,11 @@ class RewardController extends Controller
 //        $coinsEarned = $eligibilityData['coins_earned'] ?? 0;
         $coinsEarned = 0;
         $rewardDate = null;
-        $metadata = [];
+        $metadata = [
+            'gift_card_store_id' => (int) $store->id,
+            'gift_card_store_type' => $store->type,
+            'gift_card_store_image_url' => $store->image_url,
+        ];
 
         if ($type === 'daily') {
             $rewardDate = Carbon::today()->format('Y-m-d');
@@ -436,7 +471,7 @@ class RewardController extends Controller
                 $tournament = Tournament::find($tournamentId);
                 if ($tournament) {
                     $rewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
-                    $metadata['tournament_id'] = $tournamentId;
+                    $metadata['tournament_id'] = (int) $tournamentId;
                 } else {
                     $rewardDate = Carbon::today()->format('Y-m-d');
                 }
@@ -446,19 +481,28 @@ class RewardController extends Controller
         }
 
         // Ödül talebini oluştur
-        RewardRequest::create([
+        $rewardRequest = RewardRequest::create([
             'user_id' => $user->id,
             'reward_type' => $type,
             'coins_earned' => $coinsEarned,
             'reward_date' => $rewardDate,
             'status' => 'pending',
             'requested_at' => now(),
-            'metadata' => !empty($metadata) ? $metadata : null
+            'metadata' => $metadata,
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Ödül talebi başarıyla oluşturuldu.'
+            'message' => 'Ödül talebi başarıyla oluşturuldu.',
+            'data' => [
+                'id' => $rewardRequest->id,
+                'gift_card_store_id' => (int) $store->id,
+                'gift_card_store' => [
+                    'id' => (int) $store->id,
+                    'type' => $store->type,
+                    'image_url' => $store->image_url,
+                ],
+            ],
         ]);
     }
 
@@ -517,9 +561,9 @@ class RewardController extends Controller
             ->count();
 
         $duelGames = Duel::where(function ($query) use ($userId) {
-                $query->where('challenger_id', $userId)
-                    ->orWhere('opponent_id', $userId);
-            })
+            $query->where('challenger_id', $userId)
+                ->orWhere('opponent_id', $userId);
+        })
             ->where('status', 'finished')
             ->count();
 

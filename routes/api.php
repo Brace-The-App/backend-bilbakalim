@@ -18,6 +18,7 @@ use App\Http\Controllers\API\DiamondController;
 use App\Http\Controllers\API\StorePackageController;
 use App\Http\Controllers\API\AvatarController;
 use App\Http\Controllers\API\AdWatchController;
+use App\Http\Controllers\API\AdController;
 use App\Http\Controllers\API\CoinHistoryController;
 use App\Http\Controllers\API\GiftCardStoreController;
 use App\Http\Controllers\API\LeaderboardController;
@@ -208,6 +209,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('reward', [AdWatchController::class, 'reward']);
     });
 
+    // Reklam görselleri (rastgele + kullanıcı başına max 3)
+    Route::prefix('ads')->group(function () {
+        Route::get('next', [AdController::class, 'next']);
+    });
+
     // Coin History routes
     Route::get('coin-history', [CoinHistoryController::class, 'index']);
 
@@ -219,6 +225,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [LeaderboardController::class, 'all']);
         Route::get('daily', [LeaderboardController::class, 'daily']);
         Route::get('weekly', [LeaderboardController::class, 'weekly']);
+        Route::get('all-time', [LeaderboardController::class, 'allTime']);
     });
 
     // Reward routes

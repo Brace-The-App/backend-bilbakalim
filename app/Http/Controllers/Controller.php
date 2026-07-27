@@ -24,12 +24,12 @@ use Illuminate\Support\Str;
  *         url="https://opensource.org/licenses/MIT"
  *     )
  * )
- * 
+ *
  * @OA\Server(
- *     url="http://localhost",
- *     description="Local Development Server"
+ *     url="https://bil-bakalim.com",
+ *     description="Production Server"
  * )
- * 
+ *
  * @OA\SecurityScheme(
  *     securityScheme="sanctum",
  *     type="http",
@@ -37,22 +37,22 @@ use Illuminate\Support\Str;
  *     bearerFormat="JWT",
  *     description="Enter token in format: Bearer {token}"
  * )
- * 
+ *
  * @OA\Tag(
  *     name="Auth",
  *     description="Authentication endpoints"
  * )
- * 
+ *
  * @OA\Tag(
  *     name="Categories",
  *     description="Category management endpoints"
  * )
- * 
+ *
  * @OA\Tag(
  *     name="Questions",
  *     description="Question management endpoints"
  * )
- * 
+ *
  */
 
 class Controller extends BaseController

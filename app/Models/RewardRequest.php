@@ -40,6 +40,22 @@ class RewardRequest extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function getGiftCardStoreIdAttribute(): ?int
+    {
+        $id = $this->metadata['gift_card_store_id'] ?? null;
+        return $id !== null ? (int) $id : null;
+    }
+
+    public function getGiftCardStoreImageUrlAttribute(): ?string
+    {
+        return $this->metadata['gift_card_store_image_url'] ?? null;
+    }
+
+    public function getGiftCardStoreTypeAttribute(): ?string
+    {
+        return $this->metadata['gift_card_store_type'] ?? null;
+    }
+
     // Scopes
     public function scopePending($query)
     {

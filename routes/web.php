@@ -93,6 +93,9 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     // Gift Card Stores management
     Route::resource('gift-card-stores', \App\Http\Controllers\Admin\GiftCardStoreController::class);
 
+    // Ads (reklam görselleri)
+    Route::resource('ads', \App\Http\Controllers\Admin\AdController::class)->only(['index', 'store', 'update', 'destroy']);
+
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');
     Route::post('reward-requests/{rewardRequest}/approve', [\App\Http\Controllers\Admin\RewardRequestController::class, 'approve'])->name('reward-requests.approve');
@@ -114,15 +117,24 @@ Route::get('/api/documentation', function () {
     $documentation = 'default';
     $documentationTitle = 'BilBakalim API Documentation';
     $useAbsolutePath = true;
+    $docsPath = storage_path('api-docs/api-docs.json');
+    $version = file_exists($docsPath) ? filemtime($docsPath) : time();
     $urlsToDocs = [
-        'BilBakalim API' => asset('docs/api-docs.json')
+        'BilBakalim API' => url('/docs/api-docs.json') . '?v=' . $version,
     ];
 
     return view('l5-swagger::index', compact('documentation', 'documentationTitle', 'urlsToDocs', 'useAbsolutePath'));
 })->name('l5-swagger.default.docs');
 
 Route::get('/docs/api-docs.json', function () {
-    return file_get_contents(storage_path('api-docs/api-docs.json'));
+    $path = storage_path('api-docs/api-docs.json');
+
+    return response()->file($path, [
+        'Content-Type' => 'application/json',
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma' => 'no-cache',
+        'Expires' => '0',
+    ]);
 })->name('l5-swagger.default.docs.json');
 
 

@@ -145,6 +145,94 @@ class LeaderboardController extends Controller
 
     /**
      * @OA\Get(
+     *     path="/api/leaderboard/all-time",
+     *     operationId="leaderboardAllTime",
+     *     summary="Tüm zamanlar — en yüksek jeton",
+     *     description="Tüm zaman boyunca en yüksek coin bakiyesine sahip kullanıcıları listeler (yüksekten düşüğe). Response modeli daily/weekly ile aynıdır. limit varsayılan 10.",
+     *     tags={"Leaderboard"},
+     *     security={{"sanctum":{}}},
+     *     @OA\Parameter(
+     *         name="limit",
+     *         in="query",
+     *         description="Kaç kişi döneceği (varsayılan 10)",
+     *         required=false,
+     *         @OA\Schema(type="integer", default=10, minimum=1, example=10)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Başarılı — data içinde sıralı liste",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     @OA\Property(property="rank", type="integer", example=1),
+     *                     @OA\Property(property="user_id", type="integer", example=15),
+     *                     @OA\Property(property="name", type="string", example="muhammed kayacan"),
+     *                     @OA\Property(property="avatar", type="string", nullable=true, example="https://bil-bakalim.com/storage/profile_images/avatars/example.png"),
+     *                     @OA\Property(property="coins_earned", type="integer", example=535000, description="Kullanıcının mevcut coin bakiyesi")
+     *                 ),
+     *                 example={
+     *                     {"rank": 1, "user_id": 15, "name": "muhammed kayacan", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/velVtDSIIzT5twBoln5fntTWTeZ4Wea8N1MpTOtu.png", "coins_earned": 535000},
+     *                     {"rank": 2, "user_id": 48, "name": "Ahmet Özberk", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/rmovT36XGOBjVbgqyNKtlXS7PNm7Q9EbataBamzQ.png", "coins_earned": 148849},
+     *                     {"rank": 3, "user_id": 18, "name": "John", "avatar": "https://bil-bakalim.com/storage/profile_images/ZeBwT6QW6Yd2rvfClGxAYAbdPge4TEwM7pSScPN7.jpg", "coins_earned": 123215},
+     *                     {"rank": 4, "user_id": 17, "name": "John", "avatar": null, "coins_earned": 122876},
+     *                     {"rank": 5, "user_id": 91, "name": "Afife", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/LMP33kM95G0ORXDrVe0sqJbmRODLEcQxBawtslAR.png", "coins_earned": 42085},
+     *                     {"rank": 6, "user_id": 36, "name": "Nagi", "avatar": "https://bil-bakalim.com/storage/profile_images/RgBJadkcENmNQ9u5iPoow24yPUPjb69Ii8cjxJvc.jpg", "coins_earned": 36621},
+     *                     {"rank": 7, "user_id": 38, "name": "Ali K", "avatar": null, "coins_earned": 20975},
+     *                     {"rank": 8, "user_id": 50, "name": "Furkan ŞAHİN", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/bhPNn3UhDaVCkAugNOQHFL8xIgLTYdN2zZlHjiBM.png", "coins_earned": 5077},
+     *                     {"rank": 9, "user_id": 1, "name": "Admin", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/4TE74Yln6EvfDwC7zlWk021MxeOhCHP3FgVMsaFY.png", "coins_earned": 4035},
+     *                     {"rank": 10, "user_id": 93, "name": "aslı", "avatar": null, "coins_earned": 3700}
+     *                 }
+     *             ),
+     *             example={
+     *                 "success": true,
+     *                 "data": {
+     *                     {"rank": 1, "user_id": 15, "name": "muhammed kayacan", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/velVtDSIIzT5twBoln5fntTWTeZ4Wea8N1MpTOtu.png", "coins_earned": 535000},
+     *                     {"rank": 2, "user_id": 48, "name": "Ahmet Özberk", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/rmovT36XGOBjVbgqyNKtlXS7PNm7Q9EbataBamzQ.png", "coins_earned": 148849},
+     *                     {"rank": 3, "user_id": 18, "name": "John", "avatar": "https://bil-bakalim.com/storage/profile_images/ZeBwT6QW6Yd2rvfClGxAYAbdPge4TEwM7pSScPN7.jpg", "coins_earned": 123215},
+     *                     {"rank": 4, "user_id": 17, "name": "John", "avatar": null, "coins_earned": 122876},
+     *                     {"rank": 5, "user_id": 91, "name": "Afife", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/LMP33kM95G0ORXDrVe0sqJbmRODLEcQxBawtslAR.png", "coins_earned": 42085},
+     *                     {"rank": 6, "user_id": 36, "name": "Nagi", "avatar": "https://bil-bakalim.com/storage/profile_images/RgBJadkcENmNQ9u5iPoow24yPUPjb69Ii8cjxJvc.jpg", "coins_earned": 36621},
+     *                     {"rank": 7, "user_id": 38, "name": "Ali K", "avatar": null, "coins_earned": 20975},
+     *                     {"rank": 8, "user_id": 50, "name": "Furkan ŞAHİN", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/bhPNn3UhDaVCkAugNOQHFL8xIgLTYdN2zZlHjiBM.png", "coins_earned": 5077},
+     *                     {"rank": 9, "user_id": 1, "name": "Admin", "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/4TE74Yln6EvfDwC7zlWk021MxeOhCHP3FgVMsaFY.png", "coins_earned": 4035},
+     *                     {"rank": 10, "user_id": 93, "name": "aslı", "avatar": null, "coins_earned": 3700}
+     *                 }
+     *             }
+     *         )
+     *     )
+     * )
+     */
+    public function allTime(Request $request): JsonResponse
+    {
+        $limit = max(1, (int) $request->input('limit', 10));
+
+        $users = User::with('avatarModel')
+            ->orderByDesc('coins')
+            ->limit($limit)
+            ->get();
+
+        $result = $users->values()->map(function ($user, $index) {
+            return [
+                'rank' => $index + 1,
+                'user_id' => $user->id,
+                'name' => trim($user->name . ' ' . $user->surname) ?: 'Bilinmeyen',
+                'avatar' => $this->getUserAvatarUrl($user),
+                'coins_earned' => (int) $user->coins,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $result
+        ]);
+    }
+
+    /**
+     * @OA\Get(
      *     path="/api/leaderboard",
      *     summary="Tüm leaderboard'lar",
      *     description="Günün, haftanın ve son turnuvanın kazananlarını tek bir response'da döndürür",
