@@ -3,14 +3,16 @@
 @section('title', 'Avatarlar')
 
 @section('content')
-<div class="page-title">
-    <div class="row">
-        <div class="col-6"><h3>Avatarlar</h3></div>
-        <div class="col-6">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i data-feather="home"></i></a></li>
-                <li class="breadcrumb-item active">Avatarlar</li>
-            </ol>
+<div class="page-title" style="margin-top: 1rem;">
+    <div class="row align-items-center">
+        <div class="col-12 col-md-6">
+            <h3 class="mb-1">Avatarlar</h3>
+            <p class="text-muted mb-0 small">Liste ve hızlı işlemler</p>
+        </div>
+        <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
+            @can('create avatars')
+                <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#avatarCreateModal">Yeni Avatar</a>
+            @endcan
         </div>
     </div>
 </div>
@@ -18,14 +20,6 @@
 <div class="row">
     <div class="col-sm-12">
         <div class="card">
-            <div class="card-header">
-                <h5>Avatar Listesi</h5>
-                @can('create avatars')
-                <div class="card-header-right">
-                    <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#avatarCreateModal">Yeni Avatar</a>
-                </div>
-                @endcan
-            </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped">

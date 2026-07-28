@@ -3,20 +3,26 @@
 @section('title', 'Yetki Yönetimi')
 
 @section('content')
-<div class="container-fluid">
+<div class="page-title" style="margin-top: 1rem;">
+    <div class="row align-items-center">
+        <div class="col-12 col-md-6">
+            <h3 class="mb-1">Yetki Yönetimi</h3>
+            <p class="text-muted mb-0 small">Rol ve izin yönetimi</p>
+        </div>
+        <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
+            @can('create permissions')
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roleCreateModal">
+                    <i data-feather="plus"></i> Yeni Rol
+                </button>
+            @endcan
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid px-0">
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h4 class="card-title">Yetki Yönetimi</h4>
-                    @can('create permissions')
-                    <div class="card-header-right">
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roleCreateModal">
-                            <i data-feather="plus"></i> Yeni Rol
-                        </button>
-                    </div>
-                    @endcan
-                </div>
                 <div class="card-body">
                     <div class="row">
                         @foreach($roles as $role)

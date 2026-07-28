@@ -449,9 +449,9 @@
 <div class="qas-page">
     <div class="qas-hero d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div>
-            <h3>Soru Cevap Analizi</h3>
+            <h3 class="mb-1">Soru Cevap Analizi</h3>
             <p class="qas-hero-sub">
-                Gerçek kullanıcı cevaplarıyla zorluk ve başarı dağılımını izleyin.
+                Liste, filtre ve analiz özeti
                 @if($lastCalculated)
                     · Son hesaplama: {{ \Carbon\Carbon::parse($lastCalculated)->format('d.m.Y H:i') }}
                 @endif

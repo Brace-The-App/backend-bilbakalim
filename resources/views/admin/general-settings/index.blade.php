@@ -4,22 +4,24 @@
 
 @push('styles')
 <style>
-.page-title {
-    margin-top: 2rem !important;
-    padding-top: 1rem !important;
-}
+.page-title { margin-top: 1rem !important; }
 </style>
 @endpush
 
 @section('content')
-<div class="container-fluid">
+<div class="page-title">
+    <div class="row align-items-center">
+        <div class="col-12">
+            <h3 class="mb-1">Genel Ayarlar</h3>
+            <p class="text-muted mb-0 small">Site ve uygulama ayarları</p>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid px-0">
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h4 class="card-title">Genel Ayarlar</h4>
-
-                </div>
                 <div class="card-body">
                     <!-- Kategoriler -->
                     <div class="row mb-4">

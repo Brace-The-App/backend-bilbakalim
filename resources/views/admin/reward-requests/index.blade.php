@@ -3,14 +3,11 @@
 @section('title', 'Ödül Talepleri')
 
 @section('content')
-<div class="page-title">
-    <div class="row">
-        <div class="col-6"><h3>Ödül Talepleri</h3></div>
-        <div class="col-6">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i data-feather="home"></i></a></li>
-                <li class="breadcrumb-item active">Ödül Talepleri</li>
-            </ol>
+<div class="page-title" style="margin-top: 1rem;">
+    <div class="row align-items-center">
+        <div class="col-12">
+            <h3 class="mb-1">Ödül Talepleri</h3>
+            <p class="text-muted mb-0 small">Bekleyen talepler ve onay işlemleri</p>
         </div>
     </div>
 </div>
@@ -125,8 +122,7 @@
 @push('styles')
 <style>
 .page-title {
-    margin-top: 2rem !important;
-    padding-top: 1rem !important;
+    margin-top: 1rem !important;
 }
 .reward-store-thumb {
     transition: transform 0.15s ease;

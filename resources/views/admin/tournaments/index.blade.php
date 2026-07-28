@@ -4,23 +4,22 @@
 
 @push('styles')
     <style>
-        .page-title {
-            margin-top: 2rem !important;
-            padding-top: 1rem !important;
-        }
+        .page-title { margin-top: 1rem !important; }
     </style>
 @endpush
 
 @section('content')
 
     <div class="page-title">
-        <div class="row">
-            <div class="col-6"><h3>Turnuvalar</h3></div>
-            <div class="col-6">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i data-feather="home"></i></a></li>
-                    <li class="breadcrumb-item active">Turnuvalar</li>
-                </ol>
+        <div class="row align-items-center">
+            <div class="col-12 col-md-6">
+                <h3 class="mb-1">Turnuvalar</h3>
+                <p class="text-muted mb-0 small">Liste, filtre ve hızlı işlemler</p>
+            </div>
+            <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
+                @can('create tournaments')
+                    <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#tournamentCreateModal">Yeni Turnuva</a>
+                @endcan
             </div>
         </div>
     </div>
@@ -28,14 +27,6 @@
     <div class="row">
         <div class="col-sm-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h4 class="card-title">Turnuvalar</h4>
-                    @can('create tournaments')
-                        <div class="card-header-right">
-                            <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#tournamentCreateModal">Yeni Turnuva</a>
-                        </div>
-                    @endcan
-                </div>
                 <div class="card-body">
                     <!-- Filters -->
                     <form method="GET" class="row g-3 mb-4">

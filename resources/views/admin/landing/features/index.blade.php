@@ -3,16 +3,14 @@
 @section('title', 'Özellikler')
 
 @section('content')
-<div class="page-title">
-    <div class="row">
-        <div class="col-6">
-            <h3>Özellikler</h3>
+<div class="page-title" style="margin-top: 1rem;">
+    <div class="row align-items-center">
+        <div class="col-12 col-md-6">
+            <h3 class="mb-1">Özellikler</h3>
+            <p class="text-muted mb-0 small">Landing içerik yönetimi</p>
         </div>
-        <div class="col-6">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i data-feather="home"></i></a></li>
-                <li class="breadcrumb-item active">Özellikler</li>
-            </ol>
+        <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
+            <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#featureCreateModal">Yeni Özellik</a>
         </div>
     </div>
 </div>
@@ -20,12 +18,6 @@
 <div class="row">
     <div class="col-sm-12">
         <div class="card">
-            <div class="card-header">
-                <h5>Özellikler Listesi</h5>
-                <div class="card-header-right">
-                    <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#featureCreateModal">Yeni Özellik</a>
-                </div>
-            </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped">

@@ -3,14 +3,14 @@
 @section('title', 'Reklamlar')
 
 @section('content')
-<div class="page-title">
-    <div class="row">
-        <div class="col-6"><h3>Reklamlar</h3></div>
-        <div class="col-6">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}"><i data-feather="home"></i></a></li>
-                <li class="breadcrumb-item active">Reklamlar</li>
-            </ol>
+<div class="page-title" style="margin-top: 1rem;">
+    <div class="row align-items-center">
+        <div class="col-12 col-md-6">
+            <h3 class="mb-1">Reklamlar</h3>
+            <p class="text-muted mb-0 small">Liste ve içerik yönetimi</p>
+        </div>
+        <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#adCreateModal">Yeni Reklam</button>
         </div>
     </div>
 </div>
@@ -18,10 +18,6 @@
 <div class="row">
     <div class="col-sm-12">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Reklam Listesi</h5>
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#adCreateModal">Yeni Reklam</button>
-            </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped align-middle">
