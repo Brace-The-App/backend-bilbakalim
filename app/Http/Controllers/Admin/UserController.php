@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\WebhookService;
 use App\Models\Duel;
 use App\Models\Package;
 use App\Models\Payment;
@@ -29,6 +30,8 @@ class UserController extends Controller
         if (!in_array($perPage, [10, 25, 50], true)) {
             $perPage = 25;
         }
+
+        $onlineUserIds = app(WebhookService::class)->getOnlineUserIds();
 
         $query = User::with(['package', 'roles', 'avatarModel'])
             ->withCount('rewardRequests')
@@ -60,7 +63,11 @@ class UserController extends Controller
         }
 
         if ($request->filled('online') && $request->online == '1') {
-            $query->where('last_login_at', '>=', now()->subMinute());
+            if (empty($onlineUserIds)) {
+                $query->whereRaw('0 = 1');
+            } else {
+                $query->whereIn('id', $onlineUserIds);
+            }
         }
 
         if ($request->filled('premium') && $request->premium == '1') {
@@ -92,11 +99,14 @@ class UserController extends Controller
                 return $meta['package_snapshot']['name'] ?? null;
             });
 
-        $users->getCollection()->transform(function (User $user) use ($premiumNames) {
+        $onlineLookup = array_fill_keys($onlineUserIds, true);
+
+        $users->getCollection()->transform(function (User $user) use ($premiumNames, $onlineLookup) {
             $user->setAttribute(
                 'premium_package_name',
                 $premiumNames[$user->id] ?? $user->package?->title
             );
+            $user->setAttribute('is_online', isset($onlineLookup[(int) $user->id]));
             return $user;
         });
 
@@ -105,12 +115,12 @@ class UserController extends Controller
 
         $summary = [
             'total' => User::count(),
-            'online' => User::where('last_login_at', '>=', now()->subMinute())->count(),
+            'online' => count($onlineUserIds),
             'suspended' => User::where('account_status', 'suspended')->count(),
             'premium' => User::where('is_premium', true)->count(),
         ];
 
-        return view('admin.users.index', compact('users', 'roles', 'packages', 'summary', 'perPage'));
+        return view('admin.users.index', compact('users', 'roles', 'packages', 'summary', 'perPage', 'onlineUserIds'));
     }
 
     public function create()

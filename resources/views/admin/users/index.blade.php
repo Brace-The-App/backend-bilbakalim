@@ -148,7 +148,7 @@
                 <tbody>
                     @forelse($users as $user)
                     @php
-                        $isOnline = $user->last_login_at && $user->last_login_at->gte(now()->subMinute());
+                        $isOnline = (bool) ($user->is_online ?? false);
                         $fullName = trim($user->name . ' ' . ($user->surname ?? ''));
                         $avatarUrl = $user->avatarModel->image_url
                             ?? (!empty($user->profile_image)

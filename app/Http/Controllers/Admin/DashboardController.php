@@ -10,6 +10,7 @@ use App\Models\Duel;
 use App\Models\Question;
 use App\Models\RewardRequest;
 use App\Models\User;
+use App\Http\Services\WebhookService;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -22,10 +23,12 @@ class DashboardController extends Controller
 
     public function index()
     {
+        $onlineUserIds = app(WebhookService::class)->getOnlineUserIds();
+
         $stats = [
             'total_users' => User::count(),
-            // Aktif = son 1 dakika içinde giriş yapan (çevrimiçi)
-            'active_users' => User::where('last_login_at', '>=', Carbon::now()->subMinute())->count(),
+            // Aktif = socket'e bağlı (gerçek çevrimiçi)
+            'active_users' => count($onlineUserIds),
             'total_questions' => Question::count(),
             'total_categories' => Category::count(),
             'pending_rewards' => RewardRequest::where('status', 'pending')->count(),

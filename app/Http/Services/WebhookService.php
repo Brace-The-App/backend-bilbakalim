@@ -26,7 +26,7 @@ class WebhookService
     {
         try {
             $url = $this->socketUrl . $endpoint;
-            
+
             $response = Http::timeout(5)
                 ->retry(2, 100)
                 ->post($url, $data);
@@ -68,7 +68,7 @@ class WebhookService
     private function scheduleRetry(string $endpoint, array $data, int $retryCount): void
     {
         $delay = $this->retryDelay * $retryCount; // Exponential backoff
-        
+
         // Cache ile retry'ı zamanla (basit implementasyon)
         $cacheKey = "webhook_retry_{$endpoint}_{$retryCount}_" . time();
         Cache::put($cacheKey, [
@@ -197,8 +197,8 @@ class WebhookService
     public function checkWebhookHealth(): array
     {
         try {
-            $response = Http::timeout(5)->get($this->socketUrl . '/health');
-            
+            $response = Http::timeout(5)->get($this->socketUrl . '/socket-webhooks/health');
+
             return [
                 'status' => $response->successful() ? 'healthy' : 'unhealthy',
                 'response_time' => $response->transferStats?->getHandlerStat('total_time') ?? 0,
@@ -222,12 +222,12 @@ class WebhookService
             $response = Http::timeout(3)->post($this->socketUrl . '/socket-webhooks/check-user-connection', [
                 'userId' => $userId
             ]);
-            
+
             if ($response->successful()) {
                 $data = $response->json();
                 return $data['isConnected'] ?? false;
             }
-            
+
             return false;
         } catch (\Exception $e) {
             Log::error('Socket bağlantı kontrolü hatası', [
@@ -247,17 +247,45 @@ class WebhookService
             $response = Http::timeout(5)->post($this->socketUrl . '/socket-webhooks/check-users-connection', [
                 'userIds' => $userIds
             ]);
-            
+
             if ($response->successful()) {
                 $data = $response->json();
                 return $data['connectionStatus'] ?? [];
             }
-            
+
             return [];
         } catch (\Exception $e) {
             Log::error('Çoklu socket bağlantı kontrolü hatası', [
                 'userIds' => $userIds,
                 'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Socket'e bağlı tüm kullanıcı ID'leri (admin aktif/çevrimiçi sayacı).
+     * Kısa cache ile panel yükünü azaltır.
+     *
+     * @return int[]
+     */
+    public function getOnlineUserIds(): array
+    {
+        try {
+            return Cache::remember('socket_online_user_ids', 5, function () {
+                $response = Http::timeout(3)->get($this->socketUrl . '/socket-webhooks/online-users');
+
+                if (!$response->successful()) {
+                    return [];
+                }
+
+                $ids = $response->json('userIds') ?? [];
+
+                return array_values(array_unique(array_map('intval', $ids)));
+            });
+        } catch (\Exception $e) {
+            Log::error('Online kullanıcı listesi alınamadı', [
+                'error' => $e->getMessage(),
             ]);
             return [];
         }

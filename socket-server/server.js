@@ -1536,6 +1536,23 @@ app.get('/socket-webhooks/health', (req, res) => {
     });
 });
 
+// Socket'e bağlı (çevrimiçi) kullanıcı listesi — admin panel için
+app.get('/socket-webhooks/online-users', (req, res) => {
+    const userIds = [];
+    for (const [userId, socketId] of userSocketMap.entries()) {
+        if (socketId && connectedUsers.has(socketId)) {
+            userIds.push(parseInt(userId, 10));
+        }
+    }
+
+    res.json({
+        success: true,
+        count: userIds.length,
+        userIds,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Kullanıcı bağlantı durumu kontrolü
 app.post('/socket-webhooks/check-user-connection', (req, res) => {
     const userId = parseInt(req.body?.userId, 10);
