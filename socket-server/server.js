@@ -1282,7 +1282,7 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
             challenger_id: parseInt(challenger_id),
             opponent_id: parseInt(opponent_id),
             multiplier: multiplier || 'x1',
-            question_value: question_value || 10,
+            question_value: question_value || 1,
             requires_acceptance: requires_acceptance || false, // X2/X4/X8 için true
             timestamp: new Date().toISOString()
         };

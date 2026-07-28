@@ -996,7 +996,7 @@ class DuelController extends Controller
             $opponent = User::findOrFail($duel->opponent_id);
 
             // Soru değeri (multiplier ile çarpılmış)
-            $questionValue = $duel->question_value; // 10 * multiplier
+            $questionValue = $duel->question_value; // 1 * multiplier
 
             // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır
             $opponentLoss = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
@@ -1229,7 +1229,7 @@ class DuelController extends Controller
                 ? max(1, (int) $settings['current_question_multiplier'])
                 : 1;
 
-            // Temel soru değeri (10 * duel multiplier) ve soru bazlı çarpan ile çarpılmış nihai değer
+            // Temel soru değeri (1 * duel multiplier) ve soru bazlı çarpan ile çarpılmış nihai değer
             $baseQuestionValue = $duel->question_value;
             $questionValue = $baseQuestionValue * $currentMultiplier;
 

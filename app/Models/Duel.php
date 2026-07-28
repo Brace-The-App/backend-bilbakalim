@@ -92,10 +92,10 @@ class Duel extends Model
     }
 
     /**
-     * Soru değerini hesapla (multiplier ile)
+     * Soru değerini hesapla (taban 1 coin × multiplier)
      */
     public function getQuestionValueAttribute(): int
     {
-        return 10 * $this->multiplier_value;
+        return $this->multiplier_value;
     }
 }
