@@ -59,6 +59,56 @@ class Question extends Model
         return $this->hasMany(QuestionAdminLog::class);
     }
 
+    /** Tanımlı seviye ile gözlenen zorluk uyumsuz mu (güvenilir veri). */
+    public function hasLevelMismatch(): bool
+    {
+        $stat = $this->answerStat;
+        if (!$stat || !$stat->data_sufficient || (int) $stat->total_answers < 5) {
+            return false;
+        }
+
+        $observed = $stat->observed_difficulty;
+        if (!in_array($observed, ['easy', 'medium', 'hard'], true)) {
+            return false;
+        }
+
+        return $this->question_level !== $observed;
+    }
+
+    /** Şüpheli şık dağılımı (yanlış anahtar / kötü soru adayı). */
+    public function hasSuspiciousAnswers(): bool
+    {
+        $stat = $this->answerStat;
+        $total = (int) ($stat->total_answers ?? 0);
+        if (!$stat || $total < 3) {
+            return false;
+        }
+
+        $counts = [
+            '1' => (int) ($stat->option_1_count ?? 0),
+            '2' => (int) ($stat->option_2_count ?? 0),
+            '3' => (int) ($stat->option_3_count ?? 0),
+            '4' => (int) ($stat->option_4_count ?? 0),
+        ];
+
+        $correct = (string) $this->correct_answer;
+        $correctShare = ($counts[$correct] ?? 0) / $total * 100;
+        if ($correctShare < 10) {
+            return true;
+        }
+
+        foreach ($counts as $key => $count) {
+            if ((string) $key === $correct) {
+                continue;
+            }
+            if (($count / $total * 100) >= 70) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Scopes
     public function scopeActive($query)
     {

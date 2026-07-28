@@ -58,6 +58,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
 
     // Questions management
     Route::post('questions/{question}/toggle-check', [QuestionController::class, 'toggleCheck'])->name('questions.toggle-check');
+    Route::post('questions/{question}/toggle-active', [QuestionController::class, 'toggleActive'])->name('questions.toggle-active');
     Route::resource('questions', QuestionController::class);
 
     // Kullanıcı cevap istatistikleri

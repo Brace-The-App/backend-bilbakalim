@@ -17,13 +17,13 @@ class QuestionController extends Controller
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view questions')->only(['index', 'show']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create questions')->only(['create', 'store']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update', 'toggleCheck']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update', 'toggleCheck', 'toggleActive']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete questions')->only(['destroy']);
     }
 
     public function index(Request $request)
     {
-        $query = Question::with('category');
+        $query = Question::with(['category', 'answerStat']);
 
         // Filtering - Status
         if ($request->filled('status')) {
@@ -38,6 +38,22 @@ class QuestionController extends Controller
         // Filtering - Level
         if ($request->filled('level')) {
             $query->where('question_level', $request->level);
+        }
+
+        // Filtering - Category
+        if ($request->filled('category_id')) {
+            $query->where('category_id', (int) $request->category_id);
+        }
+
+        // Filtering - Kontrol (check)
+        if ($request->filled('check')) {
+            if ($request->check === '0' || $request->check === 0 || $request->check === 'false') {
+                $query->where(function ($q) {
+                    $q->where('check', false)->orWhereNull('check');
+                });
+            } elseif ($request->check === '1' || $request->check === 1 || $request->check === 'true') {
+                $query->where('check', true);
+            }
         }
 
         // Filtering - Search (ID veya soru metni)
@@ -56,7 +72,7 @@ class QuestionController extends Controller
         // Filtering - Language (dil filtresi - birden fazla seçilebilir)
         if ($request->filled('languages')) {
             $languages = is_array($request->languages) ? $request->languages : [$request->languages];
-            $query->where(function($q) use ($languages) {
+            $query->where(function ($q) use ($languages) {
                 foreach ($languages as $lang) {
                     if ($lang === 'tr') {
                         $q->orWhereRaw("JSON_EXTRACT(question, '$.tr') IS NOT NULL AND JSON_EXTRACT(question, '$.tr') != ''");
@@ -99,8 +115,25 @@ class QuestionController extends Controller
                 ->count();
         }
 
-        $questions = $query->latest()->paginate(10);
+        $perPage = (int) $request->input('per_page', 10);
+        if (!in_array($perPage, [10, 25, 50], true)) {
+            $perPage = 10;
+        }
+
+        $questions = $query->latest()->paginate($perPage)->withQueryString();
         $categories = Category::active()->get();
+
+        $summary = [
+            'total' => Question::count(),
+            'active' => Question::where('is_active', true)->count(),
+            'passive' => Question::where('is_active', false)->count(),
+            'easy' => Question::where('question_level', 'easy')->count(),
+            'medium' => Question::where('question_level', 'medium')->count(),
+            'hard' => Question::where('question_level', 'hard')->count(),
+            'unchecked' => Question::where(function ($q) {
+                $q->where('check', false)->orWhereNull('check');
+            })->count(),
+        ];
 
         return view('admin.questions.index', compact(
             'questions',
@@ -109,7 +142,9 @@ class QuestionController extends Controller
             'languageCounts',
             'bilingualCount',
             'trOnlyCount',
-            'enOnlyCount'
+            'enOnlyCount',
+            'summary',
+            'perPage'
         ));
     }
 
@@ -362,6 +397,24 @@ class QuestionController extends Controller
             'success' => true,
             'check' => (int) $question->check,
             'message' => $question->check ? 'Soru kontrol edildi olarak işaretlendi.' : 'Soru kontrol edilmedi olarak işaretlendi.'
+        ]);
+    }
+
+    /**
+     * Soru aktif/pasif durumunu aç/kapat (AJAX).
+     */
+    public function toggleActive(Question $question)
+    {
+        $question->is_active = !$question->is_active;
+        $question->save();
+
+        $webhook = new WebhookController();
+        $webhook->questionUpdated($question, $question->id);
+
+        return response()->json([
+            'success' => true,
+            'is_active' => (bool) $question->is_active,
+            'message' => $question->is_active ? 'Soru aktif edildi.' : 'Soru pasif edildi.',
         ]);
     }
 
