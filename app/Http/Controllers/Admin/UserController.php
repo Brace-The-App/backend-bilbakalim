@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\User;
+use App\Models\Duel;
 use App\Models\Package;
-use Spatie\Permission\Models\Role;
+use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -17,21 +18,35 @@ class UserController extends Controller
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view users')->only(['index', 'show']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create users')->only(['create', 'store']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit users')->only(['edit', 'update']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit users')->only(['edit', 'update', 'toggleStatus']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete users')->only(['destroy']);
     }
 
     public function index(Request $request)
     {
-        $query = User::with(['package', 'roles']);
+        $perPage = (int) $request->input('per_page', 25);
+        if (!in_array($perPage, [10, 25, 50], true)) {
+            $perPage = 25;
+        }
 
-        // Filtering
+        $query = User::with(['package', 'roles', 'avatarModel'])
+            ->withCount('rewardRequests')
+            ->addSelect([
+                'finished_duels_count' => Duel::selectRaw('COUNT(*)')
+                    ->where('status', 'finished')
+                    ->where(function ($q) {
+                        $q->whereColumn('challenger_id', 'users.id')
+                            ->orWhereColumn('opponent_id', 'users.id');
+                    }),
+            ]);
+
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
+                    ->orWhere('surname', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
@@ -43,9 +58,12 @@ class UserController extends Controller
             $query->where('account_status', $request->status);
         }
 
-        // Dashboard "Aktif Kullanıcı": son 1 dk içinde last_login_at
         if ($request->filled('online') && $request->online == '1') {
             $query->where('last_login_at', '>=', now()->subMinute());
+        }
+
+        if ($request->filled('premium') && $request->premium == '1') {
+            $query->where('is_premium', true);
         }
 
         if ($request->filled('package_id')) {
@@ -58,11 +76,18 @@ class UserController extends Controller
             $query->latest();
         }
 
-        $users = $query->paginate(10);
+        $users = $query->paginate($perPage)->withQueryString();
         $roles = Role::all();
         $packages = Package::active()->get();
 
-        return view('admin.users.index', compact('users', 'roles', 'packages'));
+        $summary = [
+            'total' => User::count(),
+            'online' => User::where('last_login_at', '>=', now()->subMinute())->count(),
+            'suspended' => User::where('account_status', 'suspended')->count(),
+            'premium' => User::where('is_premium', true)->count(),
+        ];
+
+        return view('admin.users.index', compact('users', 'roles', 'packages', 'summary', 'perPage'));
     }
 
     public function create()
@@ -92,6 +117,10 @@ class UserController extends Controller
         $user->save();
 
         $user->assignRole($request->role);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Kullanıcı başarıyla oluşturuldu.']);
+        }
 
         return redirect()->route('admin.users.index')->with('success', 'Kullanıcı başarıyla oluşturuldu.');
     }
@@ -133,17 +162,51 @@ class UserController extends Controller
 
         $user->syncRoles([$request->role]);
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Kullanıcı başarıyla güncellendi.']);
+        }
+
         return redirect()->route('admin.users.index')->with('success', 'Kullanıcı başarıyla güncellendi.');
+    }
+
+    public function toggleStatus(Request $request, User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kendi hesabınızın durumunu buradan değiştiremezsiniz.',
+            ], 400);
+        }
+
+        if ($user->account_status === 'suspended') {
+            $user->account_status = 'active';
+            $message = 'Kullanıcı hesabı aktif edildi.';
+        } else {
+            $user->account_status = 'suspended';
+            $message = 'Kullanıcı askıya alındı.';
+        }
+
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'account_status' => $user->account_status,
+        ]);
     }
 
     public function destroy(User $user)
     {
-        // Don't allow deleting the current user
         if ($user->id === auth()->id()) {
             return redirect()->back()->with('error', 'Kendi hesabınızı silemezsiniz.');
         }
 
         $user->delete();
+
+        if (request()->expectsJson() || request()->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Kullanıcı başarıyla silindi.']);
+        }
+
         return redirect()->route('admin.users.index')->with('success', 'Kullanıcı başarıyla silindi.');
     }
 }

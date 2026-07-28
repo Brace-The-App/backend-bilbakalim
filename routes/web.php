@@ -51,6 +51,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
 
     // Users management
     Route::resource('users', UserController::class);
+    Route::post('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');
 
     // Categories management
     Route::resource('categories', CategoryController::class);

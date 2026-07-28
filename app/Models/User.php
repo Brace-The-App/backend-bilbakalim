@@ -143,6 +143,11 @@ class User extends Authenticatable
         return $this->hasMany(Duel::class, 'opponent_id');
     }
 
+    public function rewardRequests()
+    {
+        return $this->hasMany(RewardRequest::class);
+    }
+
     public function avatarModel()
     {
         return $this->belongsTo(Avatar::class, 'avatar');
