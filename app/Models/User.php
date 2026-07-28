@@ -85,6 +85,7 @@ class User extends Authenticatable
         'total_coins' => 'integer',
         'coins' => 'integer',
         'last_login_at' => 'datetime',
+        'premium_expires_at' => 'datetime',
         'account_status' => 'string',
         'is_premium' => 'boolean',
         'fifty_fifty_jokers' => 'integer',

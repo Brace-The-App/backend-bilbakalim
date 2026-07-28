@@ -171,7 +171,14 @@
                                 </div>
                                 <div class="users-person__meta">
                                     <div class="users-person__name">{{ $fullName ?: 'İsimsiz' }}</div>
-                                    <div class="users-person__id text-muted">#{{ $user->id }}@if($user->is_premium) · Premium @endif</div>
+                                    <div class="users-person__id text-muted">
+                                        #{{ $user->id }}
+                                        @if($user->is_premium)
+                                            · <span class="text-warning">Premium{{ !empty($user->premium_package_name) ? ': '.$user->premium_package_name : '' }}</span>
+                                        @elseif(!empty($user->premium_package_name))
+                                            · {{ $user->premium_package_name }}
+                                        @endif
+                                    </div>
                                     <div class="d-md-none small text-muted mt-1">
                                         {{ $user->email ?: '—' }}@if($user->phone)<br>{{ $user->phone }}@endif
                                     </div>
@@ -200,7 +207,8 @@
                         </td>
                         <td class="d-none d-lg-table-cell small text-muted">
                             @if($user->last_login_at)
-                                <span title="{{ $user->last_login_at->format('d.m.Y H:i:s') }}">{{ $user->last_login_at->diffForHumans() }}</span>
+                                @php $lastLogin = \Illuminate\Support\Carbon::parse($user->last_login_at); @endphp
+                                <span title="{{ $lastLogin->format('d.m.Y H:i:s') }}">{{ $lastLogin->diffForHumans() }}</span>
                             @else
                                 —
                             @endif
@@ -217,10 +225,12 @@
                                         data-status="{{ $user->account_status }}"
                                         data-online="{{ $isOnline ? 1 : 0 }}"
                                         data-premium="{{ $user->is_premium ? 1 : 0 }}"
-                                        data-last-login="{{ $user->last_login_at ? $user->last_login_at->format('d.m.Y H:i') : '—' }}"
+                                        data-package-name="{{ $user->premium_package_name ?? '' }}"
+                                        data-premium-expires="{{ $user->premium_expires_at ? \Illuminate\Support\Carbon::parse($user->premium_expires_at)->format('d.m.Y H:i') : '' }}"
+                                        data-last-login="{{ $user->last_login_at ? \Illuminate\Support\Carbon::parse($user->last_login_at)->format('d.m.Y H:i') : '—' }}"
                                         data-duels="{{ (int) ($user->finished_duels_count ?? 0) }}"
                                         data-rewards="{{ (int) ($user->reward_requests_count ?? 0) }}"
-                                        data-registered="{{ $user->created_at->format('d.m.Y H:i') }}">Detay</button>
+                                        data-registered="{{ \Illuminate\Support\Carbon::parse($user->created_at)->format('d.m.Y H:i') }}">Detay</button>
 
                                 <button type="button" class="btn btn-sm btn-outline-warning"
                                         data-bs-toggle="modal" data-bs-target="#userEditModal"
@@ -340,6 +350,8 @@
           <dt class="col-5">Meydan Okuma</dt><dd class="col-7" id="show-duels"></dd>
           <dt class="col-5">Ödül Talebi</dt><dd class="col-7" id="show-rewards"></dd>
           <dt class="col-5">Premium</dt><dd class="col-7" id="show-premium"></dd>
+          <dt class="col-5">Paket</dt><dd class="col-7" id="show-package"></dd>
+          <dt class="col-5">Premium Bitiş</dt><dd class="col-7" id="show-premium-expires"></dd>
         </dl>
       </div>
       <div class="modal-footer">
@@ -579,6 +591,12 @@ $(document).ready(function () {
         $('#show-premium').html(String(b.data('premium')) === '1'
             ? '<span class="badge bg-warning text-dark">Premium</span>'
             : '<span class="text-muted">Hayır</span>');
+        var packageName = b.attr('data-package-name') || '';
+        $('#show-package').html(packageName
+            ? '<span class="badge bg-info text-dark">' + $('<div>').text(packageName).html() + '</span>'
+            : '<span class="text-muted">—</span>');
+        var premiumExpires = b.attr('data-premium-expires') || '';
+        $('#show-premium-expires').text(premiumExpires || '—');
 
         var online = String(b.data('online')) === '1';
         var status = b.data('status');

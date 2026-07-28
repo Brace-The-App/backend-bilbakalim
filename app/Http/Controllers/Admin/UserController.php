@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Duel;
 use App\Models\Package;
+use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -77,6 +78,28 @@ class UserController extends Controller
         }
 
         $users = $query->paginate($perPage)->withQueryString();
+
+        // Premium paket adı users.package_id'de yok; son premium ödemenin metadata'sından al
+        $premiumNames = Payment::query()
+            ->whereIn('user_id', $users->getCollection()->pluck('id'))
+            ->where('status', 'completed')
+            ->where('metadata->type', 'premium')
+            ->orderByDesc('id')
+            ->get(['user_id', 'metadata'])
+            ->groupBy('user_id')
+            ->map(function ($rows) {
+                $meta = $rows->first()->metadata ?? [];
+                return $meta['package_snapshot']['name'] ?? null;
+            });
+
+        $users->getCollection()->transform(function (User $user) use ($premiumNames) {
+            $user->setAttribute(
+                'premium_package_name',
+                $premiumNames[$user->id] ?? $user->package?->title
+            );
+            return $user;
+        });
+
         $roles = Role::all();
         $packages = Package::active()->get();
 
