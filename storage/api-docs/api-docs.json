@@ -15,18 +15,218 @@
     },
     "servers": [
         {
-            "url": "http://localhost",
-            "description": "Local Development Server"
+            "url": "https://bil-bakalim.com",
+            "description": "Production Server"
         }
     ],
     "paths": {
+        "/api/ads/next": {
+            "get": {
+                "tags": [
+                    "Ads"
+                ],
+                "summary": "Rastgele reklam görseli al",
+                "description": "Kullanıcıya rastgele aktif bir reklam görseli döner. Kullanıcı başına en fazla 3 kez izin verilir; 3'ten sonra allowed=false döner. Coin/gösterim client tarafında yönetilir.",
+                "operationId": "088acec6787fb54a7c5337f74530eee4",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "allowed": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "max": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Reklam görseli hazır."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "title": {
+                                                    "type": "string",
+                                                    "example": "Reklam Kırmızı",
+                                                    "nullable": true
+                                                },
+                                                "image_url": {
+                                                    "type": "string",
+                                                    "example": "https://bil-bakalim.com/storage/ads/dummy-red.png"
+                                                }
+                                            },
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "success": true,
+                                    "allowed": true,
+                                    "count": 1,
+                                    "max": 3,
+                                    "message": "Reklam görseli hazır.",
+                                    "data": {
+                                        "id": 1,
+                                        "title": "Reklam Kırmızı",
+                                        "image_url": "https://bil-bakalim.com/storage/ads/dummy-red.png"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/ad-watch/reward": {
+            "post": {
+                "tags": [
+                    "Ad Watch"
+                ],
+                "summary": "Reklam izleme ödülü",
+                "description": "Kullanıcı reklam izledikten sonra +50 coin kazanır",
+                "operationId": "fbfaf0c3888ef98f81ae7d4685a3e5cc",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "ad_id": {
+                                        "description": "Reklam ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "ad_12345"
+                                    },
+                                    "ad_type": {
+                                        "description": "Reklam tipi (opsiyonel)",
+                                        "type": "string",
+                                        "example": "interstitial"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Başarılı - Coin eklendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Reklam izleme ödülü başarıyla verildi."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "coins_earned": {
+                                                    "type": "integer",
+                                                    "example": 50
+                                                },
+                                                "balance_before": {
+                                                    "type": "integer",
+                                                    "example": 100
+                                                },
+                                                "balance_after": {
+                                                    "type": "integer",
+                                                    "example": 150
+                                                },
+                                                "user_coins": {
+                                                    "type": "integer",
+                                                    "example": 150
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata - Zaten bugün reklam izlenmiş olabilir veya başka bir hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Reklam izleme ödülü verilemedi."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "tags": [
                     "Auth"
                 ],
                 "summary": "User Login",
-                "description": "Authenticate user and return access token",
+                "description": "Authenticate user with email or phone and return access token",
                 "operationId": "login",
                 "requestBody": {
                     "required": true,
@@ -34,14 +234,29 @@
                         "application/x-www-form-urlencoded": {
                             "schema": {
                                 "required": [
-                                    "email",
+                                    "type",
                                     "password"
                                 ],
                                 "properties": {
+                                    "type": {
+                                        "description": "Login type: email or phone",
+                                        "type": "string",
+                                        "enum": [
+                                            "email",
+                                            "phone"
+                                        ],
+                                        "example": "email"
+                                    },
                                     "email": {
+                                        "description": "Email address (required when type is 'email')",
                                         "type": "string",
                                         "format": "email",
                                         "example": "user@example.com"
+                                    },
+                                    "phone": {
+                                        "description": "Phone number (required when type is 'phone')",
+                                        "type": "string",
+                                        "example": "+905551234567"
                                     },
                                     "password": {
                                         "type": "string",
@@ -127,35 +342,91 @@
                         "application/x-www-form-urlencoded": {
                             "schema": {
                                 "required": [
-                                    "name",
-                                    "email",
-                                    "phone",
-                                    "password",
-                                    "password_confirmation"
+                                    "phone"
                                 ],
                                 "properties": {
+                                    "phone": {
+                                        "description": "Telefon numarası (zorunlu)",
+                                        "type": "string",
+                                        "example": "05551234567"
+                                    },
                                     "name": {
+                                        "description": "İsim (opsiyonel)",
                                         "type": "string",
                                         "example": "John"
                                     },
                                     "email": {
+                                        "description": "E-posta (opsiyonel)",
                                         "type": "string",
                                         "format": "email",
                                         "example": "john@example.com"
                                     },
-                                    "phone": {
-                                        "type": "string",
-                                        "example": "+905551234567"
-                                    },
                                     "password": {
+                                        "description": "Şifre (opsiyonel)",
                                         "type": "string",
                                         "format": "password",
                                         "example": "password123"
                                     },
                                     "password_confirmation": {
+                                        "description": "Şifre tekrar (opsiyonel, password varsa zorunlu)",
                                         "type": "string",
                                         "format": "password",
                                         "example": "password123"
+                                    },
+                                    "device_id": {
+                                        "description": "FCM Device ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "fcm-device-token-12345"
+                                    },
+                                    "referral_code": {
+                                        "description": "Referans kodu (opsiyonel, 8 karakter)",
+                                        "type": "string",
+                                        "example": "ABC12345"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "phone": {
+                                        "description": "Telefon numarası (zorunlu)",
+                                        "type": "string",
+                                        "example": "05551234567"
+                                    },
+                                    "name": {
+                                        "description": "İsim (opsiyonel)",
+                                        "type": "string",
+                                        "example": "John"
+                                    },
+                                    "email": {
+                                        "description": "E-posta (opsiyonel)",
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    },
+                                    "password": {
+                                        "description": "Şifre (opsiyonel)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "password123"
+                                    },
+                                    "password_confirmation": {
+                                        "description": "Şifre tekrar (opsiyonel, password varsa zorunlu)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "password123"
+                                    },
+                                    "device_id": {
+                                        "description": "FCM Device ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "fcm-device-token-12345"
+                                    },
+                                    "referral_code": {
+                                        "description": "Referans kodu (opsiyonel, 8 karakter)",
+                                        "type": "string",
+                                        "example": "ABC12345"
                                     }
                                 },
                                 "type": "object"
@@ -218,6 +489,240 @@
                 }
             }
         },
+        "/api/me/update": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Update User Profile",
+                "description": "Update authenticated user's profile information",
+                "operationId": "updateProfile",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "description": "İsim (opsiyonel)",
+                                        "type": "string",
+                                        "example": "John"
+                                    },
+                                    "email": {
+                                        "description": "E-posta (opsiyonel)",
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    },
+                                    "phone": {
+                                        "description": "Telefon numarası (opsiyonel)",
+                                        "type": "string",
+                                        "example": "+905551234567"
+                                    },
+                                    "password": {
+                                        "description": "Şifre (opsiyonel)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "password_confirmation": {
+                                        "description": "Şifre tekrar (opsiyonel, password varsa zorunlu)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "profile_image": {
+                                        "description": "Profil resmi (opsiyonel, max: 2MB). Dosya olarak gönderilebilir veya base64 string formatında gönderilebilir (data:image/png;base64,...)",
+                                        "type": "string",
+                                        "format": "binary",
+                                        "example": ""
+                                    },
+                                    "avatar_id": {
+                                        "description": "Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "device_id": {
+                                        "description": "FCM Device ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "fcm-device-token-12345"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "description": "İsim (opsiyonel)",
+                                        "type": "string",
+                                        "example": "John"
+                                    },
+                                    "email": {
+                                        "description": "E-posta (opsiyonel)",
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    },
+                                    "phone": {
+                                        "description": "Telefon numarası (opsiyonel)",
+                                        "type": "string",
+                                        "example": "+905551234567"
+                                    },
+                                    "password": {
+                                        "description": "Şifre (opsiyonel)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "password_confirmation": {
+                                        "description": "Şifre tekrar (opsiyonel, password varsa zorunlu)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "profile_image": {
+                                        "description": "Profil resmi base64 string formatında (opsiyonel, max: 2MB). Format: data:image/png;base64,... veya sadece base64 string",
+                                        "type": "string",
+                                        "example": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+                                    },
+                                    "avatar_id": {
+                                        "description": "Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "device_id": {
+                                        "description": "FCM Device ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "fcm-device-token-12345"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "description": "İsim (opsiyonel)",
+                                        "type": "string",
+                                        "example": "John"
+                                    },
+                                    "email": {
+                                        "description": "E-posta (opsiyonel)",
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    },
+                                    "phone": {
+                                        "description": "Telefon numarası (opsiyonel)",
+                                        "type": "string",
+                                        "example": "+905551234567"
+                                    },
+                                    "password": {
+                                        "description": "Şifre (opsiyonel)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "password_confirmation": {
+                                        "description": "Şifre tekrar (opsiyonel, password varsa zorunlu)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "newpassword123"
+                                    },
+                                    "avatar_id": {
+                                        "description": "Avatar ID (opsiyonel). Eğer avatar_id gönderilirse, avatar'ın görseli profile_image olarak ayarlanır",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "device_id": {
+                                        "description": "FCM Device ID (opsiyonel)",
+                                        "type": "string",
+                                        "example": "fcm-device-token-12345"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Profile updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Kullanıcı bilgilerini bir şekilde güncellediniz."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "user": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "errors": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/auth/me": {
             "get": {
                 "tags": [
@@ -243,8 +748,524 @@
                                         },
                                         "data": {
                                             "properties": {
-                                                "user": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Test User"
+                                                },
+                                                "coins": {
+                                                    "type": "integer",
+                                                    "example": 1200
+                                                },
+                                                "diamonds": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "is_premium": {
+                                                    "description": "RevenueCat sonucuna göre hesaplanan premium durumu",
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "revenuecat": {
+                                                    "properties": {
+                                                        "checked": {
+                                                            "type": "boolean",
+                                                            "example": true
+                                                        },
+                                                        "is_premium": {
+                                                            "type": "boolean",
+                                                            "example": true
+                                                        },
+                                                        "entitlements": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string",
+                                                                "example": "premium"
+                                                            }
+                                                        },
+                                                        "error": {
+                                                            "type": "string",
+                                                            "example": null,
+                                                            "nullable": true
+                                                        }
+                                                    },
                                                     "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/logout": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "User Logout",
+                "description": "Logout authenticated user and revoke all access tokens",
+                "operationId": "logout",
+                "responses": {
+                    "200": {
+                        "description": "Logout successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Başarılı bir şekilde çıkış yapıldı."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/referral/my-code": {
+            "get": {
+                "tags": [
+                    "Referral"
+                ],
+                "summary": "Kullanıcının kendi referral kodunu getir",
+                "description": "Kullanıcının kendi unique referral kodunu döndürür",
+                "operationId": "34b954d682ed93e9380ec6619057aa36",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "referral_code": {
+                                                    "type": "string",
+                                                    "example": "ABC12345"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/referral/can-use": {
+            "get": {
+                "tags": [
+                    "Referral"
+                ],
+                "summary": "Referral kod kullanabilir mi kontrolü",
+                "description": "Kullanıcının daha önce referral kod kullanıp kullanmadığını kontrol eder. Eğer false dönerse, referral kod girişi gösterilmez.",
+                "operationId": "6a6fda24d468cf2c3385acad50db90a9",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "can_use": {
+                                                    "description": "false ise referral kod girişi gösterilmez",
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/auth/delete-account": {
+            "delete": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Hesap Silme",
+                "description": "Kullanıcının hesabını kalıcı olarak siler. Tüm token'lar iptal edilir ve kullanıcı verileri silinir.",
+                "operationId": "deleteAccount",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "password": {
+                                        "description": "Şifre doğrulama (opsiyonel)",
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "password123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Hesap başarıyla silindi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Hesabınız başarıyla silindi."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Şifre yanlış",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Şifre yanlış."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/avatars": {
+            "get": {
+                "tags": [
+                    "Avatars"
+                ],
+                "summary": "Aktif avatarları listele",
+                "operationId": "f8e8993dba13f1632af16cb0d9ff220f",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "image_url": {
+                                                        "type": "string",
+                                                        "example": "https://example.com/storage/avatars/avatar1.jpg"
+                                                    },
+                                                    "is_active": {
+                                                        "type": "boolean",
+                                                        "example": true
+                                                    },
+                                                    "sort_order": {
+                                                        "type": "integer",
+                                                        "example": 0
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/coin-history": {
+            "get": {
+                "tags": [
+                    "Coin History"
+                ],
+                "summary": "Jeton geçmişi",
+                "description": "Kullanıcının kazandığı ve kaybettiği jetonları listeler. Son 5, 15, 30 gün filtreleme yapılabilir.",
+                "operationId": "4a462d447492eeb57f9a35fb8150f80d",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "İşlem tipi: earned (kazanç), spent (kayıp), all (hepsi)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "all",
+                            "enum": [
+                                "earned",
+                                "spent",
+                                "all"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "days",
+                        "in": "query",
+                        "description": "Son kaç gün: 5, 15, 30",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                5,
+                                15,
+                                30
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "earned": {
+                                                    "description": "Kazanılan jetonlar",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "coin_amount": {
+                                                                "type": "integer",
+                                                                "example": 50
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Reklam izleme ödülü"
+                                                            },
+                                                            "transaction_type": {
+                                                                "type": "string",
+                                                                "example": "earned"
+                                                            },
+                                                            "balance_before": {
+                                                                "type": "integer",
+                                                                "example": 100
+                                                            },
+                                                            "balance_after": {
+                                                                "type": "integer",
+                                                                "example": 150
+                                                            },
+                                                            "date": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06 14:30:00"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "spent": {
+                                                    "description": "Kaybedilen jetonlar",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 2
+                                                            },
+                                                            "coin_amount": {
+                                                                "type": "integer",
+                                                                "example": -50
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Günlük Quiz"
+                                                            },
+                                                            "transaction_type": {
+                                                                "type": "string",
+                                                                "example": "spent"
+                                                            },
+                                                            "balance_before": {
+                                                                "type": "integer",
+                                                                "example": 300
+                                                            },
+                                                            "balance_after": {
+                                                                "type": "integer",
+                                                                "example": 250
+                                                            },
+                                                            "date": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06 15:00:00"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "game_transactions": {
+                                                    "description": "Oyun başlangıç ve bitiş işlemleri",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "game_id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "game_type": {
+                                                                "type": "string",
+                                                                "example": "normal"
+                                                            },
+                                                            "start_balance": {
+                                                                "type": "integer",
+                                                                "example": 300
+                                                            },
+                                                            "end_balance": {
+                                                                "type": "integer",
+                                                                "example": 250
+                                                            },
+                                                            "coin_change": {
+                                                                "type": "integer",
+                                                                "example": -50
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Günlük Quiz"
+                                                            },
+                                                            "started_at": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06 14:00:00"
+                                                            },
+                                                            "completed_at": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06 15:00:00"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
                                                 }
                                             },
                                             "type": "object"
@@ -316,7 +1337,12 @@
                             }
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
             }
         },
         "/api/coin-purchases": {
@@ -454,6 +1480,1415 @@
                 ]
             }
         },
+        "/api/coin-purchases/purchase": {
+            "post": {
+                "tags": [
+                    "Coin Purchases"
+                ],
+                "summary": "Jeton Satın Al",
+                "description": "Mobil ödeme yapıldıktan sonra jeton satın alma işlemini tamamlar.",
+                "operationId": "f1e79da1256c23f47519e74a3aa31dee",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "package_id": {
+                                        "description": "Paket ID'si",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "payment_id": {
+                                        "description": "Mobil ödeme ID'si",
+                                        "type": "string",
+                                        "example": "payment_123"
+                                    },
+                                    "payment_provider": {
+                                        "description": "Ödeme sağlayıcısı",
+                                        "type": "string",
+                                        "enum": [
+                                            "google",
+                                            "apple"
+                                        ],
+                                        "example": "google"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "package_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "payment_id": {
+                                        "type": "string",
+                                        "example": "payment_123"
+                                    },
+                                    "payment_provider": {
+                                        "type": "string",
+                                        "enum": [
+                                            "google",
+                                            "apple"
+                                        ],
+                                        "example": "google"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Jeton başarıyla yüklendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Jeton başarıyla yüklendi."
+                                        },
+                                        "coin_amount": {
+                                            "type": "integer",
+                                            "example": 100
+                                        },
+                                        "bonus_coins": {
+                                            "type": "integer",
+                                            "example": 10
+                                        },
+                                        "total_coins": {
+                                            "type": "integer",
+                                            "example": 110
+                                        },
+                                        "new_balance": {
+                                            "type": "integer",
+                                            "example": 1110
+                                        },
+                                        "purchase": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu paket aktif değil."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/diamond/balance": {
+            "get": {
+                "tags": [
+                    "Diamond"
+                ],
+                "summary": "Elmas Bakiyesi",
+                "description": "Kullanıcının elmas bakiyesini getirir.",
+                "operationId": "92da12ef159416dc6a01e2777bcbc2ce",
+                "responses": {
+                    "200": {
+                        "description": "Elmas bakiyesi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "balance": {
+                                            "type": "integer",
+                                            "example": 100
+                                        },
+                                        "user_id": {
+                                            "type": "integer",
+                                            "example": 1
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/diamond/packages": {
+            "get": {
+                "tags": [
+                    "Diamond"
+                ],
+                "summary": "Elmas Paketleri",
+                "description": "Satın alınabilecek elmas paketlerini listeler.",
+                "operationId": "4d282381d89b9ee47c221fa3099c3092",
+                "responses": {
+                    "200": {
+                        "description": "Elmas paketleri",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "packages": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "10 Elmas"
+                                                    },
+                                                    "diamond_amount": {
+                                                        "type": "integer",
+                                                        "example": 10
+                                                    },
+                                                    "price": {
+                                                        "type": "number",
+                                                        "example": 14
+                                                    },
+                                                    "gross_price": {
+                                                        "type": "number",
+                                                        "example": 10
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/diamond/purchase": {
+            "post": {
+                "tags": [
+                    "Diamond"
+                ],
+                "summary": "Elmas Satın Al",
+                "description": "Mobil ödeme yapıldıktan sonra elmas satın alma işlemini tamamlar.",
+                "operationId": "3c4e72e0d2999dae9ad8b9c07e539818",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "package_id": {
+                                        "description": "Paket ID'si",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "payment_id": {
+                                        "description": "Mobil ödeme ID'si",
+                                        "type": "string",
+                                        "example": "payment_123"
+                                    },
+                                    "payment_provider": {
+                                        "description": "Ödeme sağlayıcısı",
+                                        "type": "string",
+                                        "enum": [
+                                            "google",
+                                            "apple"
+                                        ],
+                                        "example": "google"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "package_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "payment_id": {
+                                        "type": "string",
+                                        "example": "payment_123"
+                                    },
+                                    "payment_provider": {
+                                        "type": "string",
+                                        "enum": [
+                                            "google",
+                                            "apple"
+                                        ],
+                                        "example": "google"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Elmas başarıyla yüklendi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Elmas başarıyla yüklendi."
+                                        },
+                                        "diamond_amount": {
+                                            "type": "integer",
+                                            "example": 10
+                                        },
+                                        "new_balance": {
+                                            "type": "integer",
+                                            "example": 110
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu paket aktif değil."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/diamond/transfer-to-card": {
+            "post": {
+                "tags": [
+                    "Diamond"
+                ],
+                "summary": "Elması Karta Aktar",
+                "description": "Elması BilBakalım kartına aktarır (1 elmas = 100 coin).",
+                "operationId": "87b574a126fed876ce9cf0eaecca875b",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "amount": {
+                                        "description": "Aktarılacak elmas miktarı",
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "example": 100
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "amount": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "example": 100
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Elmas başarıyla karta aktarıldı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Elmas başarıyla karta aktarıldı."
+                                        },
+                                        "diamond_amount": {
+                                            "type": "integer",
+                                            "example": 100
+                                        },
+                                        "coin_amount": {
+                                            "type": "integer",
+                                            "example": 10000
+                                        },
+                                        "new_diamond_balance": {
+                                            "type": "integer",
+                                            "example": 0
+                                        },
+                                        "new_coin_balance": {
+                                            "type": "integer",
+                                            "example": 10000
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Yetersiz elmas bakiyesi."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/question-multiplier/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Soru Bazlı 2x/3x Teklif Et",
+                "description": "Aktif düellodaki mevcut soru için 2x/3x coin çarpanı teklifi gönderir. Teklif rakibe socket üzerinden iletilir.",
+                "operationId": "69bc66c82e5a496a40d095e6d07c4137",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "question_id": {
+                                        "description": "Mevcut sorunun ID'si",
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "multiplier": {
+                                        "description": "Soru bazlı çarpan değeri (2x, 3x, 4x veya 8x)",
+                                        "type": "integer",
+                                        "enum": [
+                                            2,
+                                            4,
+                                            6,
+                                            8
+                                        ],
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "multiplier": {
+                                        "type": "integer",
+                                        "enum": [
+                                            2,
+                                            4,
+                                            6,
+                                            8
+                                        ],
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Teklif oluşturuldu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Soru için çarpan teklifi gönderildi."
+                                        },
+                                        "bet": {
+                                            "properties": {
+                                                "question_id": {
+                                                    "type": "integer",
+                                                    "example": 123
+                                                },
+                                                "initiator_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "opponent_id": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "multiplier": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "pending"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu soru için zaten bekleyen bir teklif var."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Yetki yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düelloya erişim yetkiniz yok."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/question-multiplier/respond/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Soru Bazlı 2x/3x Teklifine Cevap Ver",
+                "description": "Rakipten gelen soru bazlı 2x/3x teklifini kabul eder veya reddeder. Kabul edilirse sadece o soru için çarpan uygulanır, reddedilirse teklifi yapan düelloyu kazanır.",
+                "operationId": "62ac06fe6bd9b0c551da3679167e0c47",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "question_id": {
+                                        "description": "Teklif yapılan sorunun ID'si",
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "accept": {
+                                        "description": "true: kabul, false: reddet",
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "question_id": {
+                                        "type": "integer",
+                                        "example": 123
+                                    },
+                                    "accept": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Kabul: bet ve message döner. Reddet: bet, message ve winner_id döner.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Teklif kabul edildi. Bu soru için çarpan uygulandı."
+                                        },
+                                        "bet": {
+                                            "properties": {
+                                                "question_id": {
+                                                    "type": "integer",
+                                                    "example": 123
+                                                },
+                                                "initiator_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "opponent_id": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "multiplier": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "accepted"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "winner_id": {
+                                            "description": "Sadece accept=false (red) durumunda döner",
+                                            "type": "integer",
+                                            "example": 1
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu soru için bekleyen bir teklif bulunmuyor."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Yetki yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düelloya erişim yetkiniz yok."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/create": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Düello Oluştur",
+                "description": "Yeni bir düello oluşturur. X1 otomatik başlar, X2/X4/X8 karşı tarafa istek gönderir.",
+                "operationId": "8e3a9f5f4f99513827dd1260d0bddec2",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "multiplier": {
+                                        "description": "Çarpan değeri",
+                                        "type": "string",
+                                        "enum": [
+                                            "x1",
+                                            "x2",
+                                            "x4",
+                                            "x8"
+                                        ],
+                                        "example": "x2"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "multiplier": {
+                                        "type": "string",
+                                        "enum": [
+                                            "x1",
+                                            "x2",
+                                            "x4",
+                                            "x8"
+                                        ],
+                                        "example": "x2"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Düello başarıyla oluşturuldu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düello başladı!"
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        },
+                                        "question": {
+                                            "type": "object",
+                                            "nullable": true
+                                        },
+                                        "auto_started": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düello için yeterli coin gereklidir."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/status/{duel_id}": {
+            "get": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Düello Durumu",
+                "description": "Düello durumunu, mevcut soruyu ve oyuncu bilgilerini getirir.",
+                "operationId": "9cf9f389cbae5663df48ca6293c3a25e",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Düello durumu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Erişim yetkisi yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düelloya erişim yetkiniz yok."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/list": {
+            "get": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Aktif Düello Listesi",
+                "description": "Katılımcı bekleyen ve kullanıcının içinde bulunduğu aktif düelloları listeler.",
+                "operationId": "09254ab32f020623e5125f7da98526b6",
+                "responses": {
+                    "200": {
+                        "description": "Düello listesi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "waiting_duels": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "active_duels": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/accept/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Düelloyu Kabul Et",
+                "description": "X2/X4/X8 düello isteğini kabul eder ve düelloyu başlatır.",
+                "operationId": "e5e7efdd21593e634c78823f197751af",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Düello başladı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düello başladı!"
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        },
+                                        "question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Yetki yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düelloyu kabul etme yetkiniz yok."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/join/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Açık Düelloya Katıl",
+                "description": "Katılımcı bekleyen (opponentsiz) bir düelloya katılır ve düelloyu başlatır.",
+                "operationId": "82e8ee92f62de1af8a48793b964ffd35",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Düello başladı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düello başladı!"
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        },
+                                        "question": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düelloya katılamazsınız."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/reject/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Düelloyu Reddet",
+                "description": "X2/X4/X8 düello isteğini reddeder. Reddedilirse isteği gönderen otomatik kazanır.",
+                "operationId": "999ee90d24bed94654f37dcb809fedb9",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Düello reddedildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düello reddedildi. İsteği gönderen kazandı."
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        },
+                                        "winner_id": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "coins_transferred": {
+                                            "type": "integer",
+                                            "example": 18
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Normal düello reddedilemez."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/leave/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Düellodan Çekil",
+                "description": "Aktif düellodan çekilir. Rakip otomatik kazanır.",
+                "operationId": "89d721884a7bf3f2c5195824762637bc",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Düellodan çekildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Düellodan çekildiniz."
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu düello zaten bitmiş."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/answer/{duel_id}": {
+            "post": {
+                "tags": [
+                    "Duel"
+                ],
+                "summary": "Cevap Gönder",
+                "description": "Düello sorusuna cevap gönderir. Her iki oyuncu da cevap verdiğinde coin transferi yapılır.",
+                "operationId": "a9f0ac239ac8af12e6dc0c6cedc5eb47",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "path",
+                        "description": "Düello ID'si",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "properties": {
+                                    "selected_answer": {
+                                        "description": "Seçilen cevap",
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ],
+                                        "example": "2"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "selected_answer": {
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ],
+                                        "example": "2"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cevap gönderildi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "correct_answer": {
+                                            "type": "string",
+                                            "example": "2"
+                                        },
+                                        "both_answered": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "waiting_for_opponent": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Hata",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Bu soruya zaten cevap verdiniz."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/friend-invites/create": {
             "post": {
                 "tags": [
@@ -533,6 +2968,83 @@
                                                 }
                                             },
                                             "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/gift-card-stores": {
+            "get": {
+                "tags": [
+                    "Gift Card Stores"
+                ],
+                "summary": "Hediye kartı geçen mağaza ve market logolarını listele",
+                "description": "Her marka için id + image_url döner. Ödül talebinde (POST /api/reward/claim) kullanıcının seçtiği markanın id değeri gift_card_store_id olarak gönderilmelidir.",
+                "operationId": "73cc040e1b7441c43724eab3775bf43d",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Tip filtresi: market veya mağaza",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "market",
+                                "mağaza"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "description": "Marka id — claim isteğinde gift_card_store_id olarak gönderilir",
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "type": {
+                                                        "type": "string",
+                                                        "example": "market"
+                                                    },
+                                                    "image_url": {
+                                                        "type": "string",
+                                                        "example": "https://example.com/storage/gift-card-stores/store1.jpg"
+                                                    },
+                                                    "is_active": {
+                                                        "type": "boolean",
+                                                        "example": true
+                                                    },
+                                                    "sort_order": {
+                                                        "type": "integer",
+                                                        "example": 0
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
                                         }
                                     },
                                     "type": "object"
@@ -1137,6 +3649,519 @@
                 }
             }
         },
+        "/api/leaderboard/daily": {
+            "get": {
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Günün kazananları",
+                "description": "Bugün en çok coin kazanan 5 kişiyi listeler",
+                "operationId": "ee918fd7ce3ef2dd631b7a70d97edef6",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "rank": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "user_id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "Samet Çakır"
+                                                    },
+                                                    "avatar": {
+                                                        "type": "string",
+                                                        "example": "https://example.com/avatar.jpg"
+                                                    },
+                                                    "coins_earned": {
+                                                        "type": "integer",
+                                                        "example": 1645
+                                                    },
+                                                    "date": {
+                                                        "type": "string",
+                                                        "example": "2025-01-06"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/leaderboard/weekly": {
+            "get": {
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Haftanın kazananları",
+                "description": "Bu hafta en çok coin kazanan 5 kişiyi listeler",
+                "operationId": "91cb2031721b533f3dd4ad637fd7ed33",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "rank": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "user_id": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "Samet Çakır"
+                                                    },
+                                                    "avatar": {
+                                                        "type": "string",
+                                                        "example": "https://example.com/avatar.jpg"
+                                                    },
+                                                    "coins_earned": {
+                                                        "type": "integer",
+                                                        "example": 1645
+                                                    },
+                                                    "week_start": {
+                                                        "type": "string",
+                                                        "example": "2025-01-06"
+                                                    },
+                                                    "week_end": {
+                                                        "type": "string",
+                                                        "example": "2025-01-12"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/leaderboard/all-time": {
+            "get": {
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Tüm zamanlar — en yüksek jeton",
+                "description": "Tüm zaman boyunca en yüksek coin bakiyesine sahip kullanıcıları listeler (yüksekten düşüğe). Response modeli daily/weekly ile aynıdır. limit varsayılan 10.",
+                "operationId": "leaderboardAllTime",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Kaç kişi döneceği (varsayılan 10)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 10,
+                            "minimum": 1,
+                            "example": 10
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Başarılı — data içinde sıralı liste",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "rank": {
+                                                        "type": "integer",
+                                                        "example": 1
+                                                    },
+                                                    "user_id": {
+                                                        "type": "integer",
+                                                        "example": 15
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "muhammed kayacan"
+                                                    },
+                                                    "avatar": {
+                                                        "type": "string",
+                                                        "example": "https://bil-bakalim.com/storage/profile_images/avatars/example.png",
+                                                        "nullable": true
+                                                    },
+                                                    "coins_earned": {
+                                                        "description": "Kullanıcının mevcut coin bakiyesi",
+                                                        "type": "integer",
+                                                        "example": 535000
+                                                    }
+                                                },
+                                                "type": "object"
+                                            },
+                                            "example": [
+                                                {
+                                                    "rank": 1,
+                                                    "user_id": 15,
+                                                    "name": "muhammed kayacan",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/velVtDSIIzT5twBoln5fntTWTeZ4Wea8N1MpTOtu.png",
+                                                    "coins_earned": 535000
+                                                },
+                                                {
+                                                    "rank": 2,
+                                                    "user_id": 48,
+                                                    "name": "Ahmet Özberk",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/rmovT36XGOBjVbgqyNKtlXS7PNm7Q9EbataBamzQ.png",
+                                                    "coins_earned": 148849
+                                                },
+                                                {
+                                                    "rank": 3,
+                                                    "user_id": 18,
+                                                    "name": "John",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/ZeBwT6QW6Yd2rvfClGxAYAbdPge4TEwM7pSScPN7.jpg",
+                                                    "coins_earned": 123215
+                                                },
+                                                {
+                                                    "rank": 4,
+                                                    "user_id": 17,
+                                                    "name": "John",
+                                                    "avatar": null,
+                                                    "coins_earned": 122876
+                                                },
+                                                {
+                                                    "rank": 5,
+                                                    "user_id": 91,
+                                                    "name": "Afife",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/LMP33kM95G0ORXDrVe0sqJbmRODLEcQxBawtslAR.png",
+                                                    "coins_earned": 42085
+                                                },
+                                                {
+                                                    "rank": 6,
+                                                    "user_id": 36,
+                                                    "name": "Nagi",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/RgBJadkcENmNQ9u5iPoow24yPUPjb69Ii8cjxJvc.jpg",
+                                                    "coins_earned": 36621
+                                                },
+                                                {
+                                                    "rank": 7,
+                                                    "user_id": 38,
+                                                    "name": "Ali K",
+                                                    "avatar": null,
+                                                    "coins_earned": 20975
+                                                },
+                                                {
+                                                    "rank": 8,
+                                                    "user_id": 50,
+                                                    "name": "Furkan ŞAHİN",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/bhPNn3UhDaVCkAugNOQHFL8xIgLTYdN2zZlHjiBM.png",
+                                                    "coins_earned": 5077
+                                                },
+                                                {
+                                                    "rank": 9,
+                                                    "user_id": 1,
+                                                    "name": "Admin",
+                                                    "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/4TE74Yln6EvfDwC7zlWk021MxeOhCHP3FgVMsaFY.png",
+                                                    "coins_earned": 4035
+                                                },
+                                                {
+                                                    "rank": 10,
+                                                    "user_id": 93,
+                                                    "name": "aslı",
+                                                    "avatar": null,
+                                                    "coins_earned": 3700
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "success": true,
+                                    "data": [
+                                        {
+                                            "rank": 1,
+                                            "user_id": 15,
+                                            "name": "muhammed kayacan",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/velVtDSIIzT5twBoln5fntTWTeZ4Wea8N1MpTOtu.png",
+                                            "coins_earned": 535000
+                                        },
+                                        {
+                                            "rank": 2,
+                                            "user_id": 48,
+                                            "name": "Ahmet Özberk",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/rmovT36XGOBjVbgqyNKtlXS7PNm7Q9EbataBamzQ.png",
+                                            "coins_earned": 148849
+                                        },
+                                        {
+                                            "rank": 3,
+                                            "user_id": 18,
+                                            "name": "John",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/ZeBwT6QW6Yd2rvfClGxAYAbdPge4TEwM7pSScPN7.jpg",
+                                            "coins_earned": 123215
+                                        },
+                                        {
+                                            "rank": 4,
+                                            "user_id": 17,
+                                            "name": "John",
+                                            "avatar": null,
+                                            "coins_earned": 122876
+                                        },
+                                        {
+                                            "rank": 5,
+                                            "user_id": 91,
+                                            "name": "Afife",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/LMP33kM95G0ORXDrVe0sqJbmRODLEcQxBawtslAR.png",
+                                            "coins_earned": 42085
+                                        },
+                                        {
+                                            "rank": 6,
+                                            "user_id": 36,
+                                            "name": "Nagi",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/RgBJadkcENmNQ9u5iPoow24yPUPjb69Ii8cjxJvc.jpg",
+                                            "coins_earned": 36621
+                                        },
+                                        {
+                                            "rank": 7,
+                                            "user_id": 38,
+                                            "name": "Ali K",
+                                            "avatar": null,
+                                            "coins_earned": 20975
+                                        },
+                                        {
+                                            "rank": 8,
+                                            "user_id": 50,
+                                            "name": "Furkan ŞAHİN",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/bhPNn3UhDaVCkAugNOQHFL8xIgLTYdN2zZlHjiBM.png",
+                                            "coins_earned": 5077
+                                        },
+                                        {
+                                            "rank": 9,
+                                            "user_id": 1,
+                                            "name": "Admin",
+                                            "avatar": "https://bil-bakalim.com/storage/profile_images/avatars/4TE74Yln6EvfDwC7zlWk021MxeOhCHP3FgVMsaFY.png",
+                                            "coins_earned": 4035
+                                        },
+                                        {
+                                            "rank": 10,
+                                            "user_id": 93,
+                                            "name": "aslı",
+                                            "avatar": null,
+                                            "coins_earned": 3700
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/leaderboard": {
+            "get": {
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Tüm leaderboard'lar",
+                "description": "Günün, haftanın ve son turnuvanın kazananlarını tek bir response'da döndürür",
+                "operationId": "502dab6bff6ae72d6f2e011c0910a333",
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "daily": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "rank": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "user_id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "name": {
+                                                                "type": "string",
+                                                                "example": "Samet Çakır"
+                                                            },
+                                                            "avatar": {
+                                                                "type": "string",
+                                                                "example": "https://example.com/avatar.jpg"
+                                                            },
+                                                            "coins_earned": {
+                                                                "type": "integer",
+                                                                "example": 1645
+                                                            },
+                                                            "date": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "weekly": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "rank": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "user_id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "name": {
+                                                                "type": "string",
+                                                                "example": "Samet Çakır"
+                                                            },
+                                                            "avatar": {
+                                                                "type": "string",
+                                                                "example": "https://example.com/avatar.jpg"
+                                                            },
+                                                            "coins_earned": {
+                                                                "type": "integer",
+                                                                "example": 1645
+                                                            },
+                                                            "week_start": {
+                                                                "type": "string",
+                                                                "example": "2025-01-06"
+                                                            },
+                                                            "week_end": {
+                                                                "type": "string",
+                                                                "example": "2025-01-12"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "tournament": {
+                                                    "properties": {
+                                                        "tournament_id": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "tournament_title": {
+                                                            "type": "string",
+                                                            "example": "Haftalık Turnuva"
+                                                        },
+                                                        "tournament_end_date": {
+                                                            "type": "string",
+                                                            "example": "2025-01-06 20:00:00"
+                                                        },
+                                                        "winners": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "properties": {
+                                                                    "rank": {
+                                                                        "type": "integer",
+                                                                        "example": 1
+                                                                    },
+                                                                    "user_id": {
+                                                                        "type": "integer",
+                                                                        "example": 1
+                                                                    },
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "example": "Samet Çakır"
+                                                                    },
+                                                                    "avatar": {
+                                                                        "type": "string",
+                                                                        "example": "https://example.com/avatar.jpg"
+                                                                    },
+                                                                    "score": {
+                                                                        "type": "integer",
+                                                                        "example": 8500
+                                                                    },
+                                                                    "correct_answers": {
+                                                                        "type": "integer",
+                                                                        "example": 20
+                                                                    }
+                                                                },
+                                                                "type": "object"
+                                                            }
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/notifications/send": {
             "post": {
                 "tags": [
@@ -1406,8 +4431,8 @@
                 "tags": [
                     "Payments"
                 ],
-                "summary": "Ödeme başlat",
-                "description": "Jeton satın alma için ödeme işlemini başlatır",
+                "summary": "Ödeme işle",
+                "description": "RevenueCat onayı sonrası çağrılır. type değerine göre coin/elmas/premium/joker kullanıcı hesabına tanımlanır.",
                 "operationId": "f8e9cfbc3af173fa75cac87ebeee6962",
                 "requestBody": {
                     "required": true,
@@ -1415,29 +4440,75 @@
                         "application/x-www-form-urlencoded": {
                             "schema": {
                                 "properties": {
-                                    "coin_package_id": {
-                                        "description": "Jeton paketi ID",
-                                        "type": "integer"
-                                    },
-                                    "payment_method": {
-                                        "description": "Ödeme yöntemi",
+                                    "type": {
+                                        "description": "Satın alma tipi",
                                         "type": "string",
                                         "enum": [
-                                            "credit_card",
-                                            "paypal",
-                                            "apple_pay",
-                                            "google_pay"
-                                        ]
+                                            "coin",
+                                            "diamond",
+                                            "premium",
+                                            "joker"
+                                        ],
+                                        "example": "coin"
                                     },
-                                    "payment_provider": {
-                                        "description": "Ödeme sağlayıcısı",
+                                    "package_id": {
+                                        "description": "Paket ID",
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "status": {
+                                        "description": "Ödeme durumu",
                                         "type": "string",
                                         "enum": [
-                                            "stripe",
-                                            "paypal",
-                                            "iyzico",
-                                            "paytr"
-                                        ]
+                                            "completed",
+                                            "failed"
+                                        ],
+                                        "example": "completed"
+                                    },
+                                    "transaction_id": {
+                                        "description": "İşlem ID",
+                                        "type": "string",
+                                        "example": "txn_123456"
+                                    },
+                                    "payment_data": {
+                                        "description": "Ödeme verileri (opsiyonel)",
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "coin",
+                                            "diamond",
+                                            "premium",
+                                            "joker"
+                                        ],
+                                        "example": "coin"
+                                    },
+                                    "package_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "completed",
+                                            "failed"
+                                        ],
+                                        "example": "completed"
+                                    },
+                                    "transaction_id": {
+                                        "type": "string",
+                                        "example": "txn_123456"
+                                    },
+                                    "payment_data": {
+                                        "type": "object"
                                     }
                                 },
                                 "type": "object"
@@ -1447,7 +4518,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Ödeme başlatıldı",
+                        "description": "Ödeme işlendi",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1458,27 +4529,37 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Ödeme başlatıldı"
+                                            "example": "Ödeme başarıyla tamamlandı."
                                         },
                                         "data": {
                                             "properties": {
                                                 "payment": {
                                                     "type": "object"
                                                 },
-                                                "coin_purchase": {
-                                                    "type": "object"
-                                                },
-                                                "payment_url": {
+                                                "grant_type": {
                                                     "type": "string",
-                                                    "example": "https://checkout.stripe.com/pay/..."
+                                                    "example": "coin"
                                                 },
                                                 "amount": {
                                                     "type": "string",
                                                     "example": "39.99 TRY"
                                                 },
-                                                "total_coins": {
+                                                "user_coins": {
                                                     "type": "integer",
-                                                    "example": 600
+                                                    "example": 1600
+                                                },
+                                                "user_diamond_balance": {
+                                                    "type": "integer",
+                                                    "example": 50
+                                                },
+                                                "is_premium": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "premium_expires_at": {
+                                                    "type": "string",
+                                                    "example": "2026-04-08T12:00:00Z",
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
@@ -1730,6 +4811,11 @@
                                             "hint"
                                         ],
                                         "example": "fifty_fifty"
+                                    },
+                                    "selected_answer": {
+                                        "description": "Seçilen şık (opsiyonel, 1-4 arası)",
+                                        "type": "string",
+                                        "example": "1"
                                     }
                                 },
                                 "type": "object"
@@ -1754,6 +4840,11 @@
                                             "hint"
                                         ],
                                         "example": "fifty_fifty"
+                                    },
+                                    "selected_answer": {
+                                        "description": "Seçilen şık (opsiyonel, 1-4 arası)",
+                                        "type": "string",
+                                        "example": "1"
                                     }
                                 },
                                 "type": "object"
@@ -1781,6 +4872,16 @@
                                         },
                                         "remaining_jokers": {
                                             "type": "object"
+                                        },
+                                        "selected_answer": {
+                                            "type": "string",
+                                            "example": "1",
+                                            "nullable": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true,
+                                            "nullable": true
                                         }
                                     },
                                     "type": "object"
@@ -1802,8 +4903,20 @@
                     "Premium Quiz"
                 ],
                 "summary": "Kullanıcı Joker Durumu",
-                "description": "Kullanıcının mevcut joker sayılarını getirir.",
+                "description": "Kullanıcının mevcut joker sayılarını getirir. Eğer tournament_id parametresi gönderilirse, turnuva joker durumunu döndürür.",
                 "operationId": "88357cd34cd647eb2d0b9ffd5ce079ff",
+                "parameters": [
+                    {
+                        "name": "tournament_id",
+                        "in": "query",
+                        "description": "Turnuva ID (opsiyonel - turnuva joker durumu için)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Joker durumu başarıyla getirildi",
@@ -1814,6 +4927,14 @@
                                         "success": {
                                             "type": "boolean",
                                             "example": true
+                                        },
+                                        "game_type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "premium",
+                                                "tournament"
+                                            ],
+                                            "example": "premium"
                                         },
                                         "jokers": {
                                             "properties": {
@@ -1836,7 +4957,13 @@
                                             "type": "integer",
                                             "example": 10
                                         },
+                                        "tournament_jokers": {
+                                            "description": "Turnuva için toplam joker hakkı",
+                                            "type": "integer",
+                                            "example": 10
+                                        },
                                         "user_coins": {
+                                            "description": "Premium quiz için kullanıcı coin'i",
                                             "type": "integer",
                                             "example": 1500
                                         }
@@ -2539,6 +5666,11 @@
                                             "hint"
                                         ],
                                         "example": "fifty_fifty"
+                                    },
+                                    "selected_answer": {
+                                        "description": "Seçilen şık (opsiyonel, 1-4 arası)",
+                                        "type": "string",
+                                        "example": "1"
                                     }
                                 },
                                 "type": "object"
@@ -2563,6 +5695,11 @@
                                             "hint"
                                         ],
                                         "example": "fifty_fifty"
+                                    },
+                                    "selected_answer": {
+                                        "description": "Seçilen şık (opsiyonel, 1-4 arası)",
+                                        "type": "string",
+                                        "example": "1"
                                     }
                                 },
                                 "type": "object"
@@ -2587,6 +5724,16 @@
                                         },
                                         "result": {
                                             "type": "object"
+                                        },
+                                        "selected_answer": {
+                                            "type": "string",
+                                            "example": "1",
+                                            "nullable": true
+                                        },
+                                        "is_correct": {
+                                            "type": "boolean",
+                                            "example": true,
+                                            "nullable": true
                                         }
                                     },
                                     "type": "object"
@@ -2819,6 +5966,378 @@
                                             "type": "object"
                                         },
                                         "answer_details": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/game-settings": {
+            "get": {
+                "tags": [
+                    "Quiz"
+                ],
+                "summary": "Get Game Settings",
+                "description": "Get static game settings including package configurations",
+                "operationId": "0116753569506041b0f969005d936ccd",
+                "responses": {
+                    "200": {
+                        "description": "Game settings retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Game settings retrieved successfully"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "packages": {
+                                                    "properties": {
+                                                        "mini_package": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "medium_package": {
+                                                            "type": "integer",
+                                                            "example": 100
+                                                        },
+                                                        "large_package": {
+                                                            "type": "integer",
+                                                            "example": 150
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/reward/check-eligibility": {
+            "get": {
+                "tags": [
+                    "Reward"
+                ],
+                "summary": "Ödül talebinde bulunabilir mi kontrolü",
+                "description": "Kullanıcının günlük, haftalık veya turnuva kazananı olup olmadığını ve daha önce ödül talebinde bulunup bulunmadığını kontrol eder",
+                "operationId": "60705ab4d8e63e3188a2aed85fffae1d",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Ödül tipi: daily, weekly, tournament",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "daily",
+                                "weekly",
+                                "tournament"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "tournament_id",
+                        "in": "query",
+                        "description": "Turnuva ID (type=tournament için gerekli)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "eligible": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "rank": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "coins_earned": {
+                                            "type": "integer",
+                                            "example": 1645
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ödül talebinde bulunabilirsiniz."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/reward/claim": {
+            "post": {
+                "tags": [
+                    "Reward"
+                ],
+                "summary": "Ödül talep et",
+                "description": "Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 100) + min oyun. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
+                "operationId": "0c49263fea17942bb357a8e36577d2aa",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "gift_card_store_id"
+                                ],
+                                "properties": {
+                                    "gift_card_store_id": {
+                                        "description": "GET /api/gift-card-stores listesinden seçilen marka id",
+                                        "type": "integer",
+                                        "example": 10
+                                    },
+                                    "store_id": {
+                                        "description": "gift_card_store_id alias (opsiyonel)",
+                                        "type": "integer",
+                                        "example": 10
+                                    },
+                                    "type": {
+                                        "description": "Opsiyonel. Gönderilmezse duel",
+                                        "type": "string",
+                                        "enum": [
+                                            "duel",
+                                            "daily",
+                                            "weekly",
+                                            "tournament"
+                                        ],
+                                        "example": "duel"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Başarılı",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ödül talebi başarıyla oluşturuldu."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 12
+                                                },
+                                                "gift_card_store_id": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "gift_card_store": {
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "integer",
+                                                            "example": 10
+                                                        },
+                                                        "type": {
+                                                            "type": "string",
+                                                            "example": "mağaza"
+                                                        },
+                                                        "image_url": {
+                                                            "type": "string",
+                                                            "example": "https://bil-bakalim.com/storage/gift-card-stores/store.png"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Geçersiz istek / şartlar karşılanmıyor"
+                    },
+                    "404": {
+                        "description": "Seçilen marka bulunamadı"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/store-packages/premium": {
+            "get": {
+                "tags": [
+                    "Store Packages"
+                ],
+                "summary": "Premium paketleri listele",
+                "operationId": "a18d71a2eb5aae8fff17bdab83992b6b",
+                "responses": {
+                    "200": {
+                        "description": "Premium paket listesi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/store-packages/joker": {
+            "get": {
+                "tags": [
+                    "Store Packages"
+                ],
+                "summary": "Joker paketlerini listele",
+                "operationId": "d30daa9ca8577eb26903e94ef80577f3",
+                "responses": {
+                    "200": {
+                        "description": "Joker paket listesi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/store-packages/diamond": {
+            "get": {
+                "tags": [
+                    "Store Packages"
+                ],
+                "summary": "Elmas paketlerini listele",
+                "operationId": "809ce7309585993fcb680d0b4241812e",
+                "responses": {
+                    "200": {
+                        "description": "Elmas paket listesi",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
                                             "type": "array",
                                             "items": {
                                                 "type": "object"
@@ -3226,6 +6745,29 @@
                                     "time_spent": {
                                         "type": "integer",
                                         "example": 15
+                                    },
+                                    "joker_used": {
+                                        "description": "Kullanılan joker tipi",
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "double_answer",
+                                        "nullable": true
+                                    },
+                                    "second_option": {
+                                        "description": "Çift cevap joker için ikinci seçenek",
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ],
+                                        "example": "3",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -3249,6 +6791,27 @@
                                     "time_spent": {
                                         "type": "integer",
                                         "example": 15
+                                    },
+                                    "joker_used": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fifty_fifty",
+                                            "double_answer",
+                                            "hint"
+                                        ],
+                                        "example": "double_answer",
+                                        "nullable": true
+                                    },
+                                    "second_option": {
+                                        "type": "string",
+                                        "enum": [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4"
+                                        ],
+                                        "example": "3",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -4540,6 +8103,46 @@
             "description": "Ödeme işlemleri"
         },
         {
+            "name": "Store Packages",
+            "description": "Mağaza paketleri (premium, joker, elmas)"
+        },
+        {
+            "name": "Ads",
+            "description": "Ads"
+        },
+        {
+            "name": "Ad Watch",
+            "description": "Ad Watch"
+        },
+        {
+            "name": "Referral",
+            "description": "Referral"
+        },
+        {
+            "name": "Avatars",
+            "description": "Avatars"
+        },
+        {
+            "name": "Coin History",
+            "description": "Coin History"
+        },
+        {
+            "name": "Diamond",
+            "description": "Diamond"
+        },
+        {
+            "name": "Duel",
+            "description": "Duel"
+        },
+        {
+            "name": "Gift Card Stores",
+            "description": "Gift Card Stores"
+        },
+        {
+            "name": "Leaderboard",
+            "description": "Leaderboard"
+        },
+        {
             "name": "Notifications",
             "description": "Notifications"
         },
@@ -4558,6 +8161,10 @@
         {
             "name": "Normal Quiz",
             "description": "Normal Quiz"
+        },
+        {
+            "name": "Reward",
+            "description": "Reward"
         },
         {
             "name": "Tournament Quiz",

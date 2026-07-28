@@ -352,17 +352,16 @@ class RewardController extends Controller
      * @OA\Post(
      *     path="/api/reward/claim",
      *     summary="Ödül talep et",
-     *     description="Kullanıcı ödül talebinde bulunur. Çek/kod seçilen markaya özel üretildiği için gift_card_store_id zorunludur. İsim-soyisim veya telefon hatalıysa kod geçersiz olur; iptal/iade yoktur.",
+     *     description="Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 100) + min oyun. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
      *     tags={"Reward"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
-     *             required={"type","gift_card_store_id"},
-     *             @OA\Property(property="type", type="string", enum={"daily", "weekly", "tournament"}, example="daily"),
-     *             @OA\Property(property="gift_card_store_id", type="integer", example=1, description="GET /api/gift-card-stores listesinden seçilen marka id"),
-     *             @OA\Property(property="store_id", type="integer", example=1, description="gift_card_store_id alias (opsiyonel)"),
-     *             @OA\Property(property="tournament_id", type="integer", example=1, description="Turnuva ID (type=tournament için opsiyonel)")
+     *             required={"gift_card_store_id"},
+     *             @OA\Property(property="gift_card_store_id", type="integer", example=10, description="GET /api/gift-card-stores listesinden seçilen marka id"),
+     *             @OA\Property(property="store_id", type="integer", example=10, description="gift_card_store_id alias (opsiyonel)"),
+     *             @OA\Property(property="type", type="string", enum={"duel", "daily", "weekly", "tournament"}, example="duel", description="Opsiyonel. Gönderilmezse duel")
      *         )
      *     ),
      *     @OA\Response(
@@ -373,11 +372,11 @@ class RewardController extends Controller
      *             @OA\Property(property="message", type="string", example="Ödül talebi başarıyla oluşturuldu."),
      *             @OA\Property(property="data", type="object",
      *                 @OA\Property(property="id", type="integer", example=12),
-     *                 @OA\Property(property="gift_card_store_id", type="integer", example=1),
+     *                 @OA\Property(property="gift_card_store_id", type="integer", example=10),
      *                 @OA\Property(property="gift_card_store", type="object",
-     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="id", type="integer", example=10),
      *                     @OA\Property(property="type", type="string", example="mağaza"),
-     *                     @OA\Property(property="image_url", type="string", example="https://example.com/storage/gift-card-stores/store1.jpg")
+     *                     @OA\Property(property="image_url", type="string", example="https://bil-bakalim.com/storage/gift-card-stores/store.png")
      *                 )
      *             )
      *         )
@@ -389,20 +388,26 @@ class RewardController extends Controller
     public function claim(Request $request): JsonResponse
     {
         $user = Auth::user();
-        $type = $request->input('type');
         $storeId = $request->input('gift_card_store_id', $request->input('store_id'));
 
-        if (!in_array($type, ['daily', 'weekly', 'tournament'])) {
+        // type artık zorunlu değil — varsayılan meydan okuma (duel)
+        $type = $request->input('type', 'duel');
+        if ($type === null || $type === '' || $type === '0') {
+            $type = 'duel';
+        }
+
+        if (!in_array($type, ['daily', 'weekly', 'tournament', 'duel'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Geçersiz ödül tipi.'
+                'message' => 'Geçersiz ödül tipi.',
             ], 400);
         }
 
         if (!$storeId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Çek kullanılacak marka seçilmelidir (gift_card_store_id).'
+                'message' => 'Çek kullanılacak marka seçilmelidir (gift_card_store_id).',
+                'required' => ['gift_card_store_id'],
             ], 400);
         }
 
@@ -410,7 +415,7 @@ class RewardController extends Controller
         if (!$store) {
             return response()->json([
                 'success' => false,
-                'message' => 'Seçilen marka bulunamadı veya aktif değil.'
+                'message' => 'Seçilen marka bulunamadı veya aktif değil.',
             ], 404);
         }
 
@@ -426,61 +431,30 @@ class RewardController extends Controller
             ], 400);
         }
 
-        // Önce eligibility kontrolü yap
-//        $eligibilityResponse = $this->checkEligibility($request);
-//        $eligibilityData = json_decode($eligibilityResponse->getContent(), true);
-//
-//        // Önce success kontrolü yap
-//        if (!isset($eligibilityData['success']) || !$eligibilityData['success']) {
-//            return response()->json([
-//                'success' => false,
-//                'message' => $eligibilityData['message'] ?? 'Ödül uygunluk kontrolü başarısız oldu.'
-//            ], 400);
-//        }
-//
-//        // Sonra eligible kontrolü yap
-//        if (!isset($eligibilityData['eligible']) || !$eligibilityData['eligible']) {
-//            return response()->json([
-//                'success' => false,
-//                'message' => $eligibilityData['message'] ?? 'Bu ödül için uygun değilsiniz.'
-//            ], 400);
-//        }
-
-//        $coinsEarned = $eligibilityData['coins_earned'] ?? 0;
-        $coinsEarned = 0;
-        $rewardDate = null;
+        $coinsEarned = (int) $user->coins;
+        $rewardDate = Carbon::today()->format('Y-m-d');
         $metadata = [
             'gift_card_store_id' => (int) $store->id,
             'gift_card_store_type' => $store->type,
             'gift_card_store_image_url' => $store->image_url,
+            'source' => 'duel',
         ];
 
-        if ($type === 'daily') {
-            $rewardDate = Carbon::today()->format('Y-m-d');
-        } elseif ($type === 'weekly') {
+        if ($type === 'weekly') {
             $rewardDate = Carbon::now()->startOfWeek()->format('Y-m-d');
         } elseif ($type === 'tournament') {
             $tournamentId = $request->input('tournament_id');
-
-//            // Eğer eligibility response'da tournament_id varsa (dinamik bulunan), onu kullan
-//            if (isset($eligibilityData['tournament_id'])) {
-//                $tournamentId = $eligibilityData['tournament_id'];
-//            }
-
             if ($tournamentId && $tournamentId != 0) {
                 $tournament = Tournament::find($tournamentId);
                 if ($tournament) {
-                    $rewardDate = $tournament->end_date ? Carbon::parse($tournament->end_date)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+                    $rewardDate = $tournament->end_date
+                        ? Carbon::parse($tournament->end_date)->format('Y-m-d')
+                        : Carbon::today()->format('Y-m-d');
                     $metadata['tournament_id'] = (int) $tournamentId;
-                } else {
-                    $rewardDate = Carbon::today()->format('Y-m-d');
                 }
-            } else {
-                $rewardDate = Carbon::today()->format('Y-m-d');
             }
         }
 
-        // Ödül talebini oluştur
         $rewardRequest = RewardRequest::create([
             'user_id' => $user->id,
             'reward_type' => $type,

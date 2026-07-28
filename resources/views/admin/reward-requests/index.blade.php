@@ -69,6 +69,8 @@
                                         <span class="badge bg-info">Günlük</span>
                                     @elseif($request->reward_type === 'weekly')
                                         <span class="badge bg-primary">Haftalık</span>
+                                    @elseif($request->reward_type === 'duel')
+                                        <span class="badge bg-success">Meydan Okuma</span>
                                     @else
                                         <span class="badge bg-warning">Turnuva</span>
                                     @endif
