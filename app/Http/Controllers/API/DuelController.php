@@ -998,11 +998,11 @@ class DuelController extends Controller
             // Soru değeri (multiplier ile çarpılmış)
             $questionValue = $duel->question_value; // 1 * multiplier
 
-            // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır
+            // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır (tam tutar; %10 maç sonunda)
             $opponentLoss = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
 
-            // Düello bitir - challenger kazandı
-            $this->finishDuel($duel, $duel->challenger_id);
+            // Düello bitir - challenger kazandı (+ maç sonu %10)
+            $endCommission = $this->finishDuel($duel, $duel->challenger_id);
 
             // Socket bildirimi gönder
             $this->sendDuelFinishedWebhook($duel);
@@ -1016,7 +1016,7 @@ class DuelController extends Controller
                 'winner_id' => $duel->challenger_id,
                 'coins_transferred' => $opponentLoss['received'],
                 'coins_taken' => $opponentLoss['taken'],
-                'commission' => $opponentLoss['commission'],
+                'commission' => $endCommission,
             ]);
 
         } catch (\Exception $e) {
@@ -1347,15 +1347,10 @@ class DuelController extends Controller
             return;
         }
 
-        // Senaryo 2: Her ikisi de yanlış → Bakiyeler düşer, tamamı uygulama kasasına aktarılır
+        // Senaryo 2: Her ikisi de yanlış → Bakiyeler düşer (uygulama komisyonuna yazılmaz)
         if (!$challengerCorrect && !$opponentCorrect) {
             $challengerLoss = $this->subtractCoins($challenger, $questionValue);
             $opponentLoss = $this->subtractCoins($opponent, $questionValue);
-            $totalLoss = $challengerLoss + $opponentLoss;
-
-            if ($totalLoss > 0) {
-                $duel->increment('app_commission', $totalLoss);
-            }
 
             $challengerAnswer->update([
                 'coins_change' => -$challengerLoss,
@@ -1368,7 +1363,7 @@ class DuelController extends Controller
             return;
         }
 
-        // Senaryo 3: Biri doğru, diğeri yanlış → Kazanan net %90 alır (%10 komisyon)
+        // Senaryo 3: Biri doğru, diğeri yanlış → Maç içinde tam tutar transfer (komisyon maç sonunda)
         if ($challengerCorrect && !$opponentCorrect) {
             $result = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
             $challengerAnswer->update([
@@ -1440,14 +1435,36 @@ class DuelController extends Controller
     }
 
     /**
-     * Düello bitir
+     * Düello bitir.
      * Kazanan yoksa (açık düello iptal) sadece kapatılır.
-     * Not: %10 komisyon transfer anında kesilir; burada tekrar kesilmez.
+     * Kazanan varsa: maç boyunca net coin kazancının %10'u kesilir → duels.app_commission.
+     *
+     * @return int Kesilen komisyon tutarı
      */
-    private function finishDuel(Duel $duel, ?int $winnerId): void
+    private function finishDuel(Duel $duel, ?int $winnerId): int
     {
         $challenger = User::query()->find($duel->challenger_id);
         $opponent = $duel->opponent_id ? User::query()->find($duel->opponent_id) : null;
+
+        $commission = 0;
+
+        if ($winnerId && ($challenger || $opponent)) {
+            $winner = (int) $winnerId === (int) $duel->challenger_id ? $challenger : $opponent;
+            $coinsBefore = (int) $winnerId === (int) $duel->challenger_id
+                ? (int) $duel->challenger_coins_before
+                : (int) $duel->opponent_coins_before;
+
+            if ($winner) {
+                $coinsNow = (int) $winner->fresh()->coins;
+                $netGain = max(0, $coinsNow - $coinsBefore);
+                $commission = (int) floor($netGain * 0.1);
+
+                if ($commission > 0) {
+                    $this->subtractCoins($winner, $commission);
+                    $duel->increment('app_commission', $commission);
+                }
+            }
+        }
 
         $duel->update([
             'status' => 'finished',
@@ -1456,6 +1473,8 @@ class DuelController extends Controller
             'challenger_coins_after' => (int) ($challenger?->fresh()->coins ?? 0),
             'opponent_coins_after' => (int) ($opponent?->fresh()->coins ?? $duel->opponent_coins_after ?? 0),
         ]);
+
+        return $commission;
     }
 
     /**
@@ -1802,9 +1821,8 @@ class DuelController extends Controller
     }
 
     /**
-     * Kaybedenden kazanana coin aktar.
-     * Kaybeden full tutarı kaybeder; kazanan %90 alır, %10 uygulama komisyonu.
-     * Örnek: 100 → kazanan +90, kaybeden -100, komisyon 10.
+     * Kaybedenden kazanana coin aktar (maç içi tam tutar).
+     * %10 uygulama komisyonu maç sonunda finishDuel içinde kesilir.
      *
      * @return array{taken:int, received:int, commission:int}
      */
@@ -1815,21 +1833,12 @@ class DuelController extends Controller
             return ['taken' => 0, 'received' => 0, 'commission' => 0];
         }
 
-        $commission = (int) floor($taken * 0.1);
-        $received = $taken - $commission;
-
-        if ($received > 0) {
-            $this->addCoins($to, $received);
-        }
-
-        if ($duel && $commission > 0) {
-            $duel->increment('app_commission', $commission);
-        }
+        $this->addCoins($to, $taken);
 
         return [
             'taken' => $taken,
-            'received' => $received,
-            'commission' => $commission,
+            'received' => $taken,
+            'commission' => 0,
         ];
     }
 
