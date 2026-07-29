@@ -180,6 +180,11 @@ class CoinHistoryController extends Controller
             return $gameTypeNames[$gameType] ?? $description;
         }
 
+        // Düello kayıtlarında spesifik açıklama korunur
+        if ($item->transaction_type === 'duel' && $description !== '') {
+            return $description;
+        }
+
         // Transaction type'a göre açıklama
         $typeDescriptions = [
             'earned' => 'Jeton Kazancı',
@@ -188,7 +193,8 @@ class CoinHistoryController extends Controller
             'tournament_prize' => 'Turnuva Ödülü',
             'daily_reward' => 'Günlük Ödül',
             'purchase' => 'Jeton Satın Alma',
-            'ad_watch' => 'Reklam İzleme Ödülü'
+            'ad_watch' => 'Reklam İzleme Ödülü',
+            'duel' => 'Düello',
         ];
 
         if (isset($metadata['reward_type']) && $metadata['reward_type'] === 'ad_watch') {

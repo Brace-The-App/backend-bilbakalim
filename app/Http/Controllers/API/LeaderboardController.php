@@ -405,30 +405,6 @@ class LeaderboardController extends Controller
             return null;
         }
 
-        // Önce avatar kontrol et
-        if ($user->avatarModel && $user->avatarModel->image_url) {
-            return $user->avatarModel->image_url;
-        }
-
-        // Avatar yoksa profile_image kontrol et
-        if (!empty($user->profile_image)) {
-            $baseUrl = config('app.url', 'https://bilbakalim.online');
-            // Eğer zaten tam URL ise, olduğu gibi döndür
-            if (filter_var($user->profile_image, FILTER_VALIDATE_URL)) {
-                return $user->profile_image;
-            }
-            // Eğer storage/profile_images/ ile başlıyorsa, sadece profile_images/ kısmını al
-            $imagePath = $user->profile_image;
-            if (strpos($imagePath, 'storage/profile_images/') !== false) {
-                $imagePath = str_replace('storage/profile_images/', 'profile_images/', $imagePath);
-            }
-            // Eğer profile_images/ ile başlamıyorsa, ekle
-            if (strpos($imagePath, 'profile_images/') !== 0) {
-                $imagePath = 'profile_images/' . ltrim($imagePath, '/');
-            }
-            return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
-        }
-
-        return null;
+        return $user->resolveAvatarUrl((string) config('app.url', 'https://bil-bakalim.com'));
     }
 }

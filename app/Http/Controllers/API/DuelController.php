@@ -9,6 +9,7 @@ use App\Models\Duel;
 use App\Models\DuelAnswer;
 use App\Models\Question;
 use App\Models\User;
+use App\Models\CoinHistory;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -1306,8 +1307,8 @@ class DuelController extends Controller
 
         // Senaryo 1: Her ikisi de doğru → ikisi de o anki soru değeri (x) kadar kazanır
         if ($challengerCorrect && $opponentCorrect) {
-            $this->addCoins($challenger, $questionValue);
-            $this->addCoins($opponent, $questionValue);
+            $this->addCoins($challenger, $questionValue, $duel, 'Düello: iki taraf da doğru');
+            $this->addCoins($opponent, $questionValue, $duel, 'Düello: iki taraf da doğru');
 
             $challengerAnswer->update([
                 'coins_change' => $questionValue,
@@ -1323,8 +1324,8 @@ class DuelController extends Controller
 
         // Senaryo 2: Her ikisi de yanlış → Bakiyeler düşer (uygulama komisyonuna yazılmaz)
         if (!$challengerCorrect && !$opponentCorrect) {
-            $challengerLoss = $this->subtractCoins($challenger, $questionValue);
-            $opponentLoss = $this->subtractCoins($opponent, $questionValue);
+            $challengerLoss = $this->subtractCoins($challenger, $questionValue, $duel, 'Düello: iki taraf da yanlış');
+            $opponentLoss = $this->subtractCoins($opponent, $questionValue, $duel, 'Düello: iki taraf da yanlış');
 
             $challengerAnswer->update([
                 'coins_change' => -$challengerLoss,
@@ -1437,7 +1438,7 @@ class DuelController extends Controller
                 $commission = (int) floor($netGain * 0.1);
 
                 if ($commission > 0) {
-                    $this->subtractCoins($winner, $commission);
+                    $this->subtractCoins($winner, $commission, $duel, 'Düello: maç sonu %10 komisyon');
                     $duel->increment('app_commission', $commission);
                 }
             }
@@ -1805,18 +1806,82 @@ class DuelController extends Controller
      */
     private function transferCoins(User $from, User $to, int $amount, ?Duel $duel = null): array
     {
-        $taken = $this->subtractCoins($from, $amount);
+        $taken = $this->subtractCoins($from, $amount, $duel, 'Düello: soru kaybı (rakibe transfer)');
         if ($taken <= 0) {
             return ['taken' => 0, 'received' => 0, 'commission' => 0];
         }
 
-        $this->addCoins($to, $taken);
+        $this->addCoins($to, $taken, $duel, 'Düello: soru kazancı (rakipten transfer)');
 
         return [
             'taken' => $taken,
             'received' => $taken,
             'commission' => 0,
         ];
+    }
+
+    private function addCoins(User $user, int $amount, ?Duel $duel = null, string $description = ''): void
+    {
+        if ($amount <= 0) {
+            return;
+        }
+
+        $balanceBefore = (int) $user->coins;
+        $user->increment('coins', $amount);
+
+        if ($duel) {
+            $user->increment('duel_earned_coins', $amount);
+            CoinHistory::create([
+                'user_id' => $user->id,
+                'coin_amount' => $amount,
+                'transaction_type' => 'duel',
+                'status' => 'completed',
+                'description' => $description !== '' ? $description : 'Düello coin kazancı',
+                'metadata' => [
+                    'duel_id' => $duel->id,
+                    'multiplier' => $duel->multiplier ?? null,
+                    'question_multiplier' => ($duel->settings['current_question_multiplier'] ?? 1),
+                    'source' => 'duel',
+                ],
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceBefore + $amount,
+            ]);
+        }
+
+        $user->refresh();
+    }
+
+    private function subtractCoins(User $user, int $amount, ?Duel $duel = null, string $description = ''): int
+    {
+        $amount = min(max(0, $amount), (int) $user->coins);
+        if ($amount <= 0) {
+            return 0;
+        }
+
+        $balanceBefore = (int) $user->coins;
+        $user->decrement('coins', $amount);
+
+        if ($duel) {
+            CoinHistory::create([
+                'user_id' => $user->id,
+                'coin_amount' => -$amount,
+                'transaction_type' => 'duel',
+                'status' => 'completed',
+                'description' => $description !== '' ? $description : 'Düello coin kaybı',
+                'metadata' => [
+                    'duel_id' => $duel->id,
+                    'multiplier' => $duel->multiplier ?? null,
+                    'question_multiplier' => ($duel->settings['current_question_multiplier'] ?? 1),
+                    'source' => 'duel',
+                ],
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceBefore - $amount,
+            ]);
+        }
+
+        $user->refresh();
+
+        return $amount;
     }
 
     /**
@@ -1940,24 +2005,5 @@ class DuelController extends Controller
         }
 
         return $onlineCandidates->random();
-    }
-
-    private function addCoins(User $user, int $amount): void
-    {
-        if ($amount > 0) {
-            $user->increment('coins', $amount);
-            $user->refresh();
-        }
-    }
-
-    private function subtractCoins(User $user, int $amount): int
-    {
-        $amount = min(max(0, $amount), (int) $user->coins);
-        if ($amount > 0) {
-            $user->decrement('coins', $amount);
-            $user->refresh();
-        }
-
-        return $amount;
     }
 }

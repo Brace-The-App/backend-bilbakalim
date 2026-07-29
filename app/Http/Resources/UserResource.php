@@ -33,6 +33,7 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'coins' => $this->coins,
+            'duel_earned_coins' => (int) ($this->duel_earned_coins ?? 0),
             'diamonds' => $diamondBalance,
             'role_id' => $this->role_id,
             'phone' => $this->phone,
@@ -40,7 +41,9 @@ class UserResource extends JsonResource
             'is_premium' => $this->is_premium,
             'account_status' => $this->account_status,
             'created_at' => $this->created_at,
-            'profile_image' => 'https://bil-bakalim.com/storage/' . $this->profile_image,
+            'profile_image' => $this->profile_image
+                ? \App\Models\User::toStorageUrl((string) $this->profile_image)
+                : null,
             'profile_completed' => ($this->name && $this->email && $this->phone && $this->password) ? true : false,
             'jokers' => [
                 'fifty_fifty' => $fiftyFiftyJokers,

@@ -44,6 +44,7 @@ class User extends Authenticatable
         'package_id',
         'role_id',
         'total_coins',
+        'duel_earned_coins',
         'coins',
         'last_login_at',
         'device_token',
@@ -83,6 +84,7 @@ class User extends Authenticatable
         'package_id' => 'integer',
         'role_id' => 'integer',
         'total_coins' => 'integer',
+        'duel_earned_coins' => 'integer',
         'coins' => 'integer',
         'last_login_at' => 'datetime',
         'premium_expires_at' => 'datetime',
@@ -152,6 +154,41 @@ class User extends Authenticatable
     public function avatarModel()
     {
         return $this->belongsTo(Avatar::class, 'avatar');
+    }
+
+    /**
+     * Profil fotoğrafı URL'i: önce kullanıcının profile_image, yoksa katalog avatar.
+     */
+    public function resolveAvatarUrl(?string $fallbackBaseUrl = null): ?string
+    {
+        $base = rtrim($fallbackBaseUrl ?: (string) config('app.url', 'https://bil-bakalim.com'), '/');
+
+        if (!empty($this->profile_image)) {
+            return self::toStorageUrl((string) $this->profile_image, $base);
+        }
+
+        $avatar = $this->relationLoaded('avatarModel') ? $this->avatarModel : $this->avatarModel()->first();
+        if ($avatar && !empty($avatar->image_url)) {
+            return $avatar->image_url;
+        }
+
+        return null;
+    }
+
+    public static function toStorageUrl(string $path, ?string $baseUrl = null): string
+    {
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        $path = ltrim($path, '/');
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+
+        $base = rtrim($baseUrl ?: (string) config('app.url', 'https://bil-bakalim.com'), '/');
+
+        return $base . '/storage/' . $path;
     }
 
     // Scopes

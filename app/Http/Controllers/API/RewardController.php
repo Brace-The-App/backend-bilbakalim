@@ -73,6 +73,7 @@ class RewardController extends Controller
                 'rank' => null,
                 'coins_earned' => 0,
                 'current_coins' => $claimGate['current_coins'],
+                'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
                 'games_played' => $claimGate['games_played'],
                 'min_coins' => $claimGate['min_coins'],
                 'min_games' => $claimGate['min_games'],
@@ -334,6 +335,7 @@ class RewardController extends Controller
             'rank' => $rank,
             'coins_earned' => $coinsEarned,
             'current_coins' => $claimGate['current_coins'],
+            'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
             'games_played' => $claimGate['games_played'],
             'min_coins' => $claimGate['min_coins'],
             'min_games' => $claimGate['min_games'],
@@ -425,6 +427,7 @@ class RewardController extends Controller
                 'success' => false,
                 'message' => $claimGate['message'],
                 'current_coins' => $claimGate['current_coins'],
+                'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
                 'games_played' => $claimGate['games_played'],
                 'min_coins' => $claimGate['min_coins'],
                 'min_games' => $claimGate['min_games'],
@@ -482,21 +485,23 @@ class RewardController extends Controller
 
     /**
      * Hediye / ödül talep şartları:
-     * - Minimum 100 jeton
+     * - Meydan okumadan (düello) kazanılmış en az 100 jeton (duel_earned_coins)
      * - En az 3 tamamlanmış oyun
      */
     private function validateGiftClaimRequirements(User $user): array
     {
         $minCoins = (int) config('app.gift_claim_min_coins', 100);
         $minGames = (int) config('app.gift_claim_min_games', 3);
+        $duelEarnedCoins = (int) ($user->duel_earned_coins ?? 0);
         $currentCoins = (int) $user->coins;
         $gamesPlayed = $this->countCompletedGames($user->id);
 
-        if ($currentCoins < $minCoins) {
+        if ($duelEarnedCoins < $minCoins) {
             return [
                 'eligible' => false,
-                'message' => "Hediye talep etmek için en az {$minCoins} jeton gereklidir. Mevcut jetonunuz: {$currentCoins}.",
+                'message' => "Hediye talep etmek için meydan okumadan en az {$minCoins} jeton kazanmış olmalısınız. Düello kazancınız: {$duelEarnedCoins}.",
                 'current_coins' => $currentCoins,
+                'duel_earned_coins' => $duelEarnedCoins,
                 'games_played' => $gamesPlayed,
                 'min_coins' => $minCoins,
                 'min_games' => $minGames,
@@ -508,6 +513,7 @@ class RewardController extends Controller
                 'eligible' => false,
                 'message' => "Hediye talep etmek için en az {$minGames} oyun oynamış olmanız gerekir. Oynanan oyun: {$gamesPlayed}.",
                 'current_coins' => $currentCoins,
+                'duel_earned_coins' => $duelEarnedCoins,
                 'games_played' => $gamesPlayed,
                 'min_coins' => $minCoins,
                 'min_games' => $minGames,
@@ -518,6 +524,7 @@ class RewardController extends Controller
             'eligible' => true,
             'message' => 'Hediye talep şartları karşılanıyor.',
             'current_coins' => $currentCoins,
+            'duel_earned_coins' => $duelEarnedCoins,
             'games_played' => $gamesPlayed,
             'min_coins' => $minCoins,
             'min_games' => $minGames,

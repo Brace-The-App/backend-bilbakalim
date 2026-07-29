@@ -100,15 +100,13 @@ class StorePackagesSeeder extends Seeder
             );
         }
 
-        // Joker paketleri: ilk 3 → 10 / 100 / 1000 coin (≈1 coin = 1 TL + Google ~%40)
-        // price ≈ coin_amount / 0.6
+        // Joker paketleri: 10 / 100 / 1000 / 3000 / 5000 (≈1 coin = 1 TL + Google ~%40 → price ≈ coin/0.6)
         $jokerPackages = [
             ['code' => 'pack_1_consumable', 'name' => 'Paket 1', 'coin_amount' => 10, 'price' => 16.99, 'fifty_fifty_jokers' => 1, 'double_answer_jokers' => 1, 'hint_jokers' => 1],
             ['code' => 'pack_2_consumable', 'name' => 'Paket 2', 'coin_amount' => 100, 'price' => 166.99, 'fifty_fifty_jokers' => 3, 'double_answer_jokers' => 3, 'hint_jokers' => 3],
             ['code' => 'pack_3_consumable', 'name' => 'Paket 3', 'coin_amount' => 1000, 'price' => 1666.99, 'fifty_fifty_jokers' => 5, 'double_answer_jokers' => 5, 'hint_jokers' => 5],
-            // 4. ve 5. paketler mevcut yapıda kalsın
-            ['code' => 'pack_4_consumable', 'name' => 'Paket 4', 'coin_amount' => 10000, 'price' => 119.99, 'fifty_fifty_jokers' => 10, 'double_answer_jokers' => 10, 'hint_jokers' => 10],
-            ['code' => 'pack_5_consumable', 'name' => 'Paket 5', 'coin_amount' => 25000, 'price' => 249.99, 'fifty_fifty_jokers' => 15, 'double_answer_jokers' => 15, 'hint_jokers' => 15],
+            ['code' => 'pack_4_consumable', 'name' => 'Paket 4', 'coin_amount' => 3000, 'price' => 4999.99, 'fifty_fifty_jokers' => 10, 'double_answer_jokers' => 10, 'hint_jokers' => 10],
+            ['code' => 'pack_5_consumable', 'name' => 'Paket 5', 'coin_amount' => 5000, 'price' => 8333.99, 'fifty_fifty_jokers' => 15, 'double_answer_jokers' => 15, 'hint_jokers' => 15],
         ];
 
         foreach ($jokerPackages as $index => $item) {

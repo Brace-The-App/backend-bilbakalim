@@ -784,7 +784,7 @@ class TournamentQuizController extends Controller
             $firstOptionStr = (string) $firstOption;
             $secondOptionStr = (string) $request->second_option;
             $isCorrect = ($correctAnswer === $firstOptionStr) ||
-                        ($correctAnswer === $secondOptionStr);
+                ($correctAnswer === $secondOptionStr);
 
             // Eğer pending cevap bulunduysa, onu güncelle
             if ($pendingAnswerIndex !== null) {
@@ -2714,28 +2714,11 @@ class TournamentQuizController extends Controller
             return null;
         }
 
-        // Eğer zaten tam URL ise, olduğu gibi döndür
-        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
-            return $imagePath;
-        }
-
-        // Eğer storage/profile_images/ ile başlıyorsa, sadece profile_images/ kısmını al
-        if (strpos($imagePath, 'storage/profile_images/') !== false) {
-            $imagePath = str_replace('storage/profile_images/', 'profile_images/', $imagePath);
-        }
-
-        // Eğer profile_images/ ile başlamıyorsa, ekle
-        if (strpos($imagePath, 'profile_images/') !== 0) {
-            $imagePath = 'profile_images/' . ltrim($imagePath, '/');
-        }
-
-        // Tam URL oluştur
-        $baseUrl = config('app.url', 'https://bilbakalim.online');
-        return rtrim($baseUrl, '/') . '/storage/' . $imagePath;
+        return User::toStorageUrl((string) $imagePath, (string) config('app.url', 'https://bil-bakalim.com'));
     }
 
     /**
-     * Kullanıcının avatar URL'ini al (avatar varsa avatar, yoksa profile_image)
+     * Kullanıcının avatar URL'ini al (profile_image öncelikli, yoksa katalog avatar)
      */
     private function getUserAvatarUrl(?User $user): ?string
     {
@@ -2743,17 +2726,7 @@ class TournamentQuizController extends Controller
             return null;
         }
 
-        // Önce avatar kontrol et
-        if ($user->avatarModel && $user->avatarModel->image_url) {
-            return $user->avatarModel->image_url;
-        }
-
-        // Avatar yoksa profile_image kontrol et
-        if (!empty($user->profile_image)) {
-            return $this->formatProfileImageUrl($user->profile_image);
-        }
-
-        return null;
+        return $user->resolveAvatarUrl((string) config('app.url', 'https://bil-bakalim.com'));
     }
 
     /**
