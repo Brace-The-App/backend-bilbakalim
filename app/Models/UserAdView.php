@@ -11,12 +11,14 @@ class UserAdView extends Model
         'user_id',
         'view_count',
         'last_viewed_at',
+        'window_started_at',
     ];
 
     protected $casts = [
         'user_id' => 'integer',
         'view_count' => 'integer',
         'last_viewed_at' => 'datetime',
+        'window_started_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

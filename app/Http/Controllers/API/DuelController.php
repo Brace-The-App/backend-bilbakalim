@@ -272,7 +272,7 @@ class DuelController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Teklif kabul edildi. Bu soru için çarpan uygulandı.',
+                'message' => 'Teklif kabul edildi. Bu sorudan itibaren çarpan uygulanır.',
                 'bet' => $settings['current_bet'],
             ]);
         }
@@ -1304,45 +1304,19 @@ class DuelController extends Controller
         $challengerCorrect = $challengerAnswer->is_correct;
         $opponentCorrect = $opponentAnswer->is_correct;
 
-        $baseQuestionValue = $duel->question_value;
-        $effectiveQuestionValue = $questionValue;
-
-        // Senaryo 1: Her ikisi de doğru
+        // Senaryo 1: Her ikisi de doğru → ikisi de o anki soru değeri (x) kadar kazanır
         if ($challengerCorrect && $opponentCorrect) {
-            if ($effectiveQuestionValue > $baseQuestionValue &&
-                $challengerAnswer->answered_at &&
-                $opponentAnswer->answered_at &&
-                $challengerAnswer->answered_at != $opponentAnswer->answered_at) {
+            $this->addCoins($challenger, $questionValue);
+            $this->addCoins($opponent, $questionValue);
 
-                $winnerId = $challengerAnswer->answered_at < $opponentAnswer->answered_at
-                    ? $duel->challenger_id
-                    : $duel->opponent_id;
-
-                if ($winnerId === $duel->challenger_id) {
-                    $result = $this->transferCoins($opponent, $challenger, $effectiveQuestionValue, $duel);
-                    $challengerAnswer->update([
-                        'coins_change' => $result['received'],
-                        'coins_after' => (int) $challenger->coins,
-                    ]);
-                    $opponentAnswer->update([
-                        'coins_change' => -$result['taken'],
-                        'coins_after' => (int) $opponent->coins,
-                    ]);
-                } else {
-                    $result = $this->transferCoins($challenger, $opponent, $effectiveQuestionValue, $duel);
-                    $challengerAnswer->update([
-                        'coins_change' => -$result['taken'],
-                        'coins_after' => (int) $challenger->coins,
-                    ]);
-                    $opponentAnswer->update([
-                        'coins_change' => $result['received'],
-                        'coins_after' => (int) $opponent->coins,
-                    ]);
-                }
-            } else {
-                $challengerAnswer->update(['coins_change' => 0, 'coins_after' => (int) $challenger->coins]);
-                $opponentAnswer->update(['coins_change' => 0, 'coins_after' => (int) $opponent->coins]);
-            }
+            $challengerAnswer->update([
+                'coins_change' => $questionValue,
+                'coins_after' => (int) $challenger->coins,
+            ]);
+            $opponentAnswer->update([
+                'coins_change' => $questionValue,
+                'coins_after' => (int) $opponent->coins,
+            ]);
 
             return;
         }
@@ -1404,7 +1378,10 @@ class DuelController extends Controller
         $nextQuestion = $this->getNextQuestion($duel);
         if ($nextQuestion) {
             $settings = $duel->settings ?? [];
-            unset($settings['current_question_multiplier'], $settings['current_bet']);
+            // Kabul edilen soru çarpanı sonraki sorularda da devam eder; sadece bekleyen teklifi temizle
+            unset($settings['current_bet']);
+            // Eski davranış (bug): her soruda çarpan 1'e düşüyordu
+            // unset($settings['current_question_multiplier'], $settings['current_bet']);
 
             try {
                 $duel->update([

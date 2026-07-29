@@ -83,8 +83,8 @@ class FriendInviteController extends Controller
                 'invite_link' => $inviteLink,
                 'phone_number' => $request->phone_number,
                 'email' => $request->email,
-                'reward_coins' => $request->reward_coins ?? 50,
-                'bonus_coins' => $request->bonus_coins ?? 25,
+                'reward_coins' => $request->reward_coins ?? 5,
+                'bonus_coins' => $request->bonus_coins ?? 0,
                 'expires_at' => $expiresAt,
                 'metadata' => [
                     'created_via' => 'mobile_app',
@@ -154,12 +154,16 @@ class FriendInviteController extends Controller
             $invite->accept(Auth::id());
 
             $user = Auth::user();
-            $totalCoins = $invite->reward_coins + $invite->bonus_coins;
-            
-            $user->increment('total_coins', $totalCoins);
+            // Davet edilen ve davet eden: 5 coin (reward); bonus varsayılan 0
+            $inviteeCoins = (int) $invite->reward_coins + (int) $invite->bonus_coins;
+            $inviterCoins = (int) $invite->reward_coins;
+
+            $user->increment('coins', $inviteeCoins);
+            $user->increment('total_coins', $inviteeCoins);
 
             $inviter = $invite->inviter;
-            $inviter->increment('total_coins', $invite->reward_coins);
+            $inviter->increment('coins', $inviterCoins);
+            $inviter->increment('total_coins', $inviterCoins);
 
             DB::commit();
 
@@ -169,7 +173,8 @@ class FriendInviteController extends Controller
                 'data' => [
                     'reward_coins' => $invite->reward_coins,
                     'bonus_coins' => $invite->bonus_coins,
-                    'total_coins_earned' => $totalCoins
+                    'total_coins_earned' => $inviteeCoins,
+                    'inviter_coins_earned' => $inviterCoins,
                 ]
             ]);
 
@@ -186,15 +191,15 @@ class FriendInviteController extends Controller
     public function stats(): JsonResponse
     {
         $userId = Auth::id();
-        
+
         $totalInvites = FriendInvite::byInviter($userId)->count();
         $acceptedInvites = FriendInvite::byInviter($userId)->accepted()->count();
         $pendingInvites = FriendInvite::byInviter($userId)->pending()->count();
-        
+
         $totalCoinsEarned = FriendInvite::byInviter($userId)
             ->accepted()
             ->sum('reward_coins');
-        
+
         $successRate = $totalInvites > 0 ? ($acceptedInvites / $totalInvites) * 100 : 0;
 
         return response()->json([

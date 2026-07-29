@@ -259,7 +259,7 @@ class AuthController extends Controller
             $referrer = User::where('referral_code', $request->referral_code)->first();
 
             if ($referrer && $referrer->id !== $user->id) {
-                $referralReward = 50;
+                $referralReward = 5;
 
                 // Yeni kullanıcıya coin ekle
                 $user->increment('coins', $referralReward);
@@ -270,7 +270,7 @@ class AuthController extends Controller
                 $referrer->increment('coins', $referralReward);
 
                 // Coin history kayıtları
-                // Kullanıcı zaten 10 coin ile kaydedildi, sonra 50 eklendi
+                // Kullanıcı kayıt bonusu + referral (5) sonrası bakiye
                 $userBalanceBefore = $user->coins - $referralReward;
                 $userBalanceAfter = $user->coins;
 

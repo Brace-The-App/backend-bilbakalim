@@ -12,16 +12,20 @@ class StorePackagesSeeder extends Seeder
 {
     public function run(): void
     {
+        // Eski yüksek coin paketlerini pasife al
+        CoinPackage::query()->update(['is_active' => false]);
+
+        // Jeton paketleri (Google Play komisyonu dahil fiyatlar)
         $coinPackages = [
-            ['code' => 'coin_1000', 'amount' => 1000, 'price' => 4.99],
-            ['code' => 'coin_2500', 'amount' => 2500, 'price' => 9.99],
-            ['code' => 'coin_5000', 'amount' => 5000, 'price' => 19.99],
-            ['code' => 'coin_10000', 'amount' => 10000, 'price' => 34.99],
-            ['code' => 'coin_25000', 'amount' => 25000, 'price' => 79.99],
-            ['code' => 'coin_50000', 'amount' => 50000, 'price' => 149.99],
-            ['code' => 'coin_100000', 'amount' => 100000, 'price' => 249.99],
-            ['code' => 'coin_250000', 'amount' => 250000, 'price' => 499.99],
-            ['code' => 'coin_500000', 'amount' => 500000, 'price' => 999.99],
+            ['code' => 'coin_3', 'amount' => 3, 'price' => 4.99],
+            ['code' => 'coin_6', 'amount' => 6, 'price' => 9.99],
+            ['code' => 'coin_12', 'amount' => 12, 'price' => 19.99],
+            ['code' => 'coin_30', 'amount' => 30, 'price' => 49.99],
+            ['code' => 'coin_60', 'amount' => 60, 'price' => 99.99],
+            ['code' => 'coin_120', 'amount' => 120, 'price' => 199.99],
+            ['code' => 'coin_300', 'amount' => 300, 'price' => 499.99],
+            ['code' => 'coin_600', 'amount' => 600, 'price' => 999.99],
+            ['code' => 'coin_1200', 'amount' => 1200, 'price' => 1999.99],
         ];
 
         foreach ($coinPackages as $index => $item) {
@@ -33,7 +37,7 @@ class StorePackagesSeeder extends Seeder
                     'price' => $item['price'],
                     'currency' => 'TRY',
                     'bonus_coins' => 0,
-                    'is_popular' => false,
+                    'is_popular' => $item['amount'] === 30,
                     'is_active' => true,
                     'sort_order' => $index + 1,
                 ]
@@ -45,8 +49,8 @@ class StorePackagesSeeder extends Seeder
                 'code' => 'premium_1_month',
                 'name' => 'Aylik Paket',
                 'duration_days' => 30,
-                'price' => 29.99,
-                'gift_coins' => 2500,
+                'price' => 50.00,
+                'gift_coins' => 30,
                 'fifty_fifty_jokers' => 2,
                 'double_answer_jokers' => 2,
                 'hint_jokers' => 2,
@@ -56,8 +60,8 @@ class StorePackagesSeeder extends Seeder
                 'code' => 'premium_6_month',
                 'name' => '6 Aylik Paket',
                 'duration_days' => 180,
-                'price' => 149.99,
-                'gift_coins' => 25000,
+                'price' => 100.00,
+                'gift_coins' => 60,
                 'fifty_fifty_jokers' => 10,
                 'double_answer_jokers' => 10,
                 'hint_jokers' => 10,
@@ -67,8 +71,8 @@ class StorePackagesSeeder extends Seeder
                 'code' => 'premium_1_year',
                 'name' => 'Yillik Paket',
                 'duration_days' => 365,
-                'price' => 199.99,
-                'gift_coins' => 50000,
+                'price' => 200.00,
+                'gift_coins' => 120,
                 'fifty_fifty_jokers' => 25,
                 'double_answer_jokers' => 25,
                 'hint_jokers' => 25,
@@ -96,10 +100,13 @@ class StorePackagesSeeder extends Seeder
             );
         }
 
+        // Joker paketleri: ilk 3 → 10 / 100 / 1000 coin (≈1 coin = 1 TL + Google ~%40)
+        // price ≈ coin_amount / 0.6
         $jokerPackages = [
-            ['code' => 'pack_1_consumable', 'name' => 'Paket 1', 'coin_amount' => 1000, 'price' => 19.99, 'fifty_fifty_jokers' => 1, 'double_answer_jokers' => 1, 'hint_jokers' => 1],
-            ['code' => 'pack_2_consumable', 'name' => 'Paket 2', 'coin_amount' => 2500, 'price' => 39.99, 'fifty_fifty_jokers' => 3, 'double_answer_jokers' => 3, 'hint_jokers' => 3],
-            ['code' => 'pack_3_consumable', 'name' => 'Paket 3', 'coin_amount' => 5000, 'price' => 69.99, 'fifty_fifty_jokers' => 5, 'double_answer_jokers' => 5, 'hint_jokers' => 5],
+            ['code' => 'pack_1_consumable', 'name' => 'Paket 1', 'coin_amount' => 10, 'price' => 16.99, 'fifty_fifty_jokers' => 1, 'double_answer_jokers' => 1, 'hint_jokers' => 1],
+            ['code' => 'pack_2_consumable', 'name' => 'Paket 2', 'coin_amount' => 100, 'price' => 166.99, 'fifty_fifty_jokers' => 3, 'double_answer_jokers' => 3, 'hint_jokers' => 3],
+            ['code' => 'pack_3_consumable', 'name' => 'Paket 3', 'coin_amount' => 1000, 'price' => 1666.99, 'fifty_fifty_jokers' => 5, 'double_answer_jokers' => 5, 'hint_jokers' => 5],
+            // 4. ve 5. paketler mevcut yapıda kalsın
             ['code' => 'pack_4_consumable', 'name' => 'Paket 4', 'coin_amount' => 10000, 'price' => 119.99, 'fifty_fifty_jokers' => 10, 'double_answer_jokers' => 10, 'hint_jokers' => 10],
             ['code' => 'pack_5_consumable', 'name' => 'Paket 5', 'coin_amount' => 25000, 'price' => 249.99, 'fifty_fifty_jokers' => 15, 'double_answer_jokers' => 15, 'hint_jokers' => 15],
         ];
@@ -122,7 +129,7 @@ class StorePackagesSeeder extends Seeder
             );
         }
 
-        // Elmas paketleri - dinamik tabloya başlangıç verileri
+        // Elmas paketleri — şu an kapalı (düello/meydan okuma coin ile)
         $diamondPackages = [
             ['name' => '10 Elmas', 'diamond_amount' => 10, 'price' => 14.99, 'gross_price' => 14.99],
             ['name' => '25 Elmas', 'diamond_amount' => 25, 'price' => 34.99, 'gross_price' => 34.99],
@@ -138,7 +145,7 @@ class StorePackagesSeeder extends Seeder
                     'price' => $item['price'],
                     'gross_price' => $item['gross_price'],
                     'sort_order' => $index + 1,
-                    'is_active' => true,
+                    'is_active' => false,
                 ]
             );
         }

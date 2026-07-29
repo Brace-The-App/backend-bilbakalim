@@ -150,12 +150,15 @@
                     @php
                         $isOnline = (bool) ($user->is_online ?? false);
                         $fullName = trim($user->name . ' ' . ($user->surname ?? ''));
-                        $avatarUrl = $user->avatarModel->image_url
-                            ?? (!empty($user->profile_image)
-                                ? (filter_var($user->profile_image, FILTER_VALIDATE_URL)
-                                    ? $user->profile_image
-                                    : asset('storage/' . ltrim($user->profile_image, '/')))
-                                : $defaultAvatar);
+                        $avatarUrl = $defaultAvatar;
+                        if (!empty($user->profile_image)) {
+                            // Kullanıcının seçtiği / yüklediği profil fotoğrafı öncelikli
+                            $avatarUrl = filter_var($user->profile_image, FILTER_VALIDATE_URL)
+                                ? $user->profile_image
+                                : asset('storage/' . ltrim(preg_replace('#^storage/#', '', $user->profile_image), '/'));
+                        } elseif ($user->avatarModel && $user->avatarModel->image_url) {
+                            $avatarUrl = $user->avatarModel->image_url;
+                        }
                         $statusLabel = match($user->account_status) {
                             'suspended' => 'Askıda',
                             'pending' => 'Beklemede',

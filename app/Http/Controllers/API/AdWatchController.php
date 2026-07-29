@@ -15,7 +15,7 @@ class AdWatchController extends Controller
      * @OA\Post(
      *     path="/api/ad-watch/reward",
      *     summary="Reklam izleme ödülü",
-     *     description="Kullanıcı reklam izledikten sonra +50 coin kazanır",
+     *     description="Kullanıcı reklam izledikten sonra +1 coin kazanır",
      *     tags={"Ad Watch"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -34,10 +34,10 @@ class AdWatchController extends Controller
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
-     *                 @OA\Property(property="coins_earned", type="integer", example=50),
-     *                 @OA\Property(property="balance_before", type="integer", example=100),
-     *                 @OA\Property(property="balance_after", type="integer", example=150),
-     *                 @OA\Property(property="user_coins", type="integer", example=150)
+     *                 @OA\Property(property="coins_earned", type="integer", example=1),
+     *                 @OA\Property(property="balance_before", type="integer", example=10),
+     *                 @OA\Property(property="balance_after", type="integer", example=11),
+     *                 @OA\Property(property="user_coins", type="integer", example=11)
      *             )
      *         )
      *     ),
@@ -75,14 +75,14 @@ class AdWatchController extends Controller
 
             // Kullanıcının mevcut coin bakiyesini al
             $balanceBefore = $user->coins;
-            
-            // +50 coin ekle
-            $coinReward = 50;
+
+            // +1 coin ekle
+            $coinReward = 1;
             $user->increment('coins', $coinReward);
-            
+
             // Güncel bakiyeyi al
             $balanceAfter = $user->fresh()->coins;
-            
+
             // Coin geçmişini coin_history tablosuna kaydet
             $user->coinHistory()->create([
                 'coin_amount' => $coinReward,
