@@ -1,0 +1,225 @@
+{
+    "settings": {
+        "site_title": "Bil Bakalım - Online Bilgi Yarışması",
+        "meta_description": "Canlı turnuvalar, güncel sorular ve ödüllü rekabet deneyimi sunan mobil bilgi yarışması.",
+        "primary": "#48038b",
+        "primary_soft": "#602aa3",
+        "secondary": "#fdab01",
+        "surface": "#f8f9fa",
+        "logo_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDYrWkiGzlABUqLR_PWThsSg_u-WZWhCaKpkLIH0dj0svp8ngYGPQwblKX9cXT0boZl0mDB1yz6Z_TbcSOA2qRhgFpFWAdG5c9IIxeSlFYeDs6Dd3NApbOi3pA6lbP8IzzZYCs8xywQ4xLStLnPKXqTyeAnJvEhWNY709c0kZ9K45k7UCNSHGFMYvItx4sGpOC5RjJVMsc2Pai8cSyCNDXsnljd9HhGF6oa62WHvw44_g2IlCxvyLqAhTCEOaDJ61WMRg",
+        "footer_logo_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDvg7NnER-x1zFPkiqoTTj60M0bxseagxiLmd0iBXcFYPnydP-ADbNqdvdb6eL5W4xu4iqFi7QiKuIy2ZLDLUCEbc9f9H83PZs_P9R9MYxzXKNUfq-cCieh6pMlbXSOgRvuUy4RSZpQQoSFUnOuFOPkl7PtSny_3mZIZzSxGj91dVRIosbimBKGI0SPGZeiSqYdz0Aj_gfbkmdJAof5QXgLTFG3jHd95BLJKZulij_jSq9vnUlViNJ4vpPrVZ36fBW2Og"
+    },
+    "nav": [
+        {
+            "label": "Anasayfa",
+            "target": "home"
+        },
+        {
+            "label": "Hakkında",
+            "target": "hakkinda"
+        },
+        {
+            "label": "Nasıl Oynanır?",
+            "target": "nasil-oynanir"
+        },
+        {
+            "label": "Özellikler",
+            "target": "ozellikler"
+        },
+        {
+            "label": "Ekranlar",
+            "target": "ekranlar"
+        },
+        {
+            "label": "Avantajlar",
+            "target": "avantajlar"
+        },
+        {
+            "label": "İletişim",
+            "target": "iletisim"
+        }
+    ],
+    "hero": {
+        "eyebrow": "Ödüllü mobil bilgi yarışması",
+        "title": "Bilgini Konuştur,\r\nEğlencenin Tadını Çıkar!",
+        "highlight": "Eğlencenin",
+        "description": "Günlük yarışmalar, canlı sıralamalar ve her hafta yenilenen ödüllerle bilgi yarışması deneyimini cebine taşı.",
+        "primary_cta": "Hemen İndir",
+        "primary_url": "#indir",
+        "secondary_cta": "Nasıl Çalışır?",
+        "secondary_url": "#nasil-oynanir",
+        "secondary_icon": "play_circle",
+        "phone_image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBRee5wJjlqG9OG2S4J1ekvbQj06dRci2e-H5On6ptyLKl7YMyS42LVE24RjjKVDGYGacuhPRE8Ihdx45atW1knKhzxpfDdCBgrsm2osM-LfU60rWIXWqINTjQtAIhhsKARq-J1c-aZpXa8iYpjSgSXIlYKKP1zRKOE6RM_R-C2QDqTGUzUWJbqivFzu7VKVEJfAi3ktRtHF-x_--SQI_WtAZNMbQTRZ0bKZk1abxUX0cp-5Zn4EWGQ",
+        "phone_image_secondary": "https://lh3.googleusercontent.com/aida-public/AB6AXuAFGCR88NOEATWh_okT2y0nTSeggAWGAJzHvgPvx470DWxuJnZEju0iYwXZ6uTR_WHbsVJbc14CTwybb8GJs2JqUcTpIgHrWjxeL9Sfz9k4ooklbynrWalq6FbUSIsnASCG3lZkjpk6-1IbSK82yxIKkJiqjbQ3AlrYZguMY7OMPp4GCHnPHD2zEmcDH5Yr5K1at0EfplwL0uJi9QlrOXYPnNrXeow71HFvtsq9GxN0o2-6BI8dWu78",
+        "trust_text": "Binlerce soru, canlı rekabet, gerçek ödül heyecanı."
+    },
+    "about": {
+        "eyebrow": "Hikayemiz",
+        "title": "Bil Bakalım Nedir?",
+        "description": "Bil Bakalım, sadece bir bilgi yarışması değil; eğlenceli, sosyal ve rekabetçi bir mobil deneyimdir. Güncel kategorilerde yarışabilir, arkadaşlarınla kapışabilir ve haftalık etkinliklerde ödül kazanabilirsin.",
+        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAFGCR88NOEATWh_okT2y0nTSeggAWGAJzHvgPvx470DWxuJnZEju0iYwXZ6uTR_WHbsVJbc14CTwybb8GJs2JqUcTpIgHrWjxeL9Sfz9k4ooklbynrWalq6FbUSIsnASCG3lZkjpk6-1IbSK82yxIKkJiqjbQ3AlrYZguMY7OMPp4GCHnPHD2zEmcDH5Yr5K1at0EfplwL0uJi9QlrOXYPnNrXeow71HFvtsq9GxN0o2-6BI8dWu78",
+        "bullets": [
+            {
+                "icon": "menu_book",
+                "title": "Binlerce güncel soru arşivi"
+            },
+            {
+                "icon": "bolt",
+                "title": "Canlı turnuva ve etkinlikler"
+            }
+        ]
+    },
+    "steps": {
+        "title": "Nasıl Oynanır?",
+        "description": "Sadece üç kolay adımda büyük maceraya sen de dahil ol!",
+        "items": [
+            {
+                "icon": "install_mobile",
+                "title": "Oyunu Aç",
+                "description": "Uygulamayı indir, profilini oluştur ve yarışmaya hazır hale gel."
+            },
+            {
+                "icon": "quiz",
+                "title": "Soruları Cevapla",
+                "description": "Sevdiğin kategoriyi seç, süreye karşı doğru cevapları yakala."
+            },
+            {
+                "icon": "workspace_premium",
+                "title": "Puan Kazan",
+                "description": "Sıralamada yüksel, etkinliklere katıl ve ödüllerin kapısını aç."
+            }
+        ]
+    },
+    "features": {
+        "title": "Harika Özellikler",
+        "description": "Bil Bakalım'ı rakiplerinden ayıran özelliklere göz at.",
+        "items": [
+            {
+                "icon": "update",
+                "title": "Güncel Sorular",
+                "description": "Her gün yenilenen soru havuzu ile gündemi ve genel kültürünü canlı tut."
+            },
+            {
+                "icon": "event_available",
+                "title": "Canlı Turnuvalar",
+                "description": "Belirli saatlerde açılan etkinliklerde binlerce oyuncuyla yarış."
+            },
+            {
+                "icon": "group_add",
+                "title": "Arkadaşlarınla Yarış",
+                "description": "Arkadaşlarını düelloya davet et ve bilgini gerçek zamanlı göster."
+            },
+            {
+                "icon": "auto_fix_high",
+                "title": "Joker Hakları",
+                "description": "Zorlandığın sorularda jokerleri kullanarak oyunda kal."
+            },
+            {
+                "icon": "military_tech",
+                "title": "Sıralama Tablosu",
+                "description": "Haftalık ve aylık listelerde zirveye oyna."
+            },
+            {
+                "icon": "redeem",
+                "title": "Özel Ödüller",
+                "description": "Puanlarını biriktir, etkinlik ödülleri ve rozetler kazan."
+            }
+        ]
+    },
+    "screenshots": {
+        "title": "Uygulamadan Kareler",
+        "description": "Modern, enerjik ve kullanıcı dostu arayüzümüze yakından bakın.",
+        "items": [
+            {
+                "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDnvFHSixv5iC3t_RSUBR80wICGX34BRsmsvOFJy8-SSA60qQ76A8hRZZH6SonCfWllSNak_YCmNio8Nzv-bagVgHoS1va0mWEtM6kCzpmW3gn_US_LUPY48mQUdKaxsV7cfvN5AxMU9ljybdhXoYlngY06UtgK9IFa5HnQd4UyC4uCsSGzpnd4QuVlODqx5qOwUvNPZ7XEQzT7Ga2VBBhb3Xf4oHa7IJjccMGXcud8-jVxZ1uKEJoZ"
+            },
+            {
+                "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDdWR8wPP3guf3sHqj2yQf599uSXAI8zJZUjoTRrEi1bZma6dUXG_PoDtFBoalob8F2umBGOTbSRTzPZhF0MahGdwqV7NMbzDlk7oY-6kNNA7iLwMHd4IQMbuBuGYmaGtxU_DkU9IGyZaL5OGjgmqBixK-G_1iQbJQezBnAd8XvnsIDElZhQYfKg-Bxz-KBCBRgz0QWRnFfa_Waye2ARqz1MrWw6DTUiGt-1tW_im--mx5sKL2UQLsP"
+            },
+            {
+                "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuAwPatRXGeTctFLpPEE1ImLJ1tE3lnzt2uQ63FmXil_vXwY-h_HpRRXFWMBPwFHy_1odMYG1XEnq7Y118_7fxPRMbH9C6qPTPjUx-bZYrANSvVMeOz2N_mKTY2_tqo7wwI-Z57dnJ-tB5frG_qj1dKtT2s7_W2vnienNnyMzCZqUvdwRiHdXE0bhxW0Ch4WTyCErGcVZ4EPMCAsEjEgrIHyddmvzr28bI2JMjtuFhahgjP7SyXSpOf6"
+            },
+            {
+                "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDPZS9nE2t_ciLGFgg68ym4YDw41z8pO9B_CB2NgU9jUpTCUGmhTmUKmmCHMo8ifG9KM7QVzAQUJPSyatMvTPrHDn5EKbUw7DxcjlHbqrS8wn3yrLw_CSGUZSvjPMOdv7W5eMblmua13lV8mjjAuhv98NgearcAf2J8l0I9t9oSCaMW9jYJNSWCqYTlk_8AWNYfCWCDZ9Q4zcghLB1K"
+            },
+            {
+                "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuBODnpd6k06KrIOh-rqHdbFto5MwAHNbFXZid1Q1-Q1pzl2C417ZLFoDwAe1zfYamT7qKvotskZs6dwogTFF-XIhXFRq7KExKUtiPpYpWNBYKphEyFPWK2lDBdjy2mxIzU2qNg-BCT1PCA11ij3wVMJiyeJiUlIOtcb0W9gZxEVQxmhg3L1kb7fodVr5eILpD3ED0L-IEgci7ayD_XLNAsBD06ckiG6ZnXc-78bOLoXo40ZhvgpwHQs"
+            }
+        ]
+    },
+    "advantages": {
+        "title": "Avantajlar",
+        "description": "Neden oyuncular Bil Bakalım'ı tercih ediyor?",
+        "items": [
+            {
+                "icon": "sentiment_very_satisfied",
+                "title": "Eğlenceli Deneyim",
+                "description": "Sıkılmadan öğrenebileceğin, hızlı ve keyifli bir oyun akışı."
+            },
+            {
+                "icon": "sports_score",
+                "title": "Rekabetçi Sistem",
+                "description": "Seviyene uygun rakiplerle adil, dengeli ve heyecanlı eşleşmeler."
+            },
+            {
+                "icon": "auto_awesome",
+                "title": "Sürekli Güncel",
+                "description": "Yeni soru paketleri, tematik kategoriler ve özel etkinlikler."
+            }
+        ]
+    },
+    "faq": {
+        "title": "Sıkça Sorulan Sorular",
+        "items": [
+            {
+                "question": "Oyun tamamen ücretsiz mi?",
+                "answer": "Evet, Bil Bakalım temel özellikleriyle ücretsizdir. Ek jokerler ve kozmetik öğeler opsiyonel olabilir."
+            },
+            {
+                "question": "Gerçek ödüller nasıl kazanılır?",
+                "answer": "Haftalık etkinliklerde üst sıralara çıkarak veya puanlarını ödül merkezinde kullanarak ödül kazanabilirsin."
+            },
+            {
+                "question": "Sorular ne sıklıkla güncelleniyor?",
+                "answer": "Soru havuzu düzenli olarak yeni kategoriler ve güncel konularla genişletilir."
+            }
+        ]
+    },
+    "contact": {
+        "title": "Bize Ulaşın",
+        "description": "Sorunuz, öneriniz veya iş birliği teklifiniz varsa bize mesaj gönderin.",
+        "email_label": "E-posta",
+        "email": "destek@bilbakalim.com",
+        "form_name_label": "Ad Soyad",
+        "form_email_label": "E-posta",
+        "form_message_label": "Mesajınız",
+        "form_button": "Mesaj Gönder"
+    },
+    "footer": {
+        "copyright": "© 2026 Bil Bakalım. Tüm Hakları Saklıdır.",
+        "links": [
+            {
+                "label": "Gizlilik Politikası",
+                "url": "#"
+            },
+            {
+                "label": "Kullanım Koşulları",
+                "url": "#"
+            },
+            {
+                "label": "Destek Merkezi",
+                "url": "#"
+            }
+        ],
+        "socials": [
+            {
+                "icon": "public",
+                "url": "#"
+            },
+            {
+                "icon": "share",
+                "url": "#"
+            }
+        ]
+    }
+}

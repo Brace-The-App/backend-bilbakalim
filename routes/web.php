@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\LandingBenefitController;
 use App\Http\Controllers\Admin\LandingTestimonialController;
 use App\Http\Controllers\Admin\LandingFaqController;
 use App\Http\Controllers\Admin\LandingNewsController;
+use App\Http\Controllers\Admin\LandingV2Controller;
 use App\Http\Controllers\Admin\SmsVitriniTestController;
 
 // Welcome page
@@ -112,6 +113,9 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
         Route::resource('testimonials', LandingTestimonialController::class)->parameters(['testimonials' => 'testimonial']);
         Route::resource('faqs', LandingFaqController::class)->parameters(['faqs' => 'faq']);
         Route::resource('news', LandingNewsController::class)->parameters(['news' => 'news']);
+
+        Route::get('v2', [LandingV2Controller::class, 'index'])->name('v2.index');
+        Route::match(['get', 'post'], 'v2/editor', [LandingV2Controller::class, 'editor'])->name('v2.editor');
     });
 });
 

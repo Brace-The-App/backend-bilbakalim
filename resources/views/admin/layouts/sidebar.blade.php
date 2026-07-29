@@ -166,9 +166,18 @@
                     </li>
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.landing.*') ? 'active' : '' }}" href="#">
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.landing.v2.*') ? 'active' : '' }}"
+                           href="{{ route('admin.landing.v2.index') }}">
                             <i data-feather="layout"></i>
                             <span>Landing</span>
+                        </a>
+                    </li>
+                    {{-- Landing-eski (eski CRUD menüsü — gerekirse geri aç)
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.landing.*') ? 'active' : '' }}" href="#">
+                            <i data-feather="layout"></i>
+                            <span>Landing-eski</span>
                         </a>
                         <ul class="sidebar-submenu">
                             <li><a class="{{ request()->routeIs('admin.landing.about.*') ? 'active' : '' }}" href="{{ route('admin.landing.about.index') }}">Uygulama Hakkında</a></li>
@@ -179,6 +188,7 @@
                             <li><a class="{{ request()->routeIs('admin.landing.news.*') ? 'active' : '' }}" href="{{ route('admin.landing.news.index') }}">Bizden Haberler</a></li>
                         </ul>
                     </li>
+                    --}}
                     <li class="sidebar-main-title">
                         <div>
                             <h6>Sistem</h6>
