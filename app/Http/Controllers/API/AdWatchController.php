@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserAdView;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +16,7 @@ class AdWatchController extends Controller
      * @OA\Post(
      *     path="/api/ad-watch/reward",
      *     summary="Reklam izleme ödülü",
-     *     description="Kullanıcı reklam izledikten sonra +1 coin kazanır",
+     *     description="Reklam izlendikten sonra +1 coin verir ve 24 saatlik 3 hak kotasından 1 düşer.",
      *     tags={"Ad Watch"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -30,31 +31,15 @@ class AdWatchController extends Controller
      *         description="Başarılı - Coin eklendi",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="message", type="string", example="Reklam izleme ödülü başarıyla verildi."),
-     *             @OA\Property(
-     *                 property="data",
-     *                 type="object",
-     *                 @OA\Property(property="coins_earned", type="integer", example=1),
-     *                 @OA\Property(property="balance_before", type="integer", example=10),
-     *                 @OA\Property(property="balance_after", type="integer", example=11),
-     *                 @OA\Property(property="user_coins", type="integer", example=11)
-     *             )
+     *             @OA\Property(property="message", type="string", example="Reklam izleme ödülü başarıyla verildi.")
      *         )
      *     ),
      *     @OA\Response(
      *         response=400,
-     *         description="Hata - Zaten bugün reklam izlenmiş olabilir veya başka bir hata",
+     *         description="Hak yok veya hata",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="message", type="string", example="Reklam izleme ödülü verilemedi.")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="message", type="string", example="Unauthenticated.")
+     *             @OA\Property(property="message", type="string", example="Reklam hakkınız doldu.")
      *         )
      *     )
      * )
@@ -67,61 +52,68 @@ class AdWatchController extends Controller
             if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Kullanıcı bulunamadı.'
+                    'message' => 'Kullanıcı bulunamadı.',
                 ], 401);
             }
 
-            DB::beginTransaction();
+            return DB::transaction(function () use ($user, $request) {
+                UserAdView::forUser($user->id);
+                $view = UserAdView::where('user_id', $user->id)->lockForUpdate()->first();
+                $view->resetWindowIfExpired();
 
-            // Kullanıcının mevcut coin bakiyesini al
-            $balanceBefore = $user->coins;
+                if ($view->isExhausted()) {
+                    return response()->json(array_merge([
+                        'success' => false,
+                        'allowed' => false,
+                        'message' => 'Reklam hakkınız doldu. İlk izlemeden 24 saat sonra yenilenir.',
+                    ], $view->statusPayload()), 400);
+                }
 
-            // +1 coin ekle
-            $coinReward = 1;
-            $user->increment('coins', $coinReward);
+                $view->consumeOne();
 
-            // Güncel bakiyeyi al
-            $balanceAfter = $user->fresh()->coins;
+                $balanceBefore = (int) $user->coins;
+                $coinReward = 1;
+                $user->increment('coins', $coinReward);
+                $balanceAfter = (int) $user->fresh()->coins;
 
-            // Coin geçmişini coin_history tablosuna kaydet
-            $user->coinHistory()->create([
-                'coin_amount' => $coinReward,
-                'transaction_type' => 'earned',
-                'status' => 'completed',
-                'description' => 'Reklam izleme ödülü',
-                'metadata' => [
-                    'ad_id' => $request->input('ad_id'),
-                    'ad_type' => $request->input('ad_type'),
-                    'reward_type' => 'ad_watch',
-                    'coins_earned' => $coinReward
-                ],
-                'balance_before' => $balanceBefore,
-                'balance_after' => $balanceAfter
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Reklam izleme ödülü başarıyla verildi.',
-                'data' => [
-                    'coins_earned' => $coinReward,
+                $user->coinHistory()->create([
+                    'coin_amount' => $coinReward,
+                    'transaction_type' => 'earned',
+                    'status' => 'completed',
+                    'description' => 'Reklam izleme ödülü',
+                    'metadata' => [
+                        'ad_id' => $request->input('ad_id'),
+                        'ad_type' => $request->input('ad_type'),
+                        'reward_type' => 'ad_watch',
+                        'coins_earned' => $coinReward,
+                    ],
                     'balance_before' => $balanceBefore,
                     'balance_after' => $balanceAfter,
-                    'user_coins' => $balanceAfter
-                ]
-            ]);
+                ]);
 
+                $view->refresh();
+
+                return response()->json(array_merge([
+                    'success' => true,
+                    'allowed' => true,
+                    'message' => 'Reklam izleme ödülü başarıyla verildi.',
+                    'data' => [
+                        'coins_earned' => $coinReward,
+                        'balance_before' => $balanceBefore,
+                        'balance_after' => $balanceAfter,
+                        'user_coins' => $balanceAfter,
+                    ],
+                ], $view->statusPayload()));
+            });
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Ad watch reward error: ' . $e->getMessage(), [
                 'user_id' => Auth::id(),
-                'request' => $request->all()
+                'request' => $request->all(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Reklam izleme ödülü verilemedi.'
+                'message' => 'Reklam izleme ödülü verilemedi.',
             ], 400);
         }
     }
