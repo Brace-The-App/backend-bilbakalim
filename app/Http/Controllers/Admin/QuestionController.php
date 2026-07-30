@@ -83,57 +83,56 @@ class QuestionController extends Controller
             });
         }
 
-        $supportedLocales = config('app.supported_locales', ['tr', 'en']);
-
-        $filteredTotalCount = (clone $query)->count();
-        $languageCounts = [];
-
-        foreach ($supportedLocales as $locale) {
-            $languageCounts[$locale] = (clone $query)
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.\"{$locale}\"')), '')) != ''")
-                ->count();
-        }
-
-        $bilingualCount = null;
-        $trOnlyCount = null;
-        $enOnlyCount = null;
-
-        if (in_array('tr', $supportedLocales, true) && in_array('en', $supportedLocales, true)) {
-            $bilingualCount = (clone $query)
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) != ''")
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) != ''")
-                ->count();
-
-            $trOnlyCount = (clone $query)
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) != ''")
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) = ''")
-                ->count();
-
-            $enOnlyCount = (clone $query)
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.en')), '')) != ''")
-                ->whereRaw("TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(question, '$.tr')), '')) = ''")
-                ->count();
-        }
-
         $perPage = (int) $request->input('per_page', 10);
         if (!in_array($perPage, [10, 25, 50], true)) {
             $perPage = 10;
         }
 
-        $questions = $query->latest()->paginate($perPage)->withQueryString();
-        $categories = Category::active()->get();
+        $page = max(1, (int) $request->input('page', 1));
 
-        $summary = [
-            'total' => Question::count(),
-            'active' => Question::where('is_active', true)->count(),
-            'passive' => Question::where('is_active', false)->count(),
-            'easy' => Question::where('question_level', 'easy')->count(),
-            'medium' => Question::where('question_level', 'medium')->count(),
-            'hard' => Question::where('question_level', 'hard')->count(),
-            'unchecked' => Question::where(function ($q) {
-                $q->where('check', false)->orWhereNull('check');
-            })->count(),
+        $filterSignature = [
+            'status' => $request->input('status'),
+            'level' => $request->input('level'),
+            'category_id' => $request->input('category_id'),
+            'check' => $request->input('check'),
+            'search' => $request->input('search'),
+            'languages' => $request->input('languages'),
         ];
+
+        $filterStats = \App\Services\AdminQuestionStats::filterStats($query, $filterSignature);
+        $filteredTotalCount = $filterStats['filtered_total'];
+        $languageCounts = $filterStats['language_counts'];
+        $bilingualCount = $filterStats['bilingual'];
+        $trOnlyCount = $filterStats['tr_only'];
+        $enOnlyCount = $filterStats['en_only'];
+
+        $lastPage = max(1, (int) ceil(max($filteredTotalCount, 1) / $perPage));
+        if ($filteredTotalCount === 0) {
+            $lastPage = 1;
+        }
+        if ($page > $lastPage) {
+            $page = $lastPage;
+        }
+
+        $items = (clone $query)
+            ->orderByDesc('id')
+            ->forPage($page, $perPage)
+            ->get();
+
+        $questions = new \Illuminate\Pagination\LengthAwarePaginator(
+            $items,
+            $filteredTotalCount,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'page',
+            ]
+        );
+
+        $categories = Category::active()->get();
+        $summary = \App\Services\AdminQuestionStats::summary();
 
         return view('admin.questions.index', compact(
             'questions',

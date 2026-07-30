@@ -30,32 +30,35 @@
 </div>
 
 {{-- 1) Özet şerit --}}
+@php
+    $kpiBase = ((int) $perPage !== 10) ? ['per_page' => (int) $perPage] : [];
+@endphp
 <div id="questionsKpi" class="questions-summary mb-3">
-    <a href="{{ route('admin.questions.index') }}" class="questions-summary__card {{ !request()->hasAny(['status','level','check']) ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', $kpiBase) }}" class="questions-summary__card {{ !request()->hasAny(['status','level','check']) ? 'is-active' : '' }}">
         <span class="questions-summary__label">Toplam</span>
         <strong class="questions-summary__value">{{ number_format($summary['total']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['status' => 1]) }}" class="questions-summary__card {{ request('status') === '1' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['status' => 1])) }}" class="questions-summary__card {{ request('status') === '1' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Aktif</span>
         <strong class="questions-summary__value text-success">{{ number_format($summary['active']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['status' => 0]) }}" class="questions-summary__card {{ request('status') === '0' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['status' => 0])) }}" class="questions-summary__card {{ request('status') === '0' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Pasif</span>
         <strong class="questions-summary__value text-danger">{{ number_format($summary['passive']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['level' => 'easy']) }}" class="questions-summary__card {{ request('level') === 'easy' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['level' => 'easy'])) }}" class="questions-summary__card {{ request('level') === 'easy' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Kolay</span>
         <strong class="questions-summary__value text-success">{{ number_format($summary['easy']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['level' => 'medium']) }}" class="questions-summary__card {{ request('level') === 'medium' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['level' => 'medium'])) }}" class="questions-summary__card {{ request('level') === 'medium' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Orta</span>
         <strong class="questions-summary__value text-warning">{{ number_format($summary['medium']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['level' => 'hard']) }}" class="questions-summary__card {{ request('level') === 'hard' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['level' => 'hard'])) }}" class="questions-summary__card {{ request('level') === 'hard' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Zor</span>
         <strong class="questions-summary__value text-danger">{{ number_format($summary['hard']) }}</strong>
     </a>
-    <a href="{{ route('admin.questions.index', ['check' => 0]) }}" class="questions-summary__card {{ request('check') === '0' ? 'is-active' : '' }}">
+    <a href="{{ route('admin.questions.index', array_merge($kpiBase, ['check' => 0])) }}" class="questions-summary__card {{ request('check') === '0' ? 'is-active' : '' }}">
         <span class="questions-summary__label">Kontrol edilmemiş</span>
         <strong class="questions-summary__value">{{ number_format($summary['unchecked']) }}</strong>
     </a>
@@ -1016,6 +1019,11 @@
                 loadQuestions(1);
             });
 
+            // Adım 1: 10/25/50 değişince otomatik uygula
+            $('#filterForm select[name="per_page"]').on('change', function() {
+                loadQuestions(1);
+            });
+
             // Temizle butonu - formu temizle ve AJAX ile yükle
             $('#clearFiltersBtn').on('click', function(e) {
                 e.preventDefault();
@@ -1218,15 +1226,24 @@
                 });
             });
 
-            // Pagination Click Handler
+            // Pagination Click Handler (Adım 2: URLSearchParams)
             $(document).on('click', '.pagination a', function(e) {
                 e.preventDefault();
                 var href = $(this).attr('href');
+                if (!href || href === '#') return;
                 var page = 1;
-                if (href && href.includes('page=')) {
-                    page = href.split('page=')[1].split('&')[0];
+                try {
+                    var u = new URL(href, window.location.origin);
+                    page = parseInt(u.searchParams.get('page') || '1', 10) || 1;
+                    if (u.searchParams.has('per_page')) {
+                        $('#filterForm select[name="per_page"]').val(u.searchParams.get('per_page'));
+                    }
+                } catch (err) {
+                    if (href.indexOf('page=') !== -1) {
+                        page = parseInt(href.split('page=')[1].split('&')[0], 10) || 1;
+                    }
                 }
-                currentPage = parseInt(page) || 1;
+                currentPage = page;
                 loadQuestions(currentPage);
             });
 
@@ -1307,40 +1324,33 @@
                 }
             })();
 
-            // Anlık soru güncellemeleri
-            if (typeof window.socketClient !== 'undefined') {
-                // Socket bağlantısı kurulduğunda soru listesini yükle
-                window.socketClient.socket.on('connect', function() {
-                    console.log('Socket bağlandı, soru listesi yükleniyor...');
-                    loadQuestions(currentPage);
-                });
-
-                // Soru güncellemelerini dinle
+            // Anlık soru güncellemeleri (connect'te otomatik reload yok — Adım 2)
+            if (typeof window.socketClient !== 'undefined' && window.socketClient.socket) {
                 window.socketClient.socket.on('question_created', function(data) {
                     console.log('Yeni soru oluşturuldu:', data);
-                    loadQuestions(currentPage); // Mevcut sayfada kal
+                    loadQuestions(currentPage);
                     toastr.success('Yeni soru eklendi!', 'BilBakalim');
                 });
 
                 window.socketClient.socket.on('question_updated', function(data) {
                     console.log('Soru güncellendi:', data);
-                    loadQuestions(currentPage); // Mevcut sayfada kal
+                    loadQuestions(currentPage);
                     toastr.info('Soru güncellendi!', 'BilBakalim');
                 });
 
                 window.socketClient.socket.on('question_deleted', function(data) {
                     console.log('Soru silindi:', data);
-                    loadQuestions(currentPage); // Mevcut sayfada kal
+                    loadQuestions(currentPage);
                     toastr.warning('Soru silindi!', 'BilBakalim');
                 });
 
-                // Kategori güncellemelerini dinle
                 window.socketClient.socket.on('category_updated', function(data) {
                     console.log('Kategori güncellendi:', data);
-                    loadQuestions(currentPage); // Mevcut sayfada kal
+                    loadQuestions(currentPage);
                     toastr.info('Kategori güncellendi!', 'BilBakalim');
                 });
             }
+
 
         });
     </script>
