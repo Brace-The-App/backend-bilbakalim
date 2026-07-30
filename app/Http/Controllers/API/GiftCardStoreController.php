@@ -28,6 +28,7 @@ class GiftCardStoreController extends Controller
      *         description="Başarılı",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="duel_earned_coins", type="integer", example=120, description="Kullanıcının meydan okumadan kazandığı jeton"),
      *             @OA\Property(
      *                 property="data",
      *                 type="array",
@@ -62,8 +63,11 @@ class GiftCardStoreController extends Controller
             ];
         });
 
+        $user = $request->user();
+
         return response()->json([
             'success' => true,
+            'duel_earned_coins' => (int) ($user?->duel_earned_coins ?? 0),
             'data' => $stores
         ]);
     }

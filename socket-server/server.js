@@ -1312,26 +1312,73 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
 app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
     try {
         console.log('📥 Webhook alındı: duel-started', JSON.stringify(req.body));
-        const { duel_id, challenger_id, opponent_id, question } = req.body;
+        const {
+            duel_id,
+            challenger_id,
+            opponent_id,
+            question,
+            multiplier,
+            challenger,
+            opponent,
+        } = req.body;
 
         if (!duel_id) {
             return res.status(400).json({ success: false, message: 'duel_id gerekli' });
         }
 
-        const roomName = `duel_${duel_id}`;
+        const duelId = parseInt(duel_id, 10);
+        const challengerId = parseInt(challenger_id, 10);
+        const opponentId = parseInt(opponent_id, 10);
+        const roomName = `duel_${duelId}`;
         const data = {
-            duel_id: parseInt(duel_id),
-            challenger_id: parseInt(challenger_id),
-            opponent_id: parseInt(opponent_id),
+            duel_id: duelId,
+            challenger_id: challengerId,
+            opponent_id: opponentId,
             question: question,
             timestamp: new Date().toISOString()
         };
 
-        io.to(roomName).emit('duel-started', data);
-        io.to(`user_${challenger_id}`).emit('duel-started', data);
-        io.to(`user_${opponent_id}`).emit('duel-started', data);
+        // Bot / API eşleşmesinde mobil hâlâ duel-matched bekliyor — kuyruktan çıkar + matched yayınla
+        if (challengerId) {
+            removeUserFromMatchQueues(challengerId);
+            clearMatchCancelled(challengerId);
+            joinUserSocketToDuelRoom(challengerId, duelId);
+        }
+        if (opponentId) {
+            removeUserFromMatchQueues(opponentId);
+            clearMatchCancelled(opponentId);
+            joinUserSocketToDuelRoom(opponentId, duelId);
+        }
 
-        console.log('✅ duel-started event gönderildi');
+        const matchedPayload = {
+            duelId,
+            challengerId,
+            opponentId,
+            multiplier: multiplier || 'x1',
+            status: 'matched',
+            question: question || null,
+            challenger: challenger || null,
+            opponent: opponent || null,
+            timestamp: new Date().toISOString(),
+        };
+
+        io.to(roomName).emit('duel-started', data);
+        if (challengerId) {
+            io.to(`user_${challengerId}`).emit('duel-started', data);
+            emitToUser(challengerId, 'duel-matched', matchedPayload);
+            emitToUser(challengerId, 'duel_matched', matchedPayload);
+        }
+        if (opponentId) {
+            io.to(`user_${opponentId}`).emit('duel-started', data);
+            emitToUser(opponentId, 'duel-matched', matchedPayload);
+            emitToUser(opponentId, 'duel_matched', matchedPayload);
+        }
+        if (duelId) {
+            io.to(roomName).emit('duel-matched', matchedPayload);
+            io.to(roomName).emit('duel_matched', matchedPayload);
+        }
+
+        console.log('✅ duel-started + duel-matched event gönderildi', JSON.stringify(matchedPayload));
         res.json({ success: true });
     } catch (error) {
         console.error('❌ Duel started webhook error:', error);

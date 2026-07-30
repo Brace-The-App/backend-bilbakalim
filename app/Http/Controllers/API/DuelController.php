@@ -599,7 +599,7 @@ class DuelController extends Controller
             $currentQuestion = $this->formatQuestionMultilingual($duel->currentQuestion);
         }
 
-        return response()->json([
+        $payload = [
             'success' => true,
             'duel' => [
                 'id' => $duel->id,
@@ -628,7 +628,14 @@ class DuelController extends Controller
                 'started_at' => $duel->started_at,
                 'finished_at' => $duel->finished_at,
             ]
-        ]);
+        ];
+
+        if ($duel->status === 'finished') {
+            $duel->loadMissing('answers');
+            $payload['result'] = $this->buildDuelFinishedPayload($duel);
+        }
+
+        return response()->json($payload);
     }
 
     /**
@@ -1095,19 +1102,38 @@ class DuelController extends Controller
                 ? $duel->opponent_id
                 : $duel->challenger_id;
 
+            // Aktif maçta çıkış: o anki soru değeri (çarpanlı) kaybedene ekstra kesilir
+            $leaveForfeit = 0;
+            if ($duel->status === 'active' && $winnerId && $duel->current_question_id) {
+                $winner = User::query()->find($winnerId);
+                $settings = $duel->settings ?? [];
+                $questionValue = $duel->question_value * max(1, (int) ($settings['current_question_multiplier'] ?? 1));
+                if ($winner && $questionValue > 0) {
+                    $transfer = $this->transferCoins($user, $winner, $questionValue, $duel);
+                    $leaveForfeit = (int) ($transfer['taken'] ?? 0);
+                }
+            }
+
             // Düello bitir (winner null ise sadece iptal/kapat, komisyon yok)
             $this->finishDuel($duel, $winnerId);
+
+            $duel->refresh()->load(['challenger', 'opponent', 'winner', 'answers']);
+            $result = $this->buildDuelFinishedPayload($duel);
+            $result['left_by'] = $user->id;
+            $result['leave_forfeit'] = $leaveForfeit;
+            $result['leaveForfeit'] = $leaveForfeit;
 
             // Socket bildirimi gönder
             $this->sendDuelFinishedWebhook($duel);
 
             DB::commit();
 
-            return response()->json([
+            return response()->json(array_merge([
                 'success' => true,
                 'message' => 'Düellodan çekildiniz.',
-                'duel' => $duel->load(['challenger', 'opponent', 'winner'])
-            ]);
+                'duel' => $duel,
+                'result' => $result,
+            ], $result));
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -1587,12 +1613,24 @@ class DuelController extends Controller
     private function sendDuelStartedWebhook(Duel $duel, ?Question $question): void
     {
         try {
+            $duel->loadMissing(['challenger', 'opponent']);
             $socketUrl = config('app.socket_url', 'http://socket-server:3001');
             Http::timeout(5)->post("{$socketUrl}/socket-webhooks/webhook/duel-started", [
                 'duel_id' => $duel->id,
                 'challenger_id' => $duel->challenger_id,
                 'opponent_id' => $duel->opponent_id,
+                'multiplier' => $duel->multiplier,
                 'question' => $question ? $this->formatQuestionMultilingual($question) : null,
+                'challenger' => $duel->challenger ? [
+                    'id' => $duel->challenger->id,
+                    'name' => $duel->challenger->name,
+                    'avatar' => $duel->challenger->avatar,
+                ] : null,
+                'opponent' => $duel->opponent ? [
+                    'id' => $duel->opponent->id,
+                    'name' => $duel->opponent->name,
+                    'avatar' => $duel->opponent->avatar,
+                ] : null,
                 'timestamp' => now()->toISOString()
             ]);
         } catch (\Exception $e) {
@@ -1726,6 +1764,16 @@ class DuelController extends Controller
         $coinsGained = (int) $userAnswers->where('coins_change', '>', 0)->sum('coins_change');
         $coinsLost = (int) abs($userAnswers->where('coins_change', '<', 0)->sum('coins_change'));
         $netCoinsChange = (int) $userAnswers->sum('coins_change');
+
+        // Leave forfeit / komisyon gibi answer dışı hareketler bakiyede görünür
+        $netFromBalance = $coinsAfter - $coinsBefore;
+        if ($netFromBalance !== $netCoinsChange) {
+            $extraLoss = max(0, $netCoinsChange - $netFromBalance);
+            $extraGain = max(0, $netFromBalance - $netCoinsChange);
+            $coinsLost += $extraLoss;
+            $coinsGained += $extraGain;
+            $netCoinsChange = $netFromBalance;
+        }
 
         return [
             'userId' => $userId,
