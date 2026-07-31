@@ -11,6 +11,7 @@ use App\Models\Question;
 use App\Models\RewardRequest;
 use App\Models\User;
 use App\Http\Services\WebhookService;
+use App\Services\DuelBotSettings;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -35,8 +36,8 @@ class DashboardController extends Controller
             'total_users' => User::notBot()->count(),
             // Aktif = socket'e bağlı (gerçek çevrimiçi)
             'active_users' => count($onlineHumans),
-            // Şimdilik sabit 0; ileride canlı bot sayısı bağlanacak
-            'active_bots' => 0,
+            // Düello bot havuzunda is_active=true olanlar
+            'active_bots' => collect(DuelBotSettings::bots())->where('is_active', true)->count(),
             'total_questions' => Question::count(),
             'total_categories' => Category::count(),
             'pending_rewards' => RewardRequest::where('status', 'pending')->count(),
