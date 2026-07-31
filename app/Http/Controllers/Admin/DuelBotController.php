@@ -186,13 +186,13 @@ class DuelBotController extends Controller
                     'difficulty' => $created['config']['difficulty'],
                     'is_active' => false,
                     'coins' => (int) $user->coins,
-                    'redirect' => route('admin.duel-bot.index', ['bot' => $user->id]),
+                    'redirect' => route('admin.duel-bot.index', ['bot' => $user->id]) . '#duelBotWorkspace',
                 ],
             ]);
         }
 
         return redirect()
-            ->route('admin.duel-bot.index', ['bot' => $user->id])
+            ->to(route('admin.duel-bot.index', ['bot' => $user->id]) . '#duelBotWorkspace')
             ->with('success', "Yeni bot eklendi (pasif): {$user->name}");
     }
 
@@ -302,7 +302,7 @@ class DuelBotController extends Controller
         DuelBotSettings::log("Profil güncellendi: #{$bot->id} {$bot->name} · coins={$bot->coins}");
 
         return redirect()
-            ->route('admin.duel-bot.index', ['bot' => $bot->id])
+            ->to(route('admin.duel-bot.index', ['bot' => $bot->id]) . '#duelBotWorkspace')
             ->with('success', 'Profil kaydedildi.');
     }
 
@@ -325,7 +325,7 @@ class DuelBotController extends Controller
         DuelBotSettings::log("Avatar güncellendi: bot #{$bot->id} → avatar #{$avatar->id}");
 
         return redirect()
-            ->route('admin.duel-bot.index', ['bot' => $bot->id])
+            ->to(route('admin.duel-bot.index', ['bot' => $bot->id]) . '#duelBotWorkspace')
             ->with('success', 'Avatar kaydedildi.');
     }
 }

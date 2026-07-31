@@ -26,7 +26,6 @@
                                 <th>ID</th>
                                 <th>Başlık</th>
                                 <th>Görsel</th>
-                                <th>Link</th>
                                 <th>Sıra</th>
                                 <th>Durum</th>
                                 <th>İşlemler</th>
@@ -41,13 +40,6 @@
                                     <img src="{{ $ad->image_url }}" alt="Ad {{ $ad->id }}" class="ad-thumb"
                                          style="width:120px;height:70px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px;padding:4px;">
                                 </td>
-                                <td>
-                                    @if($ad->link)
-                                        <a href="{{ $ad->link }}" target="_blank" rel="noopener" class="small text-break">{{ \Illuminate\Support\Str::limit($ad->link, 40) }}</a>
-                                    @else
-                                        <span class="text-muted">—</span>
-                                    @endif
-                                </td>
                                 <td>{{ $ad->sort_order }}</td>
                                 <td>
                                     @if($ad->is_active)
@@ -60,7 +52,6 @@
                                     <button type="button" class="btn btn-sm btn-warning btn-edit-ad"
                                             data-id="{{ $ad->id }}"
                                             data-title="{{ $ad->title }}"
-                                            data-link="{{ $ad->link }}"
                                             data-image-url="{{ $ad->image_url }}"
                                             data-sort="{{ $ad->sort_order }}"
                                             data-active="{{ $ad->is_active ? 1 : 0 }}">Düzenle</button>
@@ -69,7 +60,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted">Henüz reklam yok.</td>
+                                <td colspan="6" class="text-center text-muted">Henüz reklam yok.</td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -111,10 +102,14 @@
                         <div class="form-text text-warning">Uyarı: Video en fazla 10 saniye olmalıdır. Daha uzun videolar reddedilir. Önerilen format: MP4.</div>
                     </div>
                     --}}
+                    {{--
+                    LINK (şimdilik gizli — ileride yorumu kaldır):
+                    API'de link dönmeye devam eder; mevcut kayıtlar korunur.
                     <div class="mb-3">
                         <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
                         <input type="url" name="link" class="form-control" placeholder="https://yudengames.com/">
                     </div>
+                    --}}
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
                         <input type="number" name="sort_order" class="form-control" value="0" min="0">
@@ -168,11 +163,14 @@
                         </div>
                     </div>
                     --}}
+                    {{--
+                    LINK (şimdilik gizli — ileride yorumu kaldır):
                     <div class="mb-3">
                         <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
                         <input type="url" name="link" id="edit-link" class="form-control" placeholder="https://yudengames.com/">
                     </div>
-                    {{-- video_path alt yapı hazır; panel UI yukarıda yorumda --}}
+                    --}}
+                    {{-- link + video_path alt yapı hazır; panel UI yorumda --}}
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
                         <input type="number" name="sort_order" id="edit-sort" class="form-control" min="0">
@@ -209,7 +207,6 @@ $(function () {
         var id = $(this).data('id');
         $('#adEditForm').attr('action', '/admin/ads/' + id);
         $('#edit-title').val($(this).data('title') || '');
-        $('#edit-link').val($(this).data('link') || '');
         $('#edit-sort').val($(this).data('sort'));
         $('#edit-preview').attr('src', $(this).data('image-url'));
         $('#edit_is_active').prop('checked', String($(this).data('active')) === '1');

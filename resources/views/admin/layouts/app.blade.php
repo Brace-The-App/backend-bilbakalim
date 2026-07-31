@@ -197,7 +197,35 @@
         }
     });
 
-
+    // Sol menü yüksekliğini ekran boyutuna göre ayarla (tema CSS'ine dokunmadan)
+    (function () {
+        function fitAdminSidebar() {
+            var links = document.querySelector('.page-wrapper.compact-wrapper .sidebar-wrapper .sidebar-links');
+            if (!links) return;
+            var logo = document.querySelector('.page-wrapper.compact-wrapper .sidebar-wrapper .logo-wrapper');
+            var logoH = logo ? logo.offsetHeight : 80;
+            var h = Math.max(160, window.innerHeight - logoH - 24);
+            links.style.height = h + 'px';
+            links.style.marginBottom = '0';
+            if (window.SimpleBar && links.SimpleBar) {
+                try { links.SimpleBar.recalculate(); } catch (e) {}
+            }
+            var scrollEl = links.querySelector('.simplebar-content-wrapper');
+            if (scrollEl) scrollEl.scrollTop = 0;
+        }
+        function resetSidebarTop() {
+            document.querySelectorAll('.sidebar-wrapper .simplebar-content-wrapper').forEach(function (el) {
+                el.scrollTop = 0;
+            });
+        }
+        window.addEventListener('resize', fitAdminSidebar);
+        window.addEventListener('load', function () {
+            fitAdminSidebar();
+            resetSidebarTop();
+        });
+        document.addEventListener('DOMContentLoaded', fitAdminSidebar);
+        setTimeout(function () { fitAdminSidebar(); resetSidebarTop(); }, 300);
+    })();
 </script>
 </body>
 </html>

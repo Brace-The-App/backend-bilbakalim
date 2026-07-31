@@ -35,6 +35,8 @@ class DashboardController extends Controller
             'total_users' => User::notBot()->count(),
             // Aktif = socket'e bağlı (gerçek çevrimiçi)
             'active_users' => count($onlineHumans),
+            // Şimdilik sabit 0; ileride canlı bot sayısı bağlanacak
+            'active_bots' => 0,
             'total_questions' => Question::count(),
             'total_categories' => Category::count(),
             'pending_rewards' => RewardRequest::where('status', 'pending')->count(),

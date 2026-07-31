@@ -228,6 +228,9 @@
                     </li>
                     @endif
                     @endcan
+
+                    {{-- Alt menü öğelerinin kaydırma alanında görünmesi için boşluk --}}
+                    <li class="sidebar-list sidebar-bottom-spacer" aria-hidden="true" style="height:96px;pointer-events:none;visibility:hidden;"></li>
                 </ul>
             </div>
             <div class="right-arrow" id="right-arrow"><i data-feather="arrow-right"></i></div>

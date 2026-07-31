@@ -60,7 +60,7 @@
                     <label class="form-label small text-muted mb-1">Ara</label>
                     <div class="input-group">
                         <span class="input-group-text bg-white"><i data-feather="search"></i></span>
-                        <input type="text" name="search" class="form-control" placeholder="Ad, email, telefon..." value="{{ request('search') }}">
+                        <input type="text" name="search" class="form-control" placeholder="Ad, email, telefon, ID..." value="{{ request('search') }}">
                     </div>
                 </div>
 

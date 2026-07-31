@@ -147,6 +147,9 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
     background: #f8f9fa;
     color: #6c757d;
 }
+#duelBotWorkspace {
+    scroll-margin-top: 90px;
+}
 </style>
 @endpush
 
@@ -319,7 +322,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
     </div>
 </div>
 
-<div class="row">
+<div class="row" id="duelBotWorkspace">
     {{-- Sol: bot kartları --}}
     <div class="col-lg-3 mb-3">
         <div class="card">
@@ -339,7 +342,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 </div>
                 <div class="duel-bot-list" id="duelBotList">
                     @foreach($bots as $item)
-                        <a href="{{ route('admin.duel-bot.index', ['bot' => $item['id']]) }}"
+                        <a href="{{ route('admin.duel-bot.index', ['bot' => $item['id']]) }}#duelBotWorkspace"
                            class="duel-bot-card {{ (string)$selectedId === (string)$item['id'] ? 'is-active' : '' }} {{ !empty($item['is_dummy']) ? 'is-dummy' : '' }}"
                            data-tier="{{ $item['difficulty'] ?? '' }}"
                            data-bot-id="{{ $item['user_id'] ?? $item['id'] }}"
@@ -475,7 +478,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                         <div class="form-text mt-1">Kısa maçta % kesirli olmaz; motor bu “mümkün” doğru sayılarına çeker.</div>
                     </div>
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Durum</label>
                             <div class="form-check form-switch mt-2">
                                 <input class="form-check-input" type="checkbox" role="switch" id="is_active"
@@ -484,7 +487,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                             </div>
                             <div class="form-text">Toggle anında kaydolur.</div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-7">
                             <label class="form-label" for="difficulty">Zorluk</label>
                             <select class="form-select" id="difficulty">
                                 @foreach(\App\Services\BotAnswerEngine::tierOptions() as $value => $label)
@@ -493,7 +496,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                             </select>
                             <div class="form-text">Maç boyunca isabet bu banda çekilir; her soru yine rastgele sıralı doğru/yanlış gelebilir.</div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-2">
                             <label class="form-label" for="match_wait_seconds">Eşleşme bekleme (sn)</label>
                             <input type="number" class="form-control" id="match_wait_seconds"
                                    min="1" max="30" value="{{ $settings['match_wait_seconds'] }}">
@@ -693,6 +696,36 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
 @push('scripts')
 <script>
 (function () {
+    // Seçili bot varken (veya #duelBotWorkspace) sayfa bot paneline gelsin
+    function focusBotWorkspace() {
+        var params = new URLSearchParams(window.location.search);
+        var hasBot = params.has('bot') && String(params.get('bot') || '') !== '';
+        var hasHash = (window.location.hash || '') === '#duelBotWorkspace';
+        if (!hasBot && !hasHash) return;
+
+        var workspace = document.getElementById('duelBotWorkspace');
+        if (workspace) {
+            workspace.scrollIntoView({ behavior: 'auto', block: 'start' });
+        }
+
+        var active = document.querySelector('#duelBotList .duel-bot-card.is-active');
+        var list = document.getElementById('duelBotList');
+        if (active && list && typeof active.scrollIntoView === 'function') {
+            active.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(focusBotWorkspace, 50);
+        });
+    } else {
+        setTimeout(focusBotWorkspace, 50);
+    }
+    window.addEventListener('load', function () {
+        setTimeout(focusBotWorkspace, 80);
+    });
+
     var search = document.getElementById('duelBotSearch');
     var list = document.getElementById('duelBotList');
     var empty = document.getElementById('duelBotSearchEmpty');

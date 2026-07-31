@@ -29,8 +29,7 @@ class AdController extends Controller
         $request->validate([
             'title' => 'nullable|string|max:255',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            'link' => 'nullable|url|max:500',
-            // Video: alt yapı hazır (panel UI yorumda). Max 10 sn.
+            // link: panel UI yorumda; API/DB hazır
             'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/webm|mimes:mp4,mov,webm|max:20480',
             'is_active' => 'nullable|in:on,1,true',
             'sort_order' => 'nullable|integer|min:0',
@@ -50,7 +49,7 @@ class AdController extends Controller
         Ad::create([
             'title' => $request->input('title'),
             'image_path' => $imagePath,
-            'link' => $request->input('link') ?: null,
+            'link' => 'https://yudengames.com/',
             'video_path' => $videoPath,
             'is_active' => $request->has('is_active'),
             'sort_order' => $request->integer('sort_order', 0),
@@ -68,7 +67,7 @@ class AdController extends Controller
         $request->validate([
             'title' => 'nullable|string|max:255',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            'link' => 'nullable|url|max:500',
+            // link: panel UI yorumda; mevcut değer korunur
             'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/webm|mimes:mp4,mov,webm|max:20480',
             'remove_video' => 'nullable|in:on,1,true',
             'is_active' => 'nullable|in:on,1,true',
@@ -76,9 +75,9 @@ class AdController extends Controller
         ]);
 
         $ad->title = $request->input('title');
-        $ad->link = $request->input('link') ?: null;
         $ad->sort_order = $request->integer('sort_order', $ad->sort_order);
         $ad->is_active = $request->has('is_active');
+        // link + video_path panelde gizli; mevcut değerler korunur
 
         if ($request->hasFile('image')) {
             $imagePath = $request->file('image')->store('ads', 'public');
