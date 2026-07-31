@@ -326,15 +326,61 @@ class CoinPurchaseController extends Controller
             ], 400);
         }
 
+        $paymentId = (string) $request->payment_id;
+
+        // Aynı store payment_id tekrar gelirse coin iki kez yüklenmesin
+        $existing = CoinPurchase::query()
+            ->where('payment_id', $paymentId)
+            ->where('status', 'completed')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($existing) {
+            $totalCoins = (int) $existing->coin_amount + (int) ($existing->bonus_coins ?? 0);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bu ödeme zaten işlenmiş.',
+                'already_exists' => true,
+                'coin_amount' => (int) $existing->coin_amount,
+                'bonus_coins' => (int) ($existing->bonus_coins ?? 0),
+                'total_coins' => $totalCoins,
+                'new_balance' => (int) $user->fresh()->coins,
+                'purchase' => $existing,
+            ]);
+        }
+
         DB::beginTransaction();
         try {
+            // Yarış: aynı payment_id ile paralel iki istek
+            $race = CoinPurchase::query()
+                ->where('payment_id', $paymentId)
+                ->where('status', 'completed')
+                ->lockForUpdate()
+                ->first();
+            if ($race) {
+                DB::commit();
+                $totalCoins = (int) $race->coin_amount + (int) ($race->bonus_coins ?? 0);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Bu ödeme zaten işlenmiş.',
+                    'already_exists' => true,
+                    'coin_amount' => (int) $race->coin_amount,
+                    'bonus_coins' => (int) ($race->bonus_coins ?? 0),
+                    'total_coins' => $totalCoins,
+                    'new_balance' => (int) $user->fresh()->coins,
+                    'purchase' => $race,
+                ]);
+            }
+
             $totalCoins = $package->coin_amount + ($package->bonus_coins ?? 0);
-            
+
             // CoinPurchase kaydı oluştur
             $coinPurchase = CoinPurchase::create([
                 'user_id' => $user->id,
                 'coin_package_id' => $package->id,
-                'payment_id' => $request->payment_id,
+                'payment_id' => $paymentId,
                 'coin_amount' => $package->coin_amount,
                 'bonus_coins' => $package->bonus_coins ?? 0,
                 'price' => $package->price,
@@ -354,7 +400,7 @@ class CoinPurchaseController extends Controller
                 'coin_amount' => $package->coin_amount,
                 'bonus_coins' => $package->bonus_coins ?? 0,
                 'total_coins' => $totalCoins,
-                'payment_id' => $request->payment_id,
+                'payment_id' => $paymentId,
                 'payment_provider' => $request->payment_provider,
             ]);
 

@@ -460,15 +460,61 @@ class RewardController extends Controller
             }
         }
 
-        $rewardRequest = RewardRequest::create([
-            'user_id' => $user->id,
-            'reward_type' => $type,
-            'coins_earned' => $coinsEarned,
-            'reward_date' => $rewardDate,
-            'status' => 'pending',
-            'requested_at' => now(),
-            'metadata' => $metadata,
-        ]);
+        try {
+            $rewardRequest = DB::transaction(function () use ($user, $type, $rewardDate, $coinsEarned, $metadata, $store) {
+                // Çift tık / paralel istek: aynı user satırını kilitle
+                User::query()->where('id', $user->id)->lockForUpdate()->first();
+
+                $existing = RewardRequest::query()
+                    ->where('user_id', $user->id)
+                    ->where('reward_type', $type)
+                    ->where('reward_date', $rewardDate)
+                    ->whereIn('status', ['pending', 'approved'])
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($existing) {
+                    return $existing;
+                }
+
+                return RewardRequest::create([
+                    'user_id' => $user->id,
+                    'reward_type' => $type,
+                    'coins_earned' => $coinsEarned,
+                    'reward_date' => $rewardDate,
+                    'status' => 'pending',
+                    'requested_at' => now(),
+                    'metadata' => $metadata,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ödül talebi oluşturulamadı. Lütfen tekrar deneyin.',
+            ], 500);
+        }
+
+        $isReplay = !$rewardRequest->wasRecentlyCreated;
+
+        if ($isReplay) {
+            return response()->json([
+                'success' => true,
+                'message' => $rewardRequest->status === 'approved'
+                    ? 'Bu ödül talebi zaten onaylanmış.'
+                    : 'Bekleyen ödül talebiniz zaten var.',
+                'already_exists' => true,
+                'data' => [
+                    'id' => $rewardRequest->id,
+                    'status' => $rewardRequest->status,
+                    'gift_card_store_id' => (int) (($rewardRequest->metadata['gift_card_store_id'] ?? $store->id)),
+                    'gift_card_store' => [
+                        'id' => (int) $store->id,
+                        'type' => $store->type,
+                        'image_url' => $store->image_url,
+                    ],
+                ],
+            ]);
+        }
 
         return response()->json([
             'success' => true,

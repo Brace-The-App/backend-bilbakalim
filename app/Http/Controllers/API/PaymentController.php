@@ -93,9 +93,80 @@ class PaymentController extends Controller
         ]);
 
         try {
+            $user = Auth::user();
+            $txnId = trim((string) ($request->transaction_id ?? ''));
+
+            // Aynı store transaction_id tekrar gelirse jeton/premium iki kez verilmesin
+            if ($txnId !== '') {
+                $existingPayment = Payment::query()
+                    ->where('user_id', $user->id)
+                    ->where('transaction_id', $txnId)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($existingPayment) {
+                    $meta = $existingPayment->metadata ?? [];
+                    $grantType = $meta['type'] ?? $request->type;
+                    $coinPurchase = CoinPurchase::query()
+                        ->where('payment_id', (string) $existingPayment->id)
+                        ->orderByDesc('id')
+                        ->first();
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Bu işlem zaten kaydedilmiş.',
+                        'already_exists' => true,
+                        'data' => [
+                            'payment' => $existingPayment,
+                            'coin_purchase' => $coinPurchase,
+                            'grant_type' => $grantType,
+                            'amount' => number_format((float) $existingPayment->amount, 2) . ' ' . ($existingPayment->currency ?? 'TRY'),
+                            'user_coins' => (int) $user->fresh()->coins,
+                            'user_diamond_balance' => (int) (Diamond::where('user_id', $user->id)->value('balance') ?? 0),
+                            'is_premium' => (bool) $user->fresh()->is_premium,
+                            'premium_expires_at' => optional($user->fresh()->premium_expires_at)->toISOString(),
+                        ],
+                    ]);
+                }
+            }
+
             DB::beginTransaction();
 
-            $user = Auth::user();
+            // Paralel istek: transaction_id tekrar kontrolü (kilitli)
+            if ($txnId !== '') {
+                $racePayment = Payment::query()
+                    ->where('user_id', $user->id)
+                    ->where('transaction_id', $txnId)
+                    ->lockForUpdate()
+                    ->orderByDesc('id')
+                    ->first();
+                if ($racePayment) {
+                    DB::commit();
+                    $meta = $racePayment->metadata ?? [];
+                    $grantType = $meta['type'] ?? $request->type;
+                    $coinPurchase = CoinPurchase::query()
+                        ->where('payment_id', (string) $racePayment->id)
+                        ->orderByDesc('id')
+                        ->first();
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Bu işlem zaten kaydedilmiş.',
+                        'already_exists' => true,
+                        'data' => [
+                            'payment' => $racePayment,
+                            'coin_purchase' => $coinPurchase,
+                            'grant_type' => $grantType,
+                            'amount' => number_format((float) $racePayment->amount, 2) . ' ' . ($racePayment->currency ?? 'TRY'),
+                            'user_coins' => (int) $user->fresh()->coins,
+                            'user_diamond_balance' => (int) (Diamond::where('user_id', $user->id)->value('balance') ?? 0),
+                            'is_premium' => (bool) $user->fresh()->is_premium,
+                            'premium_expires_at' => optional($user->fresh()->premium_expires_at)->toISOString(),
+                        ],
+                    ]);
+                }
+            }
+
             $type = $request->type;
             $packageId = (int) $request->package_id;
             $selectedPackage = null;
@@ -118,6 +189,7 @@ class PaymentController extends Controller
             }
 
             if (!$selectedPackage) {
+                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'Paket bulunamadı veya aktif değil.',
@@ -292,7 +364,7 @@ class PaymentController extends Controller
 
         if ($status !== $payment->status) {
             $payment->update(['status' => $status]);
-            
+
             if ($status === 'completed') {
                 $this->completePayment($payment);
             }
@@ -400,7 +472,7 @@ class PaymentController extends Controller
     private function completePayment(Payment $payment): void
     {
         $coinPurchase = $payment->coinPurchases()->first();
-        
+
         if ($coinPurchase) {
             $this->processCompletedPayment($payment, $coinPurchase);
         }
@@ -414,16 +486,16 @@ class PaymentController extends Controller
     {
         $user = $payment->user;
         $coinPackage = $coinPurchase->coinPackage;
-        
+
         // Kullanıcının mevcut coin bakiyesini al
         $balanceBefore = $user->coins;
-        
+
         // Kullanıcının coins alanına coin_package'daki coin_amount'ı ekle
         $user->increment('coins', $coinPackage->coin_amount);
-        
+
         // Güncel bakiyeyi al
         $balanceAfter = $user->coins;
-        
+
         // Coin alım geçmişini coin_history tablosuna kaydet
         $user->coinHistory()->create([
             'coin_amount' => $coinPackage->coin_amount,

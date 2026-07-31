@@ -28,6 +28,14 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        RateLimiter::for('reward-claim', function (Request $request) {
+            return Limit::perMinute(5)->by('reward-claim:' . ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('store-purchase', function (Request $request) {
+            return Limit::perMinute(10)->by('store-purchase:' . ($request->user()?->id ?: $request->ip()));
+        });
+
         RateLimiter::for('ai-questions', function (Request $request) {
             $token = (string) $request->header('X-AI-TOKEN', '');
             $key = $token !== '' ? 'ai:' . sha1($token) : 'ai:' . $request->ip();
