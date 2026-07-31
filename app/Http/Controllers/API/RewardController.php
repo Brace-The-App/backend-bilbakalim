@@ -96,6 +96,7 @@ class RewardController extends Controller
                 ->where('coin_amount', '>', 0)
                 ->where('status', 'completed')
                 ->whereBetween('created_at', [$today, $tomorrow])
+                ->whereNotIn('user_id', User::query()->bots()->select('id'))
                 ->groupBy('user_id')
                 ->orderBy('total_coins', 'desc')
                 ->get();
@@ -132,6 +133,7 @@ class RewardController extends Controller
                 ->where('coin_amount', '>', 0)
                 ->where('status', 'completed')
                 ->whereBetween('created_at', [$weekStart, $weekEnd])
+                ->whereNotIn('user_id', User::query()->bots()->select('id'))
                 ->groupBy('user_id')
                 ->orderBy('total_coins', 'desc')
                 ->get();

@@ -33,7 +33,8 @@ class UserController extends Controller
 
         $onlineUserIds = app(WebhookService::class)->getOnlineUserIds();
 
-        $query = User::with(['package', 'roles', 'avatarModel'])
+        $query = User::notBot()
+            ->with(['package', 'roles', 'avatarModel'])
             ->withCount('rewardRequests')
             ->addSelect([
                 'finished_duels_count' => Duel::selectRaw('COUNT(*)')
@@ -48,7 +49,6 @@ class UserController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('surname', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%");
             });
@@ -113,11 +113,17 @@ class UserController extends Controller
         $roles = Role::all();
         $packages = Package::active()->get();
 
+        $botIds = User::bots()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $onlineHumans = array_values(array_filter(
+            array_map('intval', $onlineUserIds),
+            fn (int $id) => !in_array($id, $botIds, true)
+        ));
+
         $summary = [
-            'total' => User::count(),
-            'online' => count($onlineUserIds),
-            'suspended' => User::where('account_status', 'suspended')->count(),
-            'premium' => User::where('is_premium', true)->count(),
+            'total' => User::notBot()->count(),
+            'online' => count($onlineHumans),
+            'suspended' => User::notBot()->where('account_status', 'suspended')->count(),
+            'premium' => User::notBot()->where('is_premium', true)->count(),
         ];
 
         return view('admin.users.index', compact('users', 'roles', 'packages', 'summary', 'perPage', 'onlineUserIds'));

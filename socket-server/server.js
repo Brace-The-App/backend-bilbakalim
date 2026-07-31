@@ -46,9 +46,34 @@ const userSocketMap = new Map(); // userId -> socketId mapping
 const duelMatchQueues = new Map();
 const duelMatchLocks = new Map(); // multiplier -> Promise chain (serial match)
 const duelMatchCancelled = new Set(); // ready iptal / disconnect (in-flight match öncesi)
+const botFallbackTimers = new Map(); // userId -> timeoutId
+const userDuelMap = new Map(); // userId -> active duelId
+const duelDisconnectTimers = new Map(); // userId -> timeoutId (AFK after disconnect)
+let botConfigCache = { at: 0, data: null };
 const LARAVEL_API_URL = (process.env.LARAVEL_API_URL || 'https://bil-bakalim.com').replace(/\/$/, '');
 const SOCKET_INTERNAL_SECRET = process.env.SOCKET_INTERNAL_SECRET || 'bilbakalim-socket-secret';
 const VALID_MULTIPLIERS = new Set(['x1', 'x2', 'x4', 'x8']);
+const DUEL_AFK_MS = 45000; // socket kopunca / cevap timeout ile aynı: 45 sn
+const DUEL_SOCKET_DEBUG = process.env.DUEL_SOCKET_DEBUG === '1';
+
+function duelDebugLog(...args) {
+    if (DUEL_SOCKET_DEBUG) {
+        console.log(...args);
+    }
+}
+
+function touchUserPresence(userId) {
+    const uid = parseInt(userId, 10);
+    if (!uid) return;
+    axios.post(
+        `${LARAVEL_API_URL}/api/users/socket-presence`,
+        { user_id: uid },
+        {
+            headers: { 'X-Socket-Secret': SOCKET_INTERNAL_SECRET },
+            timeout: 3000,
+        }
+    ).catch(() => {});
+}
 
 function getMatchQueue(multiplier) {
     if (!duelMatchQueues.has(multiplier)) {
@@ -59,6 +84,7 @@ function getMatchQueue(multiplier) {
 
 function removeUserFromMatchQueues(userId) {
     const uid = parseInt(userId, 10);
+    clearBotFallback(uid);
     // Diziyi yerinde mutate et (yeni dizi set etme).
     // Aksi halde eşleşme await sırasında cancel/ready eski referansı bozar.
     for (const [multiplier, queue] of duelMatchQueues.entries()) {
@@ -143,6 +169,278 @@ async function createDuelMatchOnLaravel(challengerId, opponentId, multiplier) {
     return data;
 }
 
+async function fetchBotMatchmakingConfig() {
+    const now = Date.now();
+    if (botConfigCache.data && (now - botConfigCache.at) < 2000) {
+        return botConfigCache.data;
+    }
+
+    try {
+        const response = await axios.get(`${LARAVEL_API_URL}/api/duel/bot-matchmaking-config`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+            },
+            params: { secret: SOCKET_INTERNAL_SECRET },
+            timeout: 5000,
+            validateStatus: () => true,
+        });
+        const data = response.data || {};
+        if (response.status >= 400 || !data.success) {
+            botConfigCache = { at: now, data: { active: false, pool_active: false, wait_seconds: 3, bot_user_id: 0 } };
+            return botConfigCache.data;
+        }
+        botConfigCache = {
+            at: now,
+            data: {
+                active: !!(data.active || (data.pool_active && data.idle_available)),
+                pool_active: !!data.pool_active,
+                idle_available: !!data.idle_available,
+                wait_seconds: Math.max(1, parseInt(data.wait_seconds || 3, 10)),
+                bot_user_id: parseInt(data.bot_user_id || 0, 10),
+                difficulty: data.difficulty || null,
+            },
+        };
+        return botConfigCache.data;
+    } catch (e) {
+        console.error('bot-matchmaking-config hata:', e.message);
+        return { active: false, pool_active: false, wait_seconds: 3, bot_user_id: 0 };
+    }
+}
+
+async function pickBotForChallenger(challengerId) {
+    try {
+        const response = await axios.post(`${LARAVEL_API_URL}/api/duel/bot-matchmaking-pick`, {
+            challenger_id: challengerId,
+            secret: SOCKET_INTERNAL_SECRET,
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+            },
+            timeout: 8000,
+            validateStatus: () => true,
+        });
+        const data = response.data || {};
+        if (response.status >= 400 || !data.success || !data.bot_user_id) {
+            return {
+                error: true,
+                cooldown: !!data.cooldown,
+                wait_bump: parseInt(data.wait_bump || 0, 10) || 0,
+                message: data.message || null,
+            };
+        }
+        return {
+            bot_user_id: parseInt(data.bot_user_id, 10),
+            difficulty: data.difficulty || null,
+            bot_name: data.bot_name || null,
+            wait_bump: parseInt(data.wait_bump || 0, 10) || 0,
+            soft_cap: !!data.soft_cap,
+            streak: parseInt(data.streak || 0, 10) || 0,
+            skill: data.skill || null,
+        };
+    } catch (e) {
+        console.error('bot-matchmaking-pick hata:', e.message);
+        return null;
+    }
+}
+
+function clearBotFallback(userId) {
+    const uid = parseInt(userId, 10);
+    const timer = botFallbackTimers.get(uid);
+    if (timer) {
+        clearTimeout(timer);
+        botFallbackTimers.delete(uid);
+    }
+}
+
+/**
+ * Kuyrukta yalnız kalanları tarar.
+ * Bot sonradan aktif edilse bile: joinedAt + wait_seconds dolmuşsa eşleştirir.
+ * (Pasifken girip beklerken aktif etmek artık çalışır — yeniden ready gerekmez.)
+ */
+let botFallbackScanRunning = false;
+function startBotFallbackScanner() {
+    if (global.__duelBotFallbackScannerStarted) {
+        return;
+    }
+    global.__duelBotFallbackScannerStarted = true;
+    setInterval(() => {
+        scanQueuesForBotFallback().catch((err) => {
+            console.error('Bot fallback scan hata:', err.message);
+        });
+    }, 2000);
+    console.log('🤖 Bot fallback scanner aktif (2sn)');
+}
+
+async function scanQueuesForBotFallback() {
+    if (botFallbackScanRunning) {
+        return;
+    }
+    botFallbackScanRunning = true;
+    try {
+        // 2s TTL (fetchBotMatchmakingConfig) — her tick bust etme; Laravel yükünü düşür
+        const cfg = await fetchBotMatchmakingConfig();
+        // Havuzda aktif bot yoksa hiç deneme; idle yoksa da (hepsi meşgul) bekle
+        if (!cfg.pool_active && !cfg.active) {
+            return;
+        }
+        if (!cfg.idle_available && !cfg.bot_user_id) {
+            return;
+        }
+        const waitMs = Math.max(1, cfg.wait_seconds || 3) * 1000;
+
+        for (const [multiplier, queue] of duelMatchQueues.entries()) {
+            if (!queue || queue.length !== 1) {
+                continue;
+            }
+            const entry = queue[0];
+            if (!entry) {
+                continue;
+            }
+            if (duelMatchCancelled.has(entry.userId)) {
+                continue;
+            }
+            if (entry._botMatchInFlight) {
+                continue;
+            }
+            const waited = entry.joinedAt ? (Date.now() - entry.joinedAt) : 0;
+            if (waited < waitMs) {
+                continue;
+            }
+
+            entry._botMatchInFlight = true;
+            try {
+                console.log(`🤖 Scanner: user=${entry.userId} ${Math.round(waited / 1000)}sn bekledi → bot pick`);
+                await tryBotFallbackMatch(entry.userId, multiplier);
+            } finally {
+                const still = getMatchQueue(multiplier).find((e) => e.userId === entry.userId);
+                if (still) {
+                    still._botMatchInFlight = false;
+                }
+            }
+        }
+    } finally {
+        botFallbackScanRunning = false;
+    }
+}
+
+/** @deprecated scanner kullanılıyor; geriye uyumluluk için bırakıldı */
+function scheduleBotFallback(userId, multiplier) {
+    // No-op: periyodik scanner joinedAt + aktif ayarıyla halleder
+    clearBotFallback(userId);
+}
+
+async function tryBotFallbackMatch(userId, multiplier) {
+    const uid = parseInt(userId, 10);
+    let queue = getMatchQueue(multiplier);
+    let idx = queue.findIndex((e) => e.userId === uid);
+    if (idx < 0) {
+        return;
+    }
+    // A) Kuyrukta 2. insan varsa bot yok
+    if (queue.length >= 2) {
+        console.log(`🤖 Bot iptal: kuyrukta ${queue.length} insan (${multiplier})`);
+        return;
+    }
+
+    if (duelMatchCancelled.has(uid)) {
+        return;
+    }
+
+    const entryJoinedAt = queue[idx]?.joinedAt || 0;
+
+    const picked = await pickBotForChallenger(uid);
+    if (!picked || picked.error || !picked.bot_user_id || picked.bot_user_id === uid) {
+        console.log(`🤖 Pick: uygun bot yok (user=${uid})`, picked?.message || '');
+        return;
+    }
+
+    // Soft cap: peş peşe bot → ekstra kuyruk beklemesi
+    const bump = parseInt(picked.wait_bump || 0, 10) || 0;
+    if (bump > 0) {
+        const cfg = await fetchBotMatchmakingConfig();
+        const needMs = (Math.max(1, cfg.wait_seconds || 3) + bump) * 1000;
+        const waited = entryJoinedAt ? (Date.now() - entryJoinedAt) : 0;
+        if (waited < needMs) {
+            console.log(
+                `🤖 Soft-cap wait: user=${uid} streak soft · ${Math.round(waited / 1000)}s < ${Math.round(needMs / 1000)}s`
+            );
+            return;
+        }
+    }
+
+    // Pick sonrası yeniden kontrol (ince ayar: create anında 2. insan gelmiş olabilir)
+    queue = getMatchQueue(multiplier);
+    idx = queue.findIndex((e) => e.userId === uid);
+    if (idx < 0) {
+        return;
+    }
+    if (queue.length >= 2) {
+        console.log(`🤖 Bot create iptal: pick sonrası kuyrukta ${queue.length} insan`);
+        return;
+    }
+
+    const human = queue.splice(idx, 1)[0];
+    if (!human) {
+        return;
+    }
+
+    console.log(`🤖 Bot eşleşmesi: ${uid} vs bot#${picked.bot_user_id} ${picked.bot_name || ''} [${picked.difficulty}] (${multiplier})`);
+
+    try {
+        // Create öncesi son bir kez: başka çarpan değil, aynı kuyruk yine 2+ olduysa...
+        // (splice sonrası bu kullanıcı çıktı; kalanlar insan-insan için kalsın)
+        const result = await createDuelMatchOnLaravel(uid, picked.bot_user_id, multiplier);
+        clearMatchCancelled(uid);
+
+        const duel = result.duel || {};
+        const payload = {
+            duelId: duel.duelId,
+            challengerId: duel.challengerId,
+            opponentId: duel.opponentId,
+            multiplier: duel.multiplier || multiplier,
+            status: 'matched',
+            question: result.question || null,
+            challenger: result.challenger || null,
+            opponent: result.opponent || null,
+            bot_match: true,
+            bot_difficulty: picked.difficulty || null,
+            timestamp: new Date().toISOString(),
+        };
+
+        if (payload.duelId) {
+            joinUserSocketToDuelRoom(uid, payload.duelId);
+        }
+
+        emitToUser(uid, 'duel-matched', payload);
+        if (payload.duelId) {
+            io.to(`duel_${payload.duelId}`).emit('duel-matched', payload);
+            io.to(`duel_${payload.duelId}`).emit('duel_matched', payload);
+        }
+        duelDebugLog('✅ Bot duel-matched gönderildi:', JSON.stringify(payload));
+    } catch (error) {
+        const msg = error.message || 'Bot eşleşmesi başarısız';
+        console.error('❌ Bot socket-match hatası:', msg);
+        emitToUser(uid, 'duel-match-error', {
+            success: false,
+            message: msg,
+            multiplier,
+            timestamp: new Date().toISOString(),
+        });
+
+        // Coin yok / kullanıcı yok gibi kalıcı hatalarda kuyruğa geri koyma → sonsuz PICK döngüsü olmasın.
+        // Geçici (timeout / 5xx) hatalarda tekrar denenebilir.
+        const permanent = /coin|yeterli|bulunamadı|Unauthorized|aktif soru/i.test(msg);
+        if (!permanent) {
+            requeueIfStillReady(human, queue);
+        } else {
+            console.log(`🛑 Bot eşleşme iptal (kalıcı): user=${uid} · ${msg}`);
+        }
+    }
+}
+
 function emitToUser(userId, eventName, payload) {
     const uid = parseInt(userId, 10);
     io.to(`user_${uid}`).emit(eventName, payload);
@@ -163,14 +461,186 @@ async function tryMatchDuelQueue(multiplier) {
 }
 
 function joinUserSocketToDuelRoom(userId, duelId) {
-    const socketId = userSocketMap.get(parseInt(userId, 10));
-    if (!socketId || !duelId) {
+    const uid = parseInt(userId, 10);
+    const did = parseInt(duelId, 10);
+    const socketId = userSocketMap.get(uid);
+    if (!socketId || !did) {
         return;
     }
     const sock = io.sockets.sockets.get(socketId);
     if (sock) {
-        sock.join(`duel_${duelId}`);
+        sock.join(`duel_${did}`);
     }
+    trackUserDuel(uid, did);
+}
+
+function trackUserDuel(userId, duelId) {
+    const uid = parseInt(userId, 10);
+    const did = parseInt(duelId, 10);
+    if (!uid || !did) {
+        return;
+    }
+    userDuelMap.set(uid, did);
+    clearDuelDisconnectTimer(uid);
+}
+
+function clearUserDuel(userId, duelId = null) {
+    const uid = parseInt(userId, 10);
+    if (!uid) {
+        return;
+    }
+    if (duelId != null) {
+        const did = parseInt(duelId, 10);
+        if (userDuelMap.get(uid) === did) {
+            userDuelMap.delete(uid);
+        }
+    } else {
+        userDuelMap.delete(uid);
+    }
+    clearDuelDisconnectTimer(uid);
+}
+
+function clearDuelDisconnectTimer(userId) {
+    const uid = parseInt(userId, 10);
+    const tid = duelDisconnectTimers.get(uid);
+    if (tid) {
+        clearTimeout(tid);
+        duelDisconnectTimers.delete(uid);
+    }
+}
+
+function scheduleDuelAfkTimeout(userId) {
+    const uid = parseInt(userId, 10);
+    const duelId = userDuelMap.get(uid);
+    if (!uid || !duelId) {
+        return;
+    }
+    clearDuelDisconnectTimer(uid);
+    const tid = setTimeout(async () => {
+        duelDisconnectTimers.delete(uid);
+        // Yeniden bağlandıysa bırak
+        if (userSocketMap.has(uid)) {
+            console.log(`ℹ️ AFK iptal: user ${uid} tekrar online (duel ${duelId})`);
+            return;
+        }
+        console.log(`⏱️ Düello AFK timeout: user ${uid} duel ${duelId} (${DUEL_AFK_MS}ms)`);
+        try {
+            const res = await axios.post(
+                `${LARAVEL_API_URL}/api/duel/socket-afk-timeout`,
+                { duel_id: duelId, user_id: uid, reason: 'disconnect' },
+                {
+                    headers: {
+                        'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+                        Accept: 'application/json',
+                    },
+                    timeout: 15000,
+                }
+            );
+            duelDebugLog(`✅ AFK forfeit yanıtı user ${uid}:`, JSON.stringify(res.data));
+        } catch (err) {
+            const msg = err.response?.data || err.message;
+            console.error(`❌ AFK forfeit hata user ${uid}:`, msg);
+        }
+    }, DUEL_AFK_MS);
+    duelDisconnectTimers.set(uid, tid);
+    console.log(`⏳ AFK timer başlatıldı: user ${uid} duel ${duelId} (${DUEL_AFK_MS}ms)`);
+}
+
+/** Socket restart sonrası DB'den aktif düello map'i doldur */
+async function hydrateUserDuelMapFromLaravel() {
+    try {
+        const response = await axios.get(`${LARAVEL_API_URL}/api/duel/socket-active-map`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+            },
+            params: { secret: SOCKET_INTERNAL_SECRET },
+            timeout: 8000,
+            validateStatus: () => true,
+        });
+        const data = response.data || {};
+        if (response.status >= 400 || !data.success) {
+            console.warn('⚠️ Active duel hydrate başarısız:', data.message || response.status);
+            return;
+        }
+        let n = 0;
+        for (const d of data.duels || []) {
+            const did = parseInt(d.id, 10);
+            const c = parseInt(d.challenger_id, 10);
+            const o = parseInt(d.opponent_id, 10);
+            if (!did) continue;
+            if (c) {
+                userDuelMap.set(c, did);
+                n++;
+            }
+            if (o) {
+                userDuelMap.set(o, did);
+                n++;
+            }
+        }
+        console.log(`🗺️ userDuelMap hydrate: ${data.duels?.length || 0} maç, ${n} kullanıcı`);
+    } catch (err) {
+        console.warn('⚠️ Active duel hydrate hata:', err.message);
+    }
+}
+
+async function fetchUserActiveDuel(userId) {
+    const uid = parseInt(userId, 10);
+    if (!uid) return null;
+    try {
+        const response = await axios.get(`${LARAVEL_API_URL}/api/duel/socket-user-active`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+            },
+            params: { secret: SOCKET_INTERNAL_SECRET, user_id: uid },
+            timeout: 5000,
+            validateStatus: () => true,
+        });
+        const data = response.data || {};
+        if (response.status >= 400 || !data.success || !data.duel) {
+            return null;
+        }
+        return data.duel;
+    } catch (err) {
+        return null;
+    }
+}
+
+/** Reconnect: odaya geri al + client'a kısa resume */
+async function resumeUserDuelRoom(socket, userId) {
+    const uid = parseInt(userId, 10);
+    if (!uid || !socket) return;
+
+    let duelId = userDuelMap.get(uid) || 0;
+    let meta = null;
+    if (!duelId) {
+        meta = await fetchUserActiveDuel(uid);
+        duelId = meta ? parseInt(meta.id, 10) : 0;
+        if (duelId) {
+            trackUserDuel(uid, duelId);
+        }
+    }
+    if (!duelId) {
+        return;
+    }
+
+    const roomName = `duel_${duelId}`;
+    socket.join(roomName);
+    socket.join(`user_${uid}`);
+    clearDuelDisconnectTimer(uid);
+
+    const payload = {
+        success: true,
+        duel_id: duelId,
+        room: roomName,
+        current_question_number: meta ? meta.current_question_number : null,
+        status: meta ? meta.status : 'active',
+        multiplier: meta ? meta.multiplier : null,
+    };
+    socket.emit('duel-resume', payload);
+    socket.emit('duel_resume', payload);
+    console.log(`🔁 duel-resume: user ${uid} → ${roomName}`);
 }
 
 async function tryMatchDuelQueueLocked(multiplier) {
@@ -231,6 +701,8 @@ async function tryMatchDuelQueueLocked(multiplier) {
             // Create sonrası biri ayrıldıysa yine de matched yayınla (düello DB'de oluştu)
             clearMatchCancelled(first.userId);
             clearMatchCancelled(second.userId);
+            clearBotFallback(first.userId);
+            clearBotFallback(second.userId);
 
             const duel = result.duel || {};
             const payload = {
@@ -258,7 +730,7 @@ async function tryMatchDuelQueueLocked(multiplier) {
                 io.to(`duel_${payload.duelId}`).emit('duel_matched', payload);
             }
 
-            console.log('✅ duel-matched gönderildi:', JSON.stringify(payload));
+            duelDebugLog('✅ duel-matched gönderildi:', JSON.stringify(payload));
         } catch (error) {
             console.error('❌ Laravel socket-match hatası:', error.message);
             const errorPayload = {
@@ -276,7 +748,7 @@ async function tryMatchDuelQueueLocked(multiplier) {
 }
 
 function handleDuelReady(socket, data) {
-    console.log('📥 duel-ready event alındı:', JSON.stringify(data));
+    duelDebugLog('📥 duel-ready event alındı:', JSON.stringify(data));
 
     const userId = parseInt(data?.userId ?? data?.user_id, 10);
     const multiplier = String(data?.multiplier || 'x1').toLowerCase();
@@ -311,6 +783,7 @@ function handleDuelReady(socket, data) {
     userSocketMap.set(userId, socket.id);
     socket.join(`user_${userId}`);
     clearMatchCancelled(userId);
+    clearDuelDisconnectTimer(userId);
 
     // Önce diğer kuyruklardan çıkar, sonra bu çarpana ekle
     removeUserFromMatchQueues(userId);
@@ -343,7 +816,7 @@ function handleDuelReady(socket, data) {
 }
 
 function handleDuelCancelReady(socket, data) {
-    console.log('📥 duel-cancel-ready event alındı:', JSON.stringify(data));
+    duelDebugLog('📥 duel-cancel-ready event alındı:', JSON.stringify(data));
 
     const userId = parseInt(
         data?.userId ?? data?.user_id ?? connectedUsers.get(socket.id)?.userId,
@@ -425,7 +898,9 @@ io.on('connection', (socket) => {
         connectedUsers.set(socket.id, { userId, userName });
         userSocketMap.set(userId, socket.id);
         socket.join(`user_${userId}`);
+        clearDuelDisconnectTimer(userId);
         refreshUserSocketInMatchQueues(userId, socket.id);
+        touchUserPresence(userId);
 
         console.log(`👤 Kullanıcı girişi: ${userName} (${userId})`);
 
@@ -434,6 +909,11 @@ io.on('connection', (socket) => {
             message: `Hoş geldin ${userName}!`,
             userId: userId,
             timestamp: new Date().toISOString()
+        });
+
+        // Aktif düello varsa odaya geri al (reconnect / socket restart)
+        resumeUserDuelRoom(socket, userId).catch((err) => {
+            console.warn('⚠️ duel-resume hata:', err.message);
         });
     });
 
@@ -459,7 +939,7 @@ io.on('connection', (socket) => {
 
     // Düello odasına katılma
     socket.on('join_duel', (data) => {
-        console.log('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
+        duelDebugLog('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
 
         if (!data || !data.duelId || !data.userId) {
             socket.emit('join_duel_error', {
@@ -474,6 +954,7 @@ io.on('connection', (socket) => {
 
         socket.join(roomName);
         socket.join(`user_${userId}`);
+        trackUserDuel(userId, duelId);
 
         console.log(`✅ Kullanıcı ${userId} düello odasına katıldı: ${roomName}`);
 
@@ -524,6 +1005,7 @@ io.on('connection', (socket) => {
             connectedUsers.set(socket.id, { userId, userName: userName || `User ${userId}` });
             userSocketMap.set(userId, socket.id);
             socket.join(`user_${userId}`);
+            clearDuelDisconnectTimer(userId);
             console.log(`👤 Kullanıcı otomatik oluşturuldu: User ${userId}`);
             user = connectedUsers.get(socket.id);
         } else if (userName && user.userName !== userName) {
@@ -966,6 +1448,9 @@ io.on('connection', (socket) => {
             // Başka cihaz/socket aynı userId ile bağlıysa map'i bozma
             if (userSocketMap.get(user.userId) === socket.id) {
                 userSocketMap.delete(user.userId);
+                // Aktif düelloda socket koptu → 45 sn sonra leave (yeniden bağlanırsa iptal)
+                scheduleDuelAfkTimeout(user.userId);
+                touchUserPresence(user.userId);
             }
             console.log(`Kullanıcı bağlantısı kesildi: ${user.userId}`);
         }
@@ -1269,7 +1754,7 @@ app.post('/socket-webhooks/webhook/tournament-next-question', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-created', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-created', JSON.stringify(req.body));
         const { duel_id, challenger_id, opponent_id, multiplier, question_value, requires_acceptance } = req.body;
 
         if (!duel_id || !challenger_id || !opponent_id) {
@@ -1311,7 +1796,7 @@ app.post('/socket-webhooks/webhook/duel-created', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-started', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-started', JSON.stringify(req.body));
         const {
             duel_id,
             challenger_id,
@@ -1378,7 +1863,7 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
             io.to(roomName).emit('duel_matched', matchedPayload);
         }
 
-        console.log('✅ duel-started + duel-matched event gönderildi', JSON.stringify(matchedPayload));
+        duelDebugLog('✅ duel-started + duel-matched event gönderildi', JSON.stringify(matchedPayload));
         res.json({ success: true });
     } catch (error) {
         console.error('❌ Duel started webhook error:', error);
@@ -1388,7 +1873,7 @@ app.post('/socket-webhooks/webhook/duel-started', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-answer', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-answer', JSON.stringify(req.body));
         const {
             duel_id,
             user_id,
@@ -1436,7 +1921,7 @@ app.post('/socket-webhooks/webhook/duel-answer', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-question-bet-requested', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-question-bet-requested', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-question-bet-requested', JSON.stringify(req.body));
         const { duel_id, question_id, initiator_id, opponent_id, multiplier, status } = req.body;
 
         if (!duel_id || !question_id || !initiator_id || !opponent_id) {
@@ -1468,7 +1953,7 @@ app.post('/socket-webhooks/webhook/duel-question-bet-requested', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-question-bet-responded', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-question-bet-responded', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-question-bet-responded', JSON.stringify(req.body));
         const { duel_id, question_id, initiator_id, opponent_id, multiplier, status, accepted } = req.body;
 
         if (!duel_id || !question_id || !initiator_id || !opponent_id) {
@@ -1501,7 +1986,7 @@ app.post('/socket-webhooks/webhook/duel-question-bet-responded', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-next-question', JSON.stringify(req.body));
         const { duel_id, question, question_number, challenger_id, opponent_id } = req.body;
 
         if (!duel_id || !question) {
@@ -1530,7 +2015,7 @@ app.post('/socket-webhooks/webhook/duel-next-question', (req, res) => {
 
 app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
     try {
-        console.log('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
+        duelDebugLog('📥 Webhook alındı: duel-finished', JSON.stringify(req.body));
         const body = req.body || {};
         const duelId = parseInt(body.duel_id ?? body.duelId, 10);
         const challengerId = body.challenger_id ?? body.challengerId;
@@ -1559,10 +2044,12 @@ app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
         if (data.challenger_id) {
             io.to(`user_${data.challenger_id}`).emit('duel-finished', data);
             io.to(`user_${data.challenger_id}`).emit('duel_finished', data);
+            clearUserDuel(data.challenger_id, duelId);
         }
         if (data.opponent_id) {
             io.to(`user_${data.opponent_id}`).emit('duel-finished', data);
             io.to(`user_${data.opponent_id}`).emit('duel_finished', data);
+            clearUserDuel(data.opponent_id, duelId);
         }
 
         console.log('✅ duel-finished event gönderildi');
@@ -1597,6 +2084,29 @@ app.get('/socket-webhooks/online-users', (req, res) => {
         count: userIds.length,
         userIds,
         timestamp: new Date().toISOString()
+    });
+});
+
+// Meydan oku (duel-ready) kuyruğundaki kullanıcılar — bot sadece bunlarla eşleşmeli
+app.get('/socket-webhooks/duel-ready-queue', (req, res) => {
+    const entries = [];
+    for (const [multiplier, queue] of duelMatchQueues.entries()) {
+        for (const entry of queue) {
+            entries.push({
+                userId: entry.userId,
+                multiplier: entry.multiplier || multiplier,
+                joinedAt: entry.joinedAt || null,
+                waitingMs: entry.joinedAt ? (Date.now() - entry.joinedAt) : null,
+            });
+        }
+    }
+
+    res.json({
+        success: true,
+        count: entries.length,
+        entries,
+        userIds: entries.map((e) => e.userId),
+        timestamp: new Date().toISOString(),
     });
 });
 
@@ -1658,4 +2168,6 @@ server.listen(PORT, () => {
     console.log(`📡 WebSocket URL: wss://bilbakalim.online/socket.io`);
     console.log(`🔒 HTTPS aktif`);
     console.log(`📋 Health check: https://bilbakalim.online/socket-webhooks/health`);
+    startBotFallbackScanner();
+    hydrateUserDuelMapFromLaravel().catch(() => {});
 });

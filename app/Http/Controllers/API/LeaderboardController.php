@@ -53,6 +53,7 @@ class LeaderboardController extends Controller
             ->where('coin_amount', '>', 0)
             ->where('status', 'completed')
             ->whereBetween('created_at', [$today, $tomorrow])
+            ->whereNotIn('user_id', User::query()->bots()->select('id'))
             ->groupBy('user_id')
             ->orderBy('total_coins', 'desc')
             ->limit(5)
@@ -118,6 +119,7 @@ class LeaderboardController extends Controller
             ->where('coin_amount', '>', 0)
             ->where('status', 'completed')
             ->whereBetween('created_at', [$weekStart, $weekEnd])
+            ->whereNotIn('user_id', User::query()->bots()->select('id'))
             ->groupBy('user_id')
             ->orderBy('total_coins', 'desc')
             ->limit(5)
@@ -211,6 +213,7 @@ class LeaderboardController extends Controller
         $limit = max(1, (int) $request->input('limit', 10));
 
         $users = User::with('avatarModel')
+            ->notBot()
             ->orderByDesc('coins')
             ->limit($limit)
             ->get();
@@ -305,6 +308,7 @@ class LeaderboardController extends Controller
             ->where('coin_amount', '>', 0)
             ->where('status', 'completed')
             ->whereBetween('created_at', [$today, $tomorrow])
+            ->whereNotIn('user_id', User::query()->bots()->select('id'))
             ->groupBy('user_id')
             ->orderBy('total_coins', 'desc')
             ->limit(5)
@@ -331,6 +335,7 @@ class LeaderboardController extends Controller
             ->where('coin_amount', '>', 0)
             ->where('status', 'completed')
             ->whereBetween('created_at', [$weekStart, $weekEnd])
+            ->whereNotIn('user_id', User::query()->bots()->select('id'))
             ->groupBy('user_id')
             ->orderBy('total_coins', 'desc')
             ->limit(5)
@@ -365,7 +370,10 @@ class LeaderboardController extends Controller
                 ->limit(5)
                 ->get();
 
-            $tournamentWinnersList = $tournamentWinners->map(function ($participant, $index) {
+            $tournamentWinnersList = $tournamentWinners
+                ->filter(fn ($participant) => !($participant->user?->is_bot))
+                ->values()
+                ->map(function ($participant, $index) {
                 $user = $participant->user;
                 $avatarUrl = $this->getUserAvatarUrl($user);
                 return [

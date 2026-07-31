@@ -47,9 +47,11 @@ class User extends Authenticatable
         'duel_earned_coins',
         'coins',
         'last_login_at',
+        'last_active_at',
         'device_token',
         'device_id',
         'account_status',
+        'is_bot',
         'is_premium',
         'fifty_fifty_jokers',
         'double_answer_jokers',
@@ -87,8 +89,10 @@ class User extends Authenticatable
         'duel_earned_coins' => 'integer',
         'coins' => 'integer',
         'last_login_at' => 'datetime',
+        'last_active_at' => 'datetime',
         'premium_expires_at' => 'datetime',
         'account_status' => 'string',
+        'is_bot' => 'boolean',
         'is_premium' => 'boolean',
         'fifty_fifty_jokers' => 'integer',
         'double_answer_jokers' => 'integer',
@@ -154,6 +158,18 @@ class User extends Authenticatable
     public function avatarModel()
     {
         return $this->belongsTo(Avatar::class, 'avatar');
+    }
+
+    public function scopeNotBot($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('is_bot', false)->orWhereNull('is_bot');
+        });
+    }
+
+    public function scopeBots($query)
+    {
+        return $query->where('is_bot', true);
     }
 
     /**

@@ -146,8 +146,13 @@ class AuthController extends Controller
         Auth::login($user);
         $token = $user->createToken('bilbakalim');
 
+        $user->forceFill([
+            'last_login_at' => now(),
+            'last_active_at' => now(),
+        ])->save();
+
         $responseData = [];
-        $responseData['user'] = UserResource::make($user);
+        $responseData['user'] = UserResource::make($user->fresh());
         $responseData['accessToken'] = $token->plainTextToken;
         return Response::withData(true, "Tebrikler başarılı bir şekilde giriş yaptınız.", $responseData);
     }
@@ -577,6 +582,7 @@ class AuthController extends Controller
             }
 
             $user->last_login_at = now();
+            $user->last_active_at = now();
             $user->save();
 
             return redirect()->intended(route('admin.dashboard'));
@@ -742,5 +748,25 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Hesabınız başarıyla silindi.',
         ]);
+    }
+
+    /**
+     * Socket sunucusundan son aktiflik güncellemesi (internal).
+     */
+    public function socketPresence(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $userId = (int) $request->input('user_id');
+        if ($userId <= 0) {
+            return response()->json(['success' => false, 'message' => 'user_id gerekli'], 422);
+        }
+
+        User::query()->whereKey($userId)->update(['last_active_at' => now()]);
+
+        return response()->json(['success' => true]);
     }
 }

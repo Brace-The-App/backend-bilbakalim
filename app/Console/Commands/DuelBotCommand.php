@@ -6,38 +6,70 @@ use App\Http\Controllers\API\DuelController;
 use App\Models\Duel;
 use App\Models\DuelAnswer;
 use App\Models\User;
+use App\Services\BotAnswerEngine;
+use App\Services\DuelBotSettings;
+use App\Services\DuelTimeoutService;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 
 class DuelBotCommand extends Command
 {
     protected $signature = 'duel:bot
-        {--bot=127 : Bot kullanıcı ID (varsayılan: Ayşegül test)}
+        {--bot=0 : Bot kullanıcı ID (0 = havuzdaki tüm botlar)}
         {--vs= : Rakip kullanıcı ID — verilirse hemen eşleştirir}
-        {--auto : Online + boştaki oyuncuyu bulup otomatik eşleştir (meydan okuda beklerken)}
-        {--multiplier=x1 : x1|x2|x4|x8}
-        {--delay=2 : Cevap / poll aralığı (sn)}
-        {--correct : Rastgele yerine doğru şıkkı işaretle}
+        {--auto : Sürekli çalış: maç gelince cevapla (eşleşmeyi socket yapar)}
+        {--force-match : Eski davranış: kuyruktakileri zorla botla eşleştir}
+        {--multiplier=x1 : x1|x2|x4|x8 (sadece --vs / --force-match)}
+        {--delay=1.5 : Cevap / poll aralığı (sn)}
+        {--correct : Zorluk yerine her zaman doğru}
         {--once : Tek cevap atıp çık}
-        {--timeout=600 : Süre (sn)}';
+        {--timeout=7200 : Süre (sn) — PM2 recycle için ~2 saat}';
 
-    protected $description = 'Düello test botu: otomatik eşleşir ve sorulara cevap verir';
+    protected $description = 'Düello bot worker: havuzdaki bot(lar) ile cevap verir';
+
+    /** @var array<int, BotAnswerEngine> */
+    private array $engines = [];
+
+    /** @var array<int, array{correct:int,total:int}> */
+    private array $matchStats = [];
+
+    /** @var array<int, int> botId => son işlenen düello id (istatistik sıfırlama) */
+    private array $lastDuelByBot = [];
+
+    /** @var array<string, float> duelId:questionId => unix ready_at */
+    private array $answerReadyAt = [];
+
+    /**
+     * @var array<string, array{accept:bool,ready_at:float,multiplier:int,question_id:int,decided:bool,done:bool}>
+     */
+    private array $betPlans = [];
 
     public function handle(): int
     {
-        $botId = (int) $this->option('bot');
-        $bot = User::query()->find($botId);
-
-        if (!$bot) {
-            $this->error("Bot kullanıcı bulunamadı: #{$botId}");
+        $botIds = $this->resolveBotIds();
+        if ($botIds === []) {
+            $this->error('Havuzda bot yok.');
             return self::FAILURE;
         }
 
-        if ((int) $bot->coins <= 0) {
-            $bot->update(['coins' => 1000]);
-            $this->warn('Bot coini 0 idi → 1000 yapıldı.');
+        foreach ($botIds as $botId) {
+            $bot = User::query()->find($botId);
+            if (!$bot) {
+                $this->warn("Bot #{$botId} bulunamadı, atlandı.");
+                continue;
+            }
+            if (!(bool) $bot->is_bot) {
+                $bot->is_bot = true;
+                $bot->save();
+            }
+            if ((int) $bot->coins <= 0) {
+                $bot->update(['coins' => 1000]);
+                DuelBotSettings::log("Bot #{$botId} coin 0 → 1000");
+            }
+            $cfg = DuelBotSettings::all($botId);
+            $this->engines[$botId] = new BotAnswerEngine($cfg['difficulty']);
+            $this->matchStats[$botId] = ['correct' => 0, 'total' => 0];
         }
 
         $multiplier = (string) $this->option('multiplier');
@@ -48,19 +80,31 @@ class DuelBotCommand extends Command
 
         $vsId = $this->option('vs') ? (int) $this->option('vs') : null;
         $auto = (bool) $this->option('auto');
-        $duelId = null;
+        $forceMatch = (bool) $this->option('force-match');
+        $preferDuelId = null;
 
-        $this->info("Bot: #{$bot->id} {$bot->name} (coins={$bot->coins}) [{$multiplier}]");
+        $names = collect($botIds)->map(function ($id) {
+            $u = User::query()->find($id);
+            $cfg = DuelBotSettings::all($id);
 
-        // Eski yarım düellolar botu kilitliyor — auto/vs başında temizle
-        if ($auto || $vsId) {
-            $closed = $this->closeStaleBotDuels($bot->id);
-            if ($closed > 0) {
-                $this->warn("Eski aktif düello kapatıldı: {$closed} adet (taze eşleşme için).");
+            return "#{$id} " . ($u?->name ?? '?') . "[{$cfg['difficulty']}]";
+        })->implode(', ');
+
+        $msg = "Worker başladı · botlar: {$names}";
+        $this->info($msg);
+        DuelBotSettings::log($msg);
+
+        if ($auto || $vsId || $forceMatch) {
+            foreach ($botIds as $botId) {
+                $closed = $this->closeStaleBotDuels($botId);
+                if ($closed > 0) {
+                    DuelBotSettings::log("Bot #{$botId}: eski düello kapatıldı ×{$closed}");
+                }
             }
         }
 
         if ($vsId) {
+            $botId = $botIds[0];
             if ($vsId === $botId) {
                 $this->error('--vs bot ile aynı olamaz.');
                 return self::FAILURE;
@@ -70,141 +114,284 @@ class DuelBotCommand extends Command
                 $this->error('Rakip yok veya coin yok.');
                 return self::FAILURE;
             }
-            $this->info("Eşleştiriliyor: #{$human->id} {$human->name} ↔ bot");
-            $duelId = $this->matchUsers($human->id, $bot->id, $multiplier);
-            if (!$duelId) {
+            $preferDuelId = $this->matchUsers($human->id, $botId, $multiplier);
+            if (!$preferDuelId) {
                 return self::FAILURE;
             }
-            $this->info("Düello başladı: #{$duelId}");
+            DuelBotSettings::log("Manuel eşleşme: #{$vsId} ↔ bot #{$botId} düello #{$preferDuelId}");
         } elseif ($auto) {
-            $this->info('AUTO mod: meydan okuda bekleyen (socket online + boş) oyuncuya yapışır, cevaplar.');
-            $this->line('Mobilde eşleşme ekranında bekle; bot seni bulunca maça sokar.');
-        } else {
-            $this->info('Sadece cevap modu (eşleşme yok). Otomatik için: --auto');
+            DuelBotSettings::log('AUTO: havuz worker — socket eşleşmesini bekliyor');
         }
 
         $deadline = time() + max(30, (int) $this->option('timeout'));
         $delay = max(0.5, (float) $this->option('delay'));
+        $tick = 0;
+        $lastIdleLogAt = 0;
 
         do {
-            $duel = $this->findActiveDuelForBot($bot->id, $duelId);
+            $tick++;
+            $didWork = false;
 
-            // Aktif düello yoksa: auto ise online rakip ara
-            if (!$duel) {
-                if ($duelId) {
-                    $finished = Duel::query()->find($duelId);
-                    if ($finished && $finished->status === 'finished') {
-                        $this->info("Düello bitti (#{$duelId}).");
-                        if (!$auto) {
-                            return self::SUCCESS;
-                        }
-                        $duelId = null;
-                        $this->line('AUTO: yeni rakip aranıyor...');
-                    }
-                }
-
-                if ($auto && !$this->botBusy($bot->id)) {
-                    $candidateId = $this->findOnlineIdleOpponent($bot->id, $vsId);
-                    if ($candidateId) {
-                        $name = User::where('id', $candidateId)->value('name') ?? '?';
-                        $this->info("Online rakip bulundu: #{$candidateId} {$name} → eşleşiyor");
-                        $duelId = $this->matchUsers($candidateId, $bot->id, $multiplier);
-                        if ($duelId) {
-                            $this->info("Düello başladı: #{$duelId}");
-                            continue;
-                        }
-                    } else {
-                        $this->line('[' . now()->format('H:i:s') . '] Online boş oyuncu yok, bekleniyor...');
-                    }
-                } elseif (!$auto && !$vsId) {
-                    $this->line('[' . now()->format('H:i:s') . '] Botun aktif düellosu yok...');
-                } else {
-                    $this->line('[' . now()->format('H:i:s') . '] Rakip / düello bekleniyor...');
-                }
-
-                usleep((int) ($delay * 1_000_000));
-                continue;
+            // Yeni oluşturulan botlar worker restart beklemeden devreye girsin
+            if ($auto && (int) $this->option('bot') <= 0) {
+                $botIds = $this->syncBotPool($botIds);
             }
 
-            $duelId = $duel->id;
-            $duel->refresh();
+            // AFK 45s — her tick değil (~4.5s granularity yeterli)
+            if ($tick % 3 === 1) {
+                $timedOut = DuelTimeoutService::sweepAnswerTimeouts();
+                if ($timedOut > 0) {
+                    $didWork = true;
+                }
+            }
 
-            // 2x/4x/6x/8x teklifi gelmişse bot her zaman kabul eder
-            if ($this->acceptPendingBetIfAny($bot, $duel)) {
+            foreach ($botIds as $botId) {
+                // Boşta: User/settings yükleme (maç yoksa)
+                $duel = $this->findActiveDuelForBot($botId, $preferDuelId);
+                if (!$duel && !$preferDuelId && !$forceMatch) {
+                    continue;
+                }
+
+                $bot = User::query()->find($botId);
+                if (!$bot) {
+                    continue;
+                }
+                if ((int) $bot->coins <= 0) {
+                    $bot->update(['coins' => 1000]);
+                }
+
+                $cfg = DuelBotSettings::all($botId);
+                $engine = $this->engines[$botId] ??= new BotAnswerEngine($cfg['difficulty']);
+                $engine->setTier($cfg['difficulty']);
+
+                if (!$duel) {
+                    if ($preferDuelId) {
+                        $finished = Duel::query()->find($preferDuelId);
+                        if ($finished && $finished->status === 'finished') {
+                            DuelBotSettings::log("Düello bitti: #{$preferDuelId}");
+                            $this->clearPlansForDuel((int) $preferDuelId);
+                            $preferDuelId = null;
+                            $engine->resetMatchStats();
+                            $this->matchStats[$botId] = ['correct' => 0, 'total' => 0];
+                            if (!$auto) {
+                                return self::SUCCESS;
+                            }
+                        }
+                    }
+
+                    if ($forceMatch && !empty($cfg['is_active']) && !$this->botBusy($botId)) {
+                        $candidateId = $this->findQueuedOpponent($botId, $multiplier, $vsId);
+                        if ($candidateId) {
+                            $preferDuelId = $this->matchUsers($candidateId, $botId, $multiplier);
+                            if ($preferDuelId) {
+                                $didWork = true;
+                                continue;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                $didWork = true;
+                $preferDuelId = $duel->id;
+
+                // Yeni maç → isabet istatistiğini sıfırla (önceki maç sızmasın)
+                if (($this->lastDuelByBot[$botId] ?? null) !== $duel->id) {
+                    $engine->resetMatchStats();
+                    $this->matchStats[$botId] = ['correct' => 0, 'total' => 0];
+                    $this->lastDuelByBot[$botId] = $duel->id;
+                    DuelBotSettings::log(
+                        "MAÇ İSTAT · bot #{$botId}[{$cfg['difficulty']}] · düello #{$duel->id} sıfırlandı · hedef ~%"
+                        . (int) round(100 * (float) $cfg['target_accuracy'])
+                    );
+                }
+
                 $duel->refresh();
+
+                if ($this->handlePendingBet($bot, $duel, $engine)) {
+                    $duel->refresh();
+                    // Red → düello biter; bir sonraki turda finished yakalanır
+                    if ($duel->status !== 'active') {
+                        $engine->resetMatchStats();
+                        $this->matchStats[$botId] = ['correct' => 0, 'total' => 0];
+                        $this->clearPlansForDuel($duel->id);
+                        $preferDuelId = $auto ? null : $preferDuelId;
+                        continue;
+                    }
+                }
+
+                $engine->ensureOfferPlan();
+
+                if ($this->botAlreadyAnswered($duel, $botId)) {
+                    continue;
+                }
+
+                if (!$duel->current_question_id) {
+                    continue;
+                }
+
+                // Bot kendi teklifini, cevaplamadan önce (soru açıkken) atsın
+                if ($this->maybeOfferBet($bot, $duel, $engine)) {
+                    $duel->refresh();
+                }
+
+                $readyKey = $duel->id . ':' . $duel->current_question_id;
+                if (!isset($this->answerReadyAt[$readyKey])) {
+                    $think = $engine->answerDelaySeconds();
+                    $this->answerReadyAt[$readyKey] = microtime(true) + $think;
+                    DuelBotSettings::log(
+                        "DÜŞÜN · bot #{$botId}[{$cfg['difficulty']}] · düello #{$duel->id} Q{$duel->current_question_number} · {$think}s"
+                    );
+                }
+                if (microtime(true) < $this->answerReadyAt[$readyKey]) {
+                    continue;
+                }
+
+                $choice = $engine->pickChoice($duel->currentQuestion, (bool) $this->option('correct'));
+                $opponent = (int) $duel->challenger_id === $botId ? $duel->opponent : $duel->challenger;
+                $oppLabel = $opponent ? "#{$opponent->id} {$opponent->name}" : '?';
+
+                DuelBotSettings::log(
+                    "CEVAP · bot #{$botId}[{$cfg['difficulty']}] · düello #{$duel->id} Q{$duel->current_question_number} · rakip {$oppLabel} · şık {$choice}"
+                );
+                $this->submitBotAnswer($bot, $duel->id, $choice, $oppLabel, $engine);
+
+                if ($this->option('once')) {
+                    return self::SUCCESS;
+                }
             }
 
-            if ($this->botAlreadyAnswered($duel, $bot->id)) {
-                $this->line("[#{$duel->id} Q{$duel->current_question_number}] Bot cevapladı, senin cevabın bekleniyor...");
-                usleep((int) ($delay * 1_000_000));
-                continue;
+            if (!$didWork && $auto && (time() - $lastIdleLogAt) >= 30) {
+                $this->line('[' . now()->format('H:i:s') . '] Havuz boşta, maç bekleniyor...');
+                $lastIdleLogAt = time();
             }
 
-            if (!$duel->current_question_id) {
-                $this->warn("Düello #{$duel->id} sorusu yok.");
-                usleep((int) ($delay * 1_000_000));
-                continue;
-            }
-
-            $choice = $this->pickAnswer($duel);
-            $this->info("[#{$duel->id} Q{$duel->current_question_number}] Bot cevap: {$choice}");
-            $this->submitBotAnswer($bot, $duel->id, $choice);
-
-            if ($this->option('once')) {
-                return self::SUCCESS;
+            // Idle: orphan map + GC (uzun ömürlü process heap baskısı)
+            if (!$didWork && $tick % 20 === 0) {
+                $this->pruneStaleMaps();
+                if (function_exists('gc_collect_cycles')) {
+                    gc_collect_cycles();
+                }
             }
 
             usleep((int) ($delay * 1_000_000));
         } while (time() < $deadline);
 
         $this->warn('Timeout — bot durdu.');
+        DuelBotSettings::log('Worker timeout ile durdu');
+
         return self::SUCCESS;
     }
 
+    /** @return list<int> */
+    private function resolveBotIds(): array
+    {
+        $opt = (int) $this->option('bot');
+        if ($opt > 0) {
+            return [$opt];
+        }
+
+        $ids = DuelBotSettings::allBotUserIds();
+        if ($ids !== []) {
+            return $ids;
+        }
+
+        $legacy = (int) (DuelBotSettings::all()['user_id'] ?? 0);
+
+        return $legacy > 0 ? [$legacy] : [];
+    }
+
+    /**
+     * Havuzdaki yeni botları worker'a ekle (restart gerekmesin).
+     *
+     * @param  list<int>  $current
+     * @return list<int>
+     */
+    private function syncBotPool(array $current): array
+    {
+        $fresh = $this->resolveBotIds();
+        $added = array_values(array_diff($fresh, $current));
+        if ($added === []) {
+            return $fresh !== [] ? $fresh : $current;
+        }
+
+        foreach ($added as $botId) {
+            $bot = User::query()->find($botId);
+            if (!$bot) {
+                continue;
+            }
+            if (!(bool) $bot->is_bot) {
+                $bot->is_bot = true;
+                $bot->save();
+            }
+            if ((int) $bot->coins <= 0) {
+                $bot->update(['coins' => 1000]);
+            }
+            $cfg = DuelBotSettings::all($botId);
+            $this->engines[$botId] = new BotAnswerEngine($cfg['difficulty']);
+            $this->matchStats[$botId] = ['correct' => 0, 'total' => 0];
+            DuelBotSettings::log(
+                "WORKER +BOT · #{$botId} " . ($bot->name ?? '') . " [{$cfg['difficulty']}] · restart yok"
+            );
+        }
+
+        return $fresh;
+    }
+
+    /**
+     * Worker restart: sadece başlamamış (waiting) maçları iptal et.
+     * Active maçlara dokunma — cevap AFK timeout (45s) düzgün kazanan/bakiye yazar.
+     */
     private function closeStaleBotDuels(int $botId): int
     {
-        return Duel::query()
-            ->whereIn('status', ['waiting', 'active'])
+        $duels = Duel::query()
+            ->where('status', 'waiting')
             ->where(function ($q) use ($botId) {
                 $q->where('challenger_id', $botId)->orWhere('opponent_id', $botId);
             })
-            ->update([
+            ->get();
+
+        $closed = 0;
+        foreach ($duels as $duel) {
+            $settings = $duel->settings ?? [];
+            $settings['forfeit_reason'] = 'cancelled';
+            $settings['forfeit_at'] = now()->toIso8601String();
+            $duel->update([
                 'status' => 'finished',
                 'finished_at' => now(),
+                'winner_id' => null,
+                'settings' => $settings,
+                'challenger_coins_after' => (int) (User::query()->find($duel->challenger_id)?->coins ?? $duel->challenger_coins_before ?? 0),
+                'opponent_coins_after' => $duel->opponent_id
+                    ? (int) (User::query()->find($duel->opponent_id)?->coins ?? $duel->opponent_coins_before ?? 0)
+                    : $duel->opponent_coins_after,
             ]);
+            $closed++;
+        }
+
+        return $closed;
     }
 
     private function botBusy(int $botId): bool
     {
-        return Duel::where('status', 'active')
-            ->where(function ($q) use ($botId) {
-                $q->where('challenger_id', $botId)->orWhere('opponent_id', $botId);
-            })
-            ->exists();
+        return DuelBotSettings::isBotBusy($botId);
     }
 
-    /**
-     * Socket online listesinden, aktif düellosu olmayan rakip seç.
-     */
-    private function findOnlineIdleOpponent(int $botId, ?int $preferUserId = null): ?int
+    private function findQueuedOpponent(int $botId, string $multiplier, ?int $preferUserId = null): ?int
     {
         $base = rtrim((string) config('app.socket_url'), '/');
         try {
-            $res = Http::timeout(3)->get($base . '/socket-webhooks/online-users');
+            $res = \Illuminate\Support\Facades\Http::timeout(3)->get($base . '/socket-webhooks/duel-ready-queue');
             if (!$res->successful()) {
-                $this->warn('online-users alınamadı: HTTP ' . $res->status());
                 return null;
             }
-            $userIds = collect($res->json('userIds') ?? [])
-                ->map(fn ($id) => (int) $id)
+            $userIds = collect($res->json('entries') ?? [])
+                ->filter(fn ($e) => strtolower((string) ($e['multiplier'] ?? 'x1')) === strtolower($multiplier))
+                ->map(fn ($e) => (int) ($e['userId'] ?? 0))
                 ->filter(fn ($id) => $id > 0 && $id !== $botId)
+                ->unique()
                 ->values();
         } catch (\Throwable $e) {
-            $this->warn('online-users hata: ' . $e->getMessage());
-            return null;
-        }
-
-        if ($userIds->isEmpty()) {
             return null;
         }
 
@@ -214,17 +401,10 @@ class DuelBotCommand extends Command
 
         foreach ($userIds as $userId) {
             $user = User::query()->find($userId);
-            if (!$user || (int) $user->coins <= 0) {
+            if (!$user || (int) $user->coins <= 0 || $user->is_bot) {
                 continue;
             }
-
-            $inDuel = Duel::whereIn('status', ['waiting', 'active'])
-                ->where(function ($q) use ($userId) {
-                    $q->where('challenger_id', $userId)->orWhere('opponent_id', $userId);
-                })
-                ->exists();
-
-            if ($inDuel) {
+            if (DuelBotSettings::isBotBusy($userId)) {
                 continue;
             }
 
@@ -249,7 +429,7 @@ class DuelBotCommand extends Command
         $data = $response->getData(true);
 
         if (!($data['success'] ?? false)) {
-            $this->error('Eşleşme başarısız: ' . ($data['message'] ?? 'bilinmeyen'));
+            DuelBotSettings::log('Eşleşme başarısız: ' . ($data['message'] ?? 'bilinmeyen'));
             return null;
         }
 
@@ -257,9 +437,65 @@ class DuelBotCommand extends Command
     }
 
     /**
-     * Rakibin attığı 2x/4x/6x/8x teklifini kabul et.
+     * Bot bahis teklifi: hep 2→4→6→8 sırası, sorular arası boşlukla.
      */
-    private function acceptPendingBetIfAny(User $bot, Duel $duel): bool
+    private function maybeOfferBet(User $bot, Duel $duel, BotAnswerEngine $engine): bool
+    {
+        $settings = $duel->settings ?? [];
+        $bet = $settings['current_bet'] ?? null;
+        if ($bet && ($bet['status'] ?? null) === 'pending') {
+            return false;
+        }
+
+        $qNum = (int) ($duel->current_question_number ?? 0);
+        $currentApplied = (int) ($settings['current_question_multiplier'] ?? 1);
+        if ($currentApplied < 1) {
+            $currentApplied = 1;
+        }
+
+        $mult = $engine->offerMultiplierForQuestion($qNum, $currentApplied);
+        if (!$mult || !$duel->current_question_id) {
+            return false;
+        }
+
+        DuelBotSettings::log(
+            "BAHİS TEKLİF · düello #{$duel->id} · bot #{$bot->id} · Q{$qNum} → {$mult}x "
+            . "(önceki x{$currentApplied})"
+        );
+
+        Auth::login($bot);
+        try {
+            $request = Request::create("/api/duel/question-multiplier/{$duel->id}", 'POST', [
+                'question_id' => (int) $duel->current_question_id,
+                'multiplier' => $mult,
+            ]);
+            $request->setUserResolver(fn () => $bot);
+            $request->headers->set('Accept', 'application/json');
+            /** @var \Illuminate\Http\JsonResponse $response */
+            $response = app(DuelController::class)->offerQuestionMultiplier($request, $duel->id);
+            $data = $response->getData(true);
+            $engine->recordOfferMade($qNum);
+
+            if (!($data['success'] ?? false)) {
+                DuelBotSettings::log('BAHİS TEKLİF hata: ' . ($data['message'] ?? ''));
+                return false;
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            DuelBotSettings::log('BAHİS TEKLİF exception: ' . $e->getMessage());
+            $engine->recordOfferMade($qNum);
+            return false;
+        } finally {
+            Auth::logout();
+        }
+    }
+
+    /**
+     * Bekleyen bahis: bir kez karar ver, düşün, sonra kabul/red.
+     * @return bool İşlem yapıldı mı (kabul veya red gönderildi)
+     */
+    private function handlePendingBet(User $bot, Duel $duel, BotAnswerEngine $engine): bool
     {
         $settings = $duel->settings ?? [];
         $bet = $settings['current_bet'] ?? null;
@@ -274,37 +510,111 @@ class DuelBotCommand extends Command
 
         $questionId = (int) ($bet['question_id'] ?? 0);
         $mult = (int) ($bet['multiplier'] ?? 0);
-        if ($questionId <= 0) {
+        if ($questionId <= 0 || $mult <= 0) {
             return false;
         }
 
-        $this->info("[#{$duel->id}] Çarpan teklifi geldi: {$mult}x → kabul ediliyor");
+        $key = $duel->id . ':bet:' . $questionId . ':' . $mult;
+        if (!isset($this->betPlans[$key])) {
+            $accept = $engine->decideBetAccept($mult);
+            $think = $engine->betThinkDelaySeconds();
+            $stats = $engine->getStats();
+            $ratePct = $stats['bets_seen'] > 0
+                ? (int) round(100 * $stats['bets_accepted'] / $stats['bets_seen'])
+                : 0;
+            $targetPct = (int) round(100 * (float) $stats['bet_accept_target']);
+            $this->betPlans[$key] = [
+                'accept' => $accept,
+                'ready_at' => microtime(true) + $think,
+                'multiplier' => $mult,
+                'question_id' => $questionId,
+                'decided' => true,
+                'done' => false,
+            ];
+            DuelBotSettings::log(
+                "BAHİS KARAR · düello #{$duel->id} · bot #{$bot->id} · {$mult}x → "
+                . ($accept ? 'KABUL' : 'RED')
+                . " · düşün {$think}s · oran {$stats['bets_accepted']}/{$stats['bets_seen']} (%{$ratePct}) hedef ~%{$targetPct}"
+            );
+        }
+
+        $plan = &$this->betPlans[$key];
+        if (!empty($plan['done'])) {
+            return false;
+        }
+        if (microtime(true) < (float) $plan['ready_at']) {
+            return false;
+        }
+
+        $accept = (bool) $plan['accept'];
+        DuelBotSettings::log(
+            "BAHİS · düello #{$duel->id}: {$mult}x "
+            . ($accept ? 'kabul' : 'RED (maçı kaybeder)')
+            . " (bot #{$bot->id})"
+        );
 
         Auth::login($bot);
         try {
             $request = Request::create("/api/duel/question-multiplier/respond/{$duel->id}", 'POST', [
                 'question_id' => $questionId,
-                'accept' => true,
+                'accept' => $accept,
             ]);
             $request->setUserResolver(fn () => $bot);
             $request->headers->set('Accept', 'application/json');
-
             /** @var \Illuminate\Http\JsonResponse $response */
             $response = app(DuelController::class)->respondQuestionMultiplier($request, $duel->id);
             $data = $response->getData(true);
+            $plan['done'] = true;
 
-            if (!($data['success'] ?? false)) {
-                $this->warn('Teklif kabul edilemedi: ' . ($data['message'] ?? json_encode($data)));
-                return false;
-            }
-
-            $this->line("  → {$mult}x kabul edildi");
-            return true;
+            return (bool) ($data['success'] ?? false);
         } catch (\Throwable $e) {
-            $this->error('Teklif kabul hatası: ' . $e->getMessage());
+            DuelBotSettings::log('Teklif hata: ' . $e->getMessage());
             return false;
         } finally {
             Auth::logout();
+        }
+    }
+
+    private function clearPlansForDuel(int $duelId): void
+    {
+        $prefix = $duelId . ':';
+        foreach (array_keys($this->answerReadyAt) as $k) {
+            if (str_starts_with((string) $k, $prefix)) {
+                unset($this->answerReadyAt[$k]);
+            }
+        }
+        foreach (array_keys($this->betPlans) as $k) {
+            if (str_starts_with((string) $k, $prefix)) {
+                unset($this->betPlans[$k]);
+            }
+        }
+    }
+
+    /** Bitmiş düellolara ait düşünme/bahis planlarını temizle */
+    private function pruneStaleMaps(): void
+    {
+        if ($this->answerReadyAt === [] && $this->betPlans === []) {
+            return;
+        }
+
+        $activeIds = Duel::query()
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        $activeSet = array_fill_keys($activeIds, true);
+
+        foreach (array_keys($this->answerReadyAt) as $k) {
+            $duelId = (int) explode(':', (string) $k, 2)[0];
+            if ($duelId > 0 && !isset($activeSet[$duelId])) {
+                unset($this->answerReadyAt[$k]);
+            }
+        }
+        foreach (array_keys($this->betPlans) as $k) {
+            $duelId = (int) explode(':', (string) $k, 2)[0];
+            if ($duelId > 0 && !isset($activeSet[$duelId])) {
+                unset($this->betPlans[$k]);
+            }
         }
     }
 
@@ -315,7 +625,7 @@ class DuelBotCommand extends Command
             ->where(function ($q) use ($botId) {
                 $q->where('challenger_id', $botId)->orWhere('opponent_id', $botId);
             })
-            ->with('currentQuestion')
+            ->with(['currentQuestion', 'challenger', 'opponent'])
             ->orderByDesc('id');
 
         if ($preferId) {
@@ -340,16 +650,7 @@ class DuelBotCommand extends Command
             ->exists();
     }
 
-    private function pickAnswer(Duel $duel): string
-    {
-        if ($this->option('correct') && $duel->currentQuestion) {
-            return (string) $duel->currentQuestion->correct_answer;
-        }
-
-        return (string) random_int(1, 4);
-    }
-
-    private function submitBotAnswer(User $bot, int $duelId, string $selectedAnswer): bool
+    private function submitBotAnswer(User $bot, int $duelId, string $selectedAnswer, string $oppLabel, BotAnswerEngine $engine): bool
     {
         Auth::login($bot);
 
@@ -365,16 +666,25 @@ class DuelBotCommand extends Command
             $data = $response->getData(true);
 
             if (!($data['success'] ?? false)) {
-                $this->warn('API: ' . ($data['message'] ?? json_encode($data)));
+                DuelBotSettings::log('Cevap API hata: ' . ($data['message'] ?? ''));
                 return false;
             }
 
-            $correct = ($data['is_correct'] ?? false) ? 'doğru' : 'yanlış';
-            $wait = ($data['waiting_for_opponent'] ?? false) ? ' (rakip bekleniyor)' : '';
-            $this->line("  → {$correct}{$wait}");
+            $isCorrect = (bool) ($data['is_correct'] ?? false);
+            $engine->recordResult($isCorrect);
+            $stats = $engine->getStats();
+            $label = $isCorrect ? 'DOĞRU' : 'YANLIŞ';
+            $rate = $stats['total'] > 0 ? round(100 * $stats['correct'] / $stats['total']) : 0;
+            $targetPct = (int) round(100 * (float) ($stats['target'] ?? 0.5));
+            $wait = ($data['waiting_for_opponent'] ?? false) ? ' · rakip bekleniyor' : '';
+
+            DuelBotSettings::log(
+                "SONUÇ · bot #{$bot->id} · düello #{$duelId} · {$label}{$wait} · vs {$oppLabel} · isabet {$stats['correct']}/{$stats['total']} (%{$rate}) · hedef ~%{$targetPct}"
+            );
+
             return true;
         } catch (\Throwable $e) {
-            $this->error('Hata: ' . $e->getMessage());
+            DuelBotSettings::log('Cevap exception: ' . $e->getMessage());
             return false;
         } finally {
             Auth::logout();

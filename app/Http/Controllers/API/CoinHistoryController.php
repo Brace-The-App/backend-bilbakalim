@@ -16,7 +16,7 @@ class CoinHistoryController extends Controller
      * @OA\Get(
      *     path="/api/coin-history",
      *     summary="Jeton geçmişi",
-     *     description="Kullanıcının kazandığı ve kaybettiği jetonları listeler. Son 5, 15, 30 gün filtreleme yapılabilir.",
+     *     description="Kullanıcının kazandığı ve kaybettiği jetonları listeler. Son 30 işlem döner. Son 5, 15, 30 gün filtreleme yapılabilir.",
      *     tags={"Coin History"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -102,14 +102,15 @@ class CoinHistoryController extends Controller
 
         $type = $request->input('type', 'all'); // earned, spent, all
         $days = $request->input('days'); // 5, 15, 30
+        $limit = 30;
 
         // Tarih filtresi
         $query = CoinHistory::where('user_id', $user->id)
             ->where('status', 'completed')
             ->orderBy('created_at', 'desc');
 
-        if ($days && in_array($days, [5, 15, 30])) {
-            $query->where('created_at', '>=', Carbon::now()->subDays($days));
+        if ($days && in_array((int) $days, [5, 15, 30], true)) {
+            $query->where('created_at', '>=', Carbon::now()->subDays((int) $days));
         }
 
         // Tip filtresi
@@ -119,7 +120,7 @@ class CoinHistoryController extends Controller
             $query->where('coin_amount', '<', 0);
         }
 
-        $coinHistory = $query->get();
+        $coinHistory = $query->limit($limit)->get();
 
         // Kazançlar ve kayıpları ayır
         $earned = $coinHistory->where('coin_amount', '>', 0)->map(function ($item) {
@@ -219,11 +220,11 @@ class CoinHistoryController extends Controller
             ->whereNotNull('completed_at')
             ->orderBy('completed_at', 'desc');
 
-        if ($days && in_array($days, [5, 15, 30])) {
-            $query->where('completed_at', '>=', Carbon::now()->subDays($days));
+        if ($days && in_array((int) $days, [5, 15, 30], true)) {
+            $query->where('completed_at', '>=', Carbon::now()->subDays((int) $days));
         }
 
-        $games = $query->get();
+        $games = $query->limit(30)->get();
 
         $transactions = [];
 

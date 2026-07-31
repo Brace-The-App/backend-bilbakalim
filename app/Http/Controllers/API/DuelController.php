@@ -10,9 +10,12 @@ use App\Models\DuelAnswer;
 use App\Models\Question;
 use App\Models\User;
 use App\Models\CoinHistory;
+use App\Services\DuelBotSettings;
+use App\Services\DuelTimeoutService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
@@ -363,6 +366,204 @@ class DuelController extends Controller
     }
 
     /**
+     * Socket: bot havuzu aktif mi / bekleme / (legacy) bot_user_id
+     */
+    public function botMatchmakingConfig(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $payload = Cache::remember(DuelBotSettings::CACHE_BOT_MM_CONFIG, 2, static function () {
+            $idle = DuelBotSettings::pickIdleBot();
+            $wait = DuelBotSettings::matchWaitSeconds();
+            $poolActive = DuelBotSettings::anyBotActiveInPool();
+
+            return [
+                'success' => true,
+                'active' => $poolActive && $idle !== null,
+                'pool_active' => $poolActive,
+                'bot_user_id' => $idle ? (int) $idle['user_id'] : 0,
+                'wait_seconds' => $wait,
+                'difficulty' => $idle['difficulty'] ?? null,
+                'idle_available' => $idle !== null,
+            ];
+        });
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Socket: yalnız bekleyen insan için boş bot seç.
+     */
+    public function botMatchmakingPick(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'challenger_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $challengerId = (int) $validated['challenger_id'];
+        $challenger = User::query()->find($challengerId);
+        if (!$challenger || (int) $challenger->coins <= 0) {
+            \App\Services\DuelBotSettings::log(
+                "PICK RED · insan #{$challengerId} · coin yok/yetersiz (" . ((int) ($challenger?->coins ?? 0)) . ")"
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Oyuncunun yeterli coini yok.',
+                'bot_user_id' => 0,
+            ]);
+        }
+
+        if (!empty($challenger->is_bot)) {
+            \App\Services\DuelBotSettings::log("PICK RED · challenger bot #{$challengerId}");
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Bot challenger olamaz.',
+                'bot_user_id' => 0,
+            ]);
+        }
+
+        // Uygulama kapanıp tekrar kuyruğa girince eski aktif maçı hemen bitir → bot serbest
+        $this->abandonActiveDuelsForRequeue($challenger);
+
+        if (\App\Services\DuelBotSettings::isHumanInBotRematchCooldown($challengerId)) {
+            $cd = \App\Services\DuelBotSettings::rematchCooldownStatus($challengerId);
+            $skill = \App\Services\DuelBotSettings::humanSkillSnapshot($challengerId);
+            $soft = !empty($cd['soft_cap']) ? ' soft≥'.$cd['streak'] : '';
+            \App\Services\DuelBotSettings::log(
+                "PICK RED · #{$challengerId} cooldown {$cd['remaining_seconds']}s"
+                . " (eff={$cd['effective_seconds']} base={$cd['base_seconds']}{$soft})"
+            );
+            \App\Services\DuelBotSettings::recordPickInsight([
+                'status' => 'cooldown',
+                'human_id' => $challengerId,
+                'accuracy_pct' => $skill['accuracy_pct'],
+                'band' => $skill['band'],
+                'tiers' => $skill['tiers'],
+                'selected_tier' => null,
+                'bot_user_id' => null,
+                'bot_name' => null,
+                'cooldown_remaining' => $cd['remaining_seconds'],
+                'cooldown_effective' => $cd['effective_seconds'],
+                'soft_cap' => $cd['soft_cap'],
+                'streak' => $cd['streak'],
+                'wait_bump' => $cd['wait_bump'],
+                'line' => sprintf(
+                    '#%d · %s · isabet %s · bant %s · COOLDOWN %ds%s',
+                    $challengerId,
+                    implode('+', $skill['tiers']),
+                    $skill['accuracy_pct'] !== null ? '%'.$skill['accuracy_pct'] : 'n/a',
+                    $skill['band'],
+                    $cd['remaining_seconds'],
+                    $cd['soft_cap'] ? ' · soft-cap×'.$cd['streak'] : ''
+                ),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Rematch cooldown.',
+                'bot_user_id' => 0,
+                'cooldown' => true,
+                'cooldown_seconds' => $cd['effective_seconds'],
+                'cooldown_remaining' => $cd['remaining_seconds'],
+                'soft_cap' => $cd['soft_cap'],
+                'streak' => $cd['streak'],
+                'wait_bump' => $cd['wait_bump'],
+            ]);
+        }
+
+        $picked = \App\Services\DuelBotSettings::pickIdleBotForHuman($challengerId);
+
+        if (!$picked) {
+            $skill = \App\Services\DuelBotSettings::humanSkillSnapshot($challengerId);
+            \App\Services\DuelBotSettings::recordPickInsight([
+                'status' => 'no_bot',
+                'human_id' => $challengerId,
+                'accuracy_pct' => $skill['accuracy_pct'],
+                'band' => $skill['band'],
+                'tiers' => $skill['tiers'],
+                'selected_tier' => null,
+                'bot_user_id' => null,
+                'line' => sprintf(
+                    '#%d · isabet %s · bant %s → %s · UYGUN BOT YOK',
+                    $challengerId,
+                    $skill['accuracy_pct'] !== null ? '%'.$skill['accuracy_pct'] : 'n/a',
+                    $skill['band'],
+                    implode('+', $skill['tiers'])
+                ),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Uygun bot yok.',
+                'bot_user_id' => 0,
+            ]);
+        }
+
+        $idle = $picked['bot'];
+        $skill = $picked['skill'];
+        $cd = \App\Services\DuelBotSettings::rematchCooldownStatus($challengerId);
+        $bot = User::query()->find($idle['user_id']);
+        $acc = $skill['accuracy_pct'] !== null ? ('%' . $skill['accuracy_pct']) : 'n/a';
+        $tiers = implode('+', $skill['tiers']);
+        $softNote = !empty($cd['soft_cap']) ? " · soft-cap×{$cd['streak']} wait+{$cd['wait_bump']}" : '';
+        \App\Services\DuelBotSettings::log(
+            "PICK · insan #{$challengerId} [{$skill['band']} {$acc} n={$skill['duel_count']} sample={$skill['sample']} → {$tiers}]"
+            . " → bot #{$idle['user_id']} " . ($bot?->name ?? '') . " · {$idle['difficulty']}{$softNote}"
+        );
+        \App\Services\DuelBotSettings::recordPickInsight([
+            'status' => 'ok',
+            'human_id' => $challengerId,
+            'accuracy_pct' => $skill['accuracy_pct'],
+            'band' => $skill['band'],
+            'tiers' => $skill['tiers'],
+            'selected_tier' => $idle['difficulty'],
+            'bot_user_id' => (int) $idle['user_id'],
+            'bot_name' => $bot?->name,
+            'soft_cap' => $cd['soft_cap'],
+            'streak' => $cd['streak'],
+            'wait_bump' => $cd['wait_bump'],
+            'line' => sprintf(
+                '#%d · isabet %s · bant %s → %s · bot #%d %s [%s]%s',
+                $challengerId,
+                $acc,
+                $skill['band'],
+                $tiers,
+                (int) $idle['user_id'],
+                $bot?->name ?? '',
+                $idle['difficulty'],
+                $cd['soft_cap'] ? ' · soft-cap' : ''
+            ),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'bot_user_id' => (int) $idle['user_id'],
+            'difficulty' => $idle['difficulty'],
+            'bot_name' => $bot?->name,
+            'skill' => $skill,
+            'soft_cap' => $cd['soft_cap'],
+            'streak' => $cd['streak'],
+            'wait_bump' => $cd['wait_bump'],
+        ]);
+    }
+
+    /**
      * Socket eşleşme kuyruğundan gelen match isteği.
      * İki hazır kullanıcıyı tek düelloda birleştirir.
      */
@@ -431,16 +632,39 @@ class DuelController extends Controller
         }
 
         if ((int) $challenger->coins <= 0 || (int) $opponent->coins <= 0) {
+            // Bot coini bitmişse otomatik doldur
+            foreach ([$challenger, $opponent] as $u) {
+                if (!empty($u->is_bot) && (int) $u->coins <= 0) {
+                    $u->update(['coins' => 1000]);
+                    $u->refresh();
+                    \App\Services\DuelBotSettings::log("Bot #{$u->id} coin dolduruldu (eşleşme öncesi)");
+                }
+            }
+        }
+
+        if ((int) $challenger->coins <= 0 || (int) $opponent->coins <= 0) {
             return response()->json([
                 'success' => false,
                 'message' => 'Oyuncuların yeterli coini yok.',
             ], 400);
         }
 
+        // Bot ↔ bot asla eşleşmez; en az bir taraf canlı insan olmalı
+        if (!empty($challenger->is_bot) && !empty($opponent->is_bot)) {
+            \App\Services\DuelBotSettings::log(
+                "EŞLEŞME RED · bot↔bot engellendi · #{$challenger->id} ↔ #{$opponent->id}"
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Botlar birbirleriyle eşleşemez.',
+            ], 400);
+        }
+
         DB::beginTransaction();
         try {
-            // Her iki kullanıcının açık/yarım kalmış düellolarını kapat (sıra bağımsız rematch)
-            Duel::whereIn('status', ['waiting', 'active'])
+            // Eski açık düellolar: yeni maça geçen taraf forfeit (kazananlı kapanış)
+            $oldDuels = Duel::whereIn('status', ['waiting', 'active'])
                 ->where(function ($q) use ($challenger, $opponent) {
                     $q->where('challenger_id', $challenger->id)
                         ->orWhere('opponent_id', $challenger->id)
@@ -448,13 +672,45 @@ class DuelController extends Controller
                         ->orWhere('opponent_id', $opponent->id);
                 })
                 ->lockForUpdate()
-                ->get()
-                ->each(function (Duel $old) {
+                ->get();
+
+            foreach ($oldDuels as $old) {
+                if ($old->status === 'waiting' || !$old->opponent_id) {
+                    $settings = $old->settings ?? [];
+                    $settings['forfeit_reason'] = 'rematch';
                     $old->update([
                         'status' => 'finished',
                         'finished_at' => now(),
+                        'winner_id' => null,
+                        'settings' => $settings,
                     ]);
-                });
+                    continue;
+                }
+                $loserId = null;
+                if (in_array((int) $old->challenger_id, [(int) $challenger->id, (int) $opponent->id], true)) {
+                    $loserId = (int) $old->challenger_id;
+                } elseif (in_array((int) $old->opponent_id, [(int) $challenger->id, (int) $opponent->id], true)) {
+                    $loserId = (int) $old->opponent_id;
+                }
+                $loser = $loserId ? User::query()->find($loserId) : null;
+                if ($loser) {
+                    // Transaction içinde nested forfeit sorun çıkarmasın diye basit: rakip kazanır
+                    $winnerId = (int) $old->challenger_id === $loserId
+                        ? $old->opponent_id
+                        : $old->challenger_id;
+                    $settings = $old->settings ?? [];
+                    $settings['forfeit_reason'] = 'rematch';
+                    $settings['forfeit_by'] = $loserId;
+                    $old->update([
+                        'status' => 'finished',
+                        'finished_at' => now(),
+                        'winner_id' => $winnerId,
+                        'settings' => $settings,
+                        'challenger_coins_after' => (int) (User::query()->find($old->challenger_id)?->coins ?? 0),
+                        'opponent_coins_after' => (int) (User::query()->find($old->opponent_id)?->coins ?? 0),
+                    ]);
+                }
+            }
 
             $firstQuestion = Question::query()
                 ->where('is_active', true)
@@ -484,6 +740,15 @@ class DuelController extends Controller
             $duel->load(['challenger', 'opponent', 'currentQuestion']);
 
             DB::commit();
+
+            if (!empty($challenger->is_bot) || !empty($opponent->is_bot)) {
+                $bot = !empty($opponent->is_bot) ? $opponent : $challenger;
+                $human = !empty($opponent->is_bot) ? $challenger : $opponent;
+                \App\Services\DuelBotSettings::log(
+                    "EŞLEŞME · düello #{$duel->id} · {$validated['multiplier']} · "
+                    . "insan: #{$human->id} {$human->name} ↔ bot: #{$bot->id} {$bot->name}"
+                );
+            }
 
             $this->sendDuelStartedWebhook($duel, $firstQuestion);
 
@@ -1080,33 +1345,160 @@ class DuelController extends Controller
         $user = Auth::user();
         $duel = Duel::findOrFail($duel_id);
 
-        // Kullanıcı kontrolü
-        if ($duel->challenger_id !== $user->id && $duel->opponent_id !== $user->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bu düellodan çekilme yetkiniz yok.'
-            ], 403);
+        $payload = $this->forfeitAsLeave($duel, $user, 'leave');
+        $status = ($payload['success'] ?? false) ? 200 : (int) ($payload['http_status'] ?? 400);
+
+        return response()->json($payload, $status);
+    }
+
+    /**
+     * Socket: bağlantı koptu + AFK süresi doldu → leave ile aynı sonuç.
+     */
+    public function socketAfkTimeout(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
 
-        if (!in_array($duel->status, ['waiting', 'active'])) {
+        $duelId = (int) $request->input('duel_id');
+        $userId = (int) $request->input('user_id');
+        $reason = (string) ($request->input('reason') ?: 'disconnect');
+
+        $duel = Duel::query()->find($duelId);
+        $user = User::query()->find($userId);
+        if (!$duel || !$user) {
+            return response()->json(['success' => false, 'message' => 'Düello veya kullanıcı yok.'], 404);
+        }
+
+        $payload = $this->forfeitAsLeave($duel, $user, $reason);
+        $status = ($payload['success'] ?? false) ? 200 : (int) ($payload['http_status'] ?? 400);
+
+        return response()->json($payload, $status);
+    }
+
+    /**
+     * Socket boot: aktif düelloları userDuelMap hydrate.
+     */
+    public function socketActiveMap(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $rows = Duel::query()
+            ->where('status', 'active')
+            ->whereNotNull('opponent_id')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get(['id', 'challenger_id', 'opponent_id', 'status', 'current_question_number', 'multiplier']);
+
+        $duels = $rows->map(static function (Duel $d) {
+            return [
+                'id' => (int) $d->id,
+                'challenger_id' => (int) $d->challenger_id,
+                'opponent_id' => (int) $d->opponent_id,
+                'status' => (string) $d->status,
+                'current_question_number' => (int) $d->current_question_number,
+                'multiplier' => (string) $d->multiplier,
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'success' => true,
+            'duels' => $duels,
+        ]);
+    }
+
+    /**
+     * Socket user_join: kullanıcının aktif düellosu (map boşsa).
+     */
+    public function socketUserActive(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $userId = (int) ($request->query('user_id') ?: $request->input('user_id'));
+        if ($userId <= 0) {
+            return response()->json(['success' => false, 'message' => 'user_id gerekli'], 422);
+        }
+
+        $duel = Duel::query()
+            ->where('status', 'active')
+            ->where(function ($q) use ($userId) {
+                $q->where('challenger_id', $userId)->orWhere('opponent_id', $userId);
+            })
+            ->orderByDesc('id')
+            ->first(['id', 'challenger_id', 'opponent_id', 'status', 'current_question_number', 'multiplier']);
+
+        if (!$duel) {
             return response()->json([
+                'success' => true,
+                'duel' => null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'duel' => [
+                'id' => (int) $duel->id,
+                'challenger_id' => (int) $duel->challenger_id,
+                'opponent_id' => (int) $duel->opponent_id,
+                'status' => (string) $duel->status,
+                'current_question_number' => (int) $duel->current_question_number,
+                'multiplier' => (string) $duel->multiplier,
+            ],
+        ]);
+    }
+
+    /**
+     * Çekilme / AFK / cevap timeout — rakip kazanır (leave ile aynı ekonomi).
+     *
+     * @return array<string, mixed>
+     */
+    public function forfeitAsLeave(Duel $duel, User $user, string $reason = 'leave'): array
+    {
+        if ((int) $duel->challenger_id !== (int) $user->id && (int) $duel->opponent_id !== (int) $user->id) {
+            return [
                 'success' => false,
-                'message' => 'Bu düello zaten bitmiş.'
-            ], 400);
+                'http_status' => 403,
+                'message' => 'Bu düellodan çekilme yetkiniz yok.',
+            ];
+        }
+
+        if (!in_array($duel->status, ['waiting', 'active'], true)) {
+            return [
+                'success' => false,
+                'http_status' => 400,
+                'message' => 'Bu düello zaten bitmiş.',
+            ];
         }
 
         DB::beginTransaction();
         try {
-            // Kazanan belirle (çekilenin rakibi). Açık düelloda rakip yoksa winner null olur
-            $winnerId = $duel->challenger_id === $user->id
+            $duel = Duel::query()->lockForUpdate()->findOrFail($duel->id);
+
+            if (!in_array($duel->status, ['waiting', 'active'], true)) {
+                DB::rollBack();
+
+                return [
+                    'success' => false,
+                    'http_status' => 400,
+                    'message' => 'Bu düello zaten bitmiş.',
+                ];
+            }
+
+            $winnerId = (int) $duel->challenger_id === (int) $user->id
                 ? $duel->opponent_id
                 : $duel->challenger_id;
 
-            // Aktif maçta çıkış: o anki soru değeri (çarpanlı) kaybedene ekstra kesilir
             $leaveForfeit = 0;
+            $settings = $duel->settings ?? [];
             if ($duel->status === 'active' && $winnerId && $duel->current_question_id) {
                 $winner = User::query()->find($winnerId);
-                $settings = $duel->settings ?? [];
                 $questionValue = $duel->question_value * max(1, (int) ($settings['current_question_multiplier'] ?? 1));
                 if ($winner && $questionValue > 0) {
                     $transfer = $this->transferCoins($user, $winner, $questionValue, $duel);
@@ -1114,7 +1506,12 @@ class DuelController extends Controller
                 }
             }
 
-            // Düello bitir (winner null ise sadece iptal/kapat, komisyon yok)
+            $settings['forfeit_reason'] = $reason;
+            $settings['forfeit_by'] = (int) $user->id;
+            $settings['forfeit_at'] = now()->toIso8601String();
+            $duel->settings = $settings;
+            $duel->save();
+
             $this->finishDuel($duel, $winnerId);
 
             $duel->refresh()->load(['challenger', 'opponent', 'winner', 'answers']);
@@ -1122,32 +1519,73 @@ class DuelController extends Controller
             $result['left_by'] = $user->id;
             $result['leave_forfeit'] = $leaveForfeit;
             $result['leaveForfeit'] = $leaveForfeit;
+            $result['forfeit_reason'] = $reason;
 
-            // Socket bildirimi gönder
             $this->sendDuelFinishedWebhook($duel);
+            $this->logBotForfeit($duel, (int) $user->id, $winnerId ? (int) $winnerId : null, $reason);
 
             DB::commit();
 
-            return response()->json(array_merge([
+            $message = match ($reason) {
+                'answer_timeout' => 'Rakip süre aşımı: düello bitti.',
+                'disconnect' => 'Bağlantı koptu: düello bitti.',
+                'afk_streak' => 'Üst üste cevap verilmedi: düello bitti.',
+                'requeue' => 'Yeni eşleşme için önceki düello kapatıldı.',
+                default => 'Düellodan çekildiniz.',
+            };
+
+            return array_merge([
                 'success' => true,
-                'message' => 'Düellodan çekildiniz.',
+                'message' => $message,
                 'duel' => $duel,
                 'result' => $result,
-            ], $result));
-
+            ], $result);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Duel leave error', [
+            Log::error('Duel forfeit error', [
                 'duel_id' => $duel->id,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'reason' => $reason,
+                'error' => $e->getMessage(),
             ]);
 
-            return response()->json([
+            return [
                 'success' => false,
-                'message' => 'Düellodan çekilirken bir hata oluştu.'
-            ], 500);
+                'http_status' => 500,
+                'message' => 'Düellodan çekilirken bir hata oluştu.',
+            ];
         }
+    }
+
+    private function logBotForfeit(Duel $duel, int $loserId, ?int $winnerId, string $reason): void
+    {
+        $botIds = array_map(
+            static fn ($b) => (int) $b['user_id'],
+            DuelBotSettings::bots()
+        );
+        $c = (int) $duel->challenger_id;
+        $o = (int) ($duel->opponent_id ?? 0);
+        if (!in_array($c, $botIds, true) && !in_array($o, $botIds, true)) {
+            $challengerBot = (bool) optional($duel->challenger)->is_bot;
+            $opponentBot = (bool) optional($duel->opponent)->is_bot;
+            if (!$challengerBot && !$opponentBot) {
+                return;
+            }
+        }
+
+        $label = match ($reason) {
+            'answer_timeout' => 'TIMEOUT',
+            'disconnect' => 'DISCONNECT',
+            'afk_streak' => 'AFK',
+            'requeue' => 'REQUEUE',
+            default => 'LEAVE',
+        };
+
+        DuelBotSettings::log(
+            "{$label} · düello #{$duel->id} · kaybeden #{$loserId} · kazanan #"
+            . ($winnerId ?? '—')
+            . ' · ' . DuelTimeoutService::ANSWER_WAIT_SECONDS . 's kuralı'
+        );
     }
 
     /**
@@ -1284,16 +1722,47 @@ class DuelController extends Controller
                 ->first();
 
             $bothAnswered = $challengerAnswer && $opponentAnswer;
+            $afkFinished = false;
 
             if ($bothAnswered) {
                 // Her iki oyuncu da cevap verdi, coin transferi yap
                 $this->processAnswers($duel, $challengerAnswer, $opponentAnswer, $question, $questionValue);
 
-                // Sonraki soruya geç veya düello bitir
-                $this->moveToNextQuestion($duel);
+                // Üst üste süre-bitimi (0): istemci timer AFK'yı 45sn kuralından kaçırır → streak ile kes
+                if ($this->shouldForfeitAfkZeroStreak($duel, (int) $user->id)) {
+                    $winnerId = (int) $duel->challenger_id === (int) $user->id
+                        ? $duel->opponent_id
+                        : $duel->challenger_id;
+                    $settings = $duel->settings ?? [];
+                    $settings['forfeit_reason'] = 'afk_streak';
+                    $settings['forfeit_by'] = (int) $user->id;
+                    $settings['forfeit_at'] = now()->toIso8601String();
+                    $duel->settings = $settings;
+                    $duel->save();
+                    $this->finishDuel($duel, $winnerId);
+                    $afkFinished = true;
+                    $this->logBotForfeit($duel->fresh()->load(['challenger', 'opponent']), (int) $user->id, $winnerId ? (int) $winnerId : null, 'afk_streak');
+                } else {
+                    $this->moveToNextQuestion($duel);
+                }
             }
 
             DB::commit();
+
+            if ($afkFinished) {
+                $duel->refresh()->load(['challenger', 'opponent', 'winner', 'answers']);
+                $this->sendDuelFinishedWebhook($duel);
+
+                return response()->json(array_merge([
+                    'success' => true,
+                    'is_correct' => $isCorrect,
+                    'both_answered' => true,
+                    'waiting_for_opponent' => false,
+                    'duel_finished' => true,
+                    'afk_forfeit' => true,
+                    'message' => 'Üst üste cevap verilmediği için düello sona erdi.',
+                ], $this->correctAnswerRevealForQuestion($question, $isCorrect), $this->buildDuelFinishedPayload($duel)));
+            }
 
             // Socket bildirimi gönder
             $this->sendDuelAnswerWebhook($duel, $user, $isCorrect, $bothAnswered);
@@ -1386,6 +1855,75 @@ class DuelController extends Controller
                 'coins_after' => (int) $opponent->coins,
             ]);
         }
+    }
+
+    /**
+     * Oyuncu tekrar kuyruğa / bot pick isterken açık düelloyu forfeit et (bot işgalini kes).
+     */
+    private function abandonActiveDuelsForRequeue(User $user): int
+    {
+        $duels = Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->where(function ($q) use ($user) {
+                $q->where('challenger_id', $user->id)->orWhere('opponent_id', $user->id);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        $n = 0;
+        foreach ($duels as $duel) {
+            $result = $this->forfeitAsLeave($duel, $user, 'requeue');
+            if (!empty($result['success'])) {
+                $n++;
+            }
+        }
+
+        return $n;
+    }
+
+    /**
+     * Üst üste selected_answer=0 (istemci süre bitimi) → AFK.
+     * Rakibin gerçek cevabı (1–4) olduğu sorularda sayılır; ikisi de 0 ise sayılmaz.
+     */
+    private function shouldForfeitAfkZeroStreak(Duel $duel, int $userId): bool
+    {
+        $limit = DuelTimeoutService::AFK_ZERO_STREAK;
+        if ($limit <= 0) {
+            return false;
+        }
+
+        $opponentId = (int) $duel->challenger_id === $userId
+            ? (int) $duel->opponent_id
+            : (int) $duel->challenger_id;
+        if ($opponentId <= 0) {
+            return false;
+        }
+
+        $mine = DuelAnswer::query()
+            ->where('duel_id', $duel->id)
+            ->where('user_id', $userId)
+            ->orderByDesc('id')
+            ->limit($limit + 2)
+            ->get(['id', 'question_id', 'selected_answer']);
+
+        $streak = 0;
+        foreach ($mine as $ans) {
+            if ((string) $ans->selected_answer !== '0') {
+                break;
+            }
+            $opp = DuelAnswer::query()
+                ->where('duel_id', $duel->id)
+                ->where('user_id', $opponentId)
+                ->where('question_id', $ans->question_id)
+                ->first(['selected_answer']);
+            // Rakip de süre bitirdiyse "AFK işgal" değil
+            if (!$opp || (string) $opp->selected_answer === '0') {
+                break;
+            }
+            $streak++;
+        }
+
+        return $streak >= $limit;
     }
 
     /**

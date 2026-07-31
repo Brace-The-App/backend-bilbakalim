@@ -25,10 +25,16 @@ class DashboardController extends Controller
     {
         $onlineUserIds = app(WebhookService::class)->getOnlineUserIds();
 
+        $botIds = User::bots()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $onlineHumans = array_values(array_filter(
+            array_map('intval', $onlineUserIds),
+            fn (int $id) => !in_array($id, $botIds, true)
+        ));
+
         $stats = [
-            'total_users' => User::count(),
+            'total_users' => User::notBot()->count(),
             // Aktif = socket'e bağlı (gerçek çevrimiçi)
-            'active_users' => count($onlineUserIds),
+            'active_users' => count($onlineHumans),
             'total_questions' => Question::count(),
             'total_categories' => Category::count(),
             'pending_rewards' => RewardRequest::where('status', 'pending')->count(),
@@ -36,10 +42,10 @@ class DashboardController extends Controller
             'total_answers' => Answer::count(),
             'correct_answers' => Answer::where('is_correct', true)->count(),
             'active_ads' => Ad::where('is_active', true)->count(),
-            'today_users' => User::whereDate('created_at', Carbon::today())->count(),
+            'today_users' => User::notBot()->whereDate('created_at', Carbon::today())->count(),
         ];
 
-        $recent_users = User::with('avatarModel')->latest()->take(5)->get();
+        $recent_users = User::notBot()->with('avatarModel')->latest()->take(5)->get();
         $recent_questions = Question::with('category')->latest()->take(5)->get();
 
         // Son 7 gün yeni kayıt + biten düello (mini grafik)
@@ -50,7 +56,7 @@ class DashboardController extends Controller
         for ($i = 6; $i >= 0; $i--) {
             $day = Carbon::today()->subDays($i);
             $chartLabels[] = $day->translatedFormat('d M');
-            $chartRegistrations[] = User::whereDate('created_at', $day)->count();
+            $chartRegistrations[] = User::notBot()->whereDate('created_at', $day)->count();
             $chartDuels[] = Duel::where('status', 'finished')
                 ->where(function ($q) use ($day) {
                     $q->whereDate('finished_at', $day)

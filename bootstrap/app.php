@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', [
             \App\Http\Middleware\ForceJsonAcceptForApi::class,
+            \App\Http\Middleware\UpdateLastActiveAt::class,
         ]);
 
         $middleware->alias([

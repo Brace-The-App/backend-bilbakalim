@@ -33,6 +33,12 @@ Route::prefix('auth')->group(function () {
 
 // Socket sunucusundan düello eşleşme (internal)
 Route::post('duel/socket-match', [DuelController::class, 'socketMatch']);
+Route::post('duel/socket-afk-timeout', [DuelController::class, 'socketAfkTimeout']);
+Route::get('duel/bot-matchmaking-config', [DuelController::class, 'botMatchmakingConfig']);
+Route::post('duel/bot-matchmaking-pick', [DuelController::class, 'botMatchmakingPick']);
+Route::get('duel/socket-active-map', [DuelController::class, 'socketActiveMap']);
+Route::get('duel/socket-user-active', [DuelController::class, 'socketUserActive']);
+Route::post('users/socket-presence', [AuthController::class, 'socketPresence']);
 
 // TODO: AI dışarıdan soru girişini geçici olarak kapattık.
 // Yeniden açmak için bu satırları yorumdan kaldırın.

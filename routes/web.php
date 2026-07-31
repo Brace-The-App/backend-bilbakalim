@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\LandingFaqController;
 use App\Http\Controllers\Admin\LandingNewsController;
 use App\Http\Controllers\Admin\LandingV2Controller;
 use App\Http\Controllers\Admin\SmsVitriniTestController;
+use App\Http\Controllers\Admin\DuelBotController;
 
 // Welcome page
 Route::get('/', function () {
@@ -98,6 +99,21 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
 
     // Ads (reklam görselleri)
     Route::resource('ads', \App\Http\Controllers\Admin\AdController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    // Düello bot ayarları (şimdilik kısıtlı erişim — controller içinde)
+    Route::get('duel-bot', [DuelBotController::class, 'index'])->name('duel-bot.index');
+    Route::get('duel-bot/logs', [DuelBotController::class, 'logs'])->name('duel-bot.logs');
+    Route::get('duel-bot/live', [DuelBotController::class, 'live'])->name('duel-bot.live');
+    Route::get('duel-bot/{userId}/duels', [DuelBotController::class, 'duels'])->name('duel-bot.duels')->whereNumber('userId');
+    Route::get('duel-bot/{userId}/duels/{duelId}', [DuelBotController::class, 'duelDetail'])->name('duel-bot.duel-detail')->whereNumber('userId')->whereNumber('duelId');
+    Route::post('duel-bot', [DuelBotController::class, 'store'])->name('duel-bot.store');
+    Route::post('duel-bot/logs/clear', [DuelBotController::class, 'clearLogs'])->name('duel-bot.logs.clear');
+    Route::post('duel-bot/active', [DuelBotController::class, 'updateActive'])->name('duel-bot.active');
+    Route::post('duel-bot/behavior', [DuelBotController::class, 'updateBehavior'])->name('duel-bot.behavior');
+    Route::post('duel-bot/matchmaking', [DuelBotController::class, 'updateMatchmaking'])->name('duel-bot.matchmaking');
+    Route::put('duel-bot/profile', [DuelBotController::class, 'updateProfile'])->name('duel-bot.profile');
+    Route::put('duel-bot/avatar', [DuelBotController::class, 'updateAvatar'])->name('duel-bot.avatar');
+    Route::put('duel-bot', [DuelBotController::class, 'update'])->name('duel-bot.update');
 
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');

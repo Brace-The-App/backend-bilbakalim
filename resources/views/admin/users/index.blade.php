@@ -141,7 +141,7 @@
                             </a>
                         </th>
                         <th>Durum</th>
-                        <th class="d-none d-lg-table-cell">Son Giriş</th>
+                        <th class="d-none d-lg-table-cell">Giriş / Aktif</th>
                         <th class="text-end">İşlem</th>
                     </tr>
                 </thead>
@@ -173,7 +173,12 @@
                                     <span class="users-person__dot {{ $isOnline ? 'is-on' : '' }}" title="{{ $isOnline ? 'Çevrimiçi' : 'Çevrimdışı' }}"></span>
                                 </div>
                                 <div class="users-person__meta">
-                                    <div class="users-person__name">{{ $fullName ?: 'İsimsiz' }}</div>
+                                    <div class="users-person__name">
+                                        {{ $fullName ?: 'İsimsiz' }}
+                                        @if(!empty($user->is_bot))
+                                            <span class="badge bg-dark ms-1" style="font-size:0.65rem;">BOT</span>
+                                        @endif
+                                    </div>
                                     <div class="users-person__id text-muted">
                                         #{{ $user->id }}
                                         @if($user->is_premium)
@@ -209,12 +214,30 @@
                             @endif
                         </td>
                         <td class="d-none d-lg-table-cell small text-muted">
-                            @if($user->last_login_at)
-                                @php $lastLogin = \Illuminate\Support\Carbon::parse($user->last_login_at); @endphp
-                                <span title="{{ $lastLogin->format('d.m.Y H:i:s') }}">{{ $lastLogin->diffForHumans() }}</span>
-                            @else
-                                —
-                            @endif
+                            @php
+                                $lastLogin = $user->last_login_at
+                                    ? \Illuminate\Support\Carbon::parse($user->last_login_at)
+                                    : null;
+                                $lastActive = $isOnline
+                                    ? now()
+                                    : ($user->last_active_at
+                                        ? \Illuminate\Support\Carbon::parse($user->last_active_at)
+                                        : null);
+                            @endphp
+                            <div title="{{ $lastLogin ? $lastLogin->format('d.m.Y H:i:s') : '' }}">
+                                <span class="text-muted">Giriş:</span>
+                                {{ $lastLogin ? $lastLogin->diffForHumans() : '—' }}
+                            </div>
+                            <div title="{{ $lastActive && !$isOnline ? $lastActive->format('d.m.Y H:i:s') : ($isOnline ? 'Çevrimiçi' : '') }}">
+                                <span class="text-muted">Aktif:</span>
+                                @if($isOnline)
+                                    <span class="text-success">Şimdi</span>
+                                @elseif($lastActive)
+                                    {{ $lastActive->diffForHumans() }}
+                                @else
+                                    —
+                                @endif
+                            </div>
                         </td>
                         <td class="text-end">
                             <div class="users-actions">
@@ -230,7 +253,8 @@
                                         data-premium="{{ $user->is_premium ? 1 : 0 }}"
                                         data-package-name="{{ $user->premium_package_name ?? '' }}"
                                         data-premium-expires="{{ $user->premium_expires_at ? \Illuminate\Support\Carbon::parse($user->premium_expires_at)->format('d.m.Y H:i') : '' }}"
-                                        data-last-login="{{ $user->last_login_at ? \Illuminate\Support\Carbon::parse($user->last_login_at)->format('d.m.Y H:i') : '—' }}"
+                                        data-last-login="{{ $lastLogin ? $lastLogin->format('d.m.Y H:i') : '—' }}"
+                                        data-last-active="{{ $isOnline ? 'Şimdi (çevrimiçi)' : ($lastActive ? $lastActive->format('d.m.Y H:i') : '—') }}"
                                         data-duels="{{ (int) ($user->finished_duels_count ?? 0) }}"
                                         data-rewards="{{ (int) ($user->reward_requests_count ?? 0) }}"
                                         data-registered="{{ \Illuminate\Support\Carbon::parse($user->created_at)->format('d.m.Y H:i') }}">Detay</button>
@@ -349,6 +373,7 @@
           <dt class="col-5">Jeton</dt><dd class="col-7" id="show-coins"></dd>
           <dt class="col-5">Durum</dt><dd class="col-7" id="show-status"></dd>
           <dt class="col-5">Son Giriş</dt><dd class="col-7" id="show-last-login"></dd>
+          <dt class="col-5">Son Aktiflik</dt><dd class="col-7" id="show-last-active"></dd>
           <dt class="col-5">Kayıt</dt><dd class="col-7" id="show-registered"></dd>
           <dt class="col-5">Meydan Okuma</dt><dd class="col-7" id="show-duels"></dd>
           <dt class="col-5">Ödül Talebi</dt><dd class="col-7" id="show-rewards"></dd>
@@ -588,6 +613,7 @@ $(document).ready(function () {
         $('#show-phone').text(b.data('phone') || '—');
         $('#show-coins').text(Number(b.data('coins') || 0).toLocaleString('tr-TR'));
         $('#show-last-login').text(b.data('last-login') || '—');
+        $('#show-last-active').text(b.attr('data-last-active') || '—');
         $('#show-registered').text(b.data('registered') || '—');
         $('#show-duels').text(b.data('duels') || 0);
         $('#show-rewards').text(b.data('rewards') || 0);

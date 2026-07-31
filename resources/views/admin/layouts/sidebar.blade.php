@@ -145,6 +145,17 @@
                     </li>
                     @endif
 
+                    @if((int) auth()->id() === 15)
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.duel-bot.*') ? 'active' : '' }}"
+                           href="{{ route('admin.duel-bot.index') }}">
+                            <i data-feather="cpu"></i>
+                            <span>Düello Bot</span>
+                        </a>
+                    </li>
+                    @endif
+
                     @can('view reward requests')
                         <li class="sidebar-list">
                             <i class="fa fa-thumb-tack"></i>
