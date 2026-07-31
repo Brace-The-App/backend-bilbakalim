@@ -26,6 +26,7 @@
                                 <th>ID</th>
                                 <th>Başlık</th>
                                 <th>Görsel</th>
+                                <th>Link</th>
                                 <th>Sıra</th>
                                 <th>Durum</th>
                                 <th>İşlemler</th>
@@ -40,6 +41,13 @@
                                     <img src="{{ $ad->image_url }}" alt="Ad {{ $ad->id }}" class="ad-thumb"
                                          style="width:120px;height:70px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px;padding:4px;">
                                 </td>
+                                <td>
+                                    @if($ad->link)
+                                        <a href="{{ $ad->link }}" target="_blank" rel="noopener" class="small text-break">{{ \Illuminate\Support\Str::limit($ad->link, 40) }}</a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
                                 <td>{{ $ad->sort_order }}</td>
                                 <td>
                                     @if($ad->is_active)
@@ -52,6 +60,7 @@
                                     <button type="button" class="btn btn-sm btn-warning btn-edit-ad"
                                             data-id="{{ $ad->id }}"
                                             data-title="{{ $ad->title }}"
+                                            data-link="{{ $ad->link }}"
                                             data-image-url="{{ $ad->image_url }}"
                                             data-sort="{{ $ad->sort_order }}"
                                             data-active="{{ $ad->is_active ? 1 : 0 }}">Düzenle</button>
@@ -60,7 +69,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="6" class="text-center text-muted">Henüz reklam yok.</td>
+                                <td colspan="7" class="text-center text-muted">Henüz reklam yok.</td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -92,6 +101,19 @@
                     <div class="mb-3">
                         <label class="form-label">Görsel <span class="text-danger">*</span></label>
                         <input type="file" name="image" class="form-control" accept="image/*" required>
+                    </div>
+                    {{--
+                    VIDEO (şimdilik gizli — ileride yorumu kaldır):
+                    Görsel yerine / yanında kısa video yüklenebilir. Max 10 sn.
+                    <div class="mb-3">
+                        <label class="form-label">Video <span class="text-muted small">(opsiyonel, max 10 sn)</span></label>
+                        <input type="file" name="video" class="form-control ad-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm">
+                        <div class="form-text text-warning">Uyarı: Video en fazla 10 saniye olmalıdır. Daha uzun videolar reddedilir. Önerilen format: MP4.</div>
+                    </div>
+                    --}}
+                    <div class="mb-3">
+                        <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
+                        <input type="url" name="link" class="form-control" placeholder="https://yudengames.com/">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
@@ -134,6 +156,23 @@
                         <label class="form-label">Yeni Görsel (opsiyonel)</label>
                         <input type="file" name="image" class="form-control" accept="image/*">
                     </div>
+                    {{--
+                    VIDEO (şimdilik gizli — ileride yorumu kaldır):
+                    <div class="mb-3">
+                        <label class="form-label">Video <span class="text-muted small">(opsiyonel, max 10 sn)</span></label>
+                        <input type="file" name="video" class="form-control ad-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm">
+                        <div class="form-text text-warning">Uyarı: Video en fazla 10 saniye olmalıdır. Daha uzun videolar reddedilir.</div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="remove_video" id="edit_remove_video" value="1">
+                            <label class="form-check-label" for="edit_remove_video">Mevcut videoyu kaldır</label>
+                        </div>
+                    </div>
+                    --}}
+                    <div class="mb-3">
+                        <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
+                        <input type="url" name="link" id="edit-link" class="form-control" placeholder="https://yudengames.com/">
+                    </div>
+                    {{-- video_path alt yapı hazır; panel UI yukarıda yorumda --}}
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
                         <input type="number" name="sort_order" id="edit-sort" class="form-control" min="0">
@@ -170,6 +209,7 @@ $(function () {
         var id = $(this).data('id');
         $('#adEditForm').attr('action', '/admin/ads/' + id);
         $('#edit-title').val($(this).data('title') || '');
+        $('#edit-link').val($(this).data('link') || '');
         $('#edit-sort').val($(this).data('sort'));
         $('#edit-preview').attr('src', $(this).data('image-url'));
         $('#edit_is_active').prop('checked', String($(this).data('active')) === '1');
@@ -216,6 +256,38 @@ $(function () {
             error: function () { toastr.error('Silinemedi'); }
         });
     });
+
+    /*
+    // VIDEO max 10 sn istemci kontrolü — panel video alanı açılınca yorumu kaldır
+    var AD_VIDEO_MAX_SEC = 10;
+    $(document).on('change', '.ad-video-input', function () {
+        var input = this;
+        var file = input.files && input.files[0];
+        if (!file) return;
+        if (file.size > 20 * 1024 * 1024) {
+            toastr.error('Video en fazla 20 MB olabilir.');
+            input.value = '';
+            return;
+        }
+        var url = URL.createObjectURL(file);
+        var video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = function () {
+            URL.revokeObjectURL(url);
+            if (video.duration > AD_VIDEO_MAX_SEC + 0.05) {
+                toastr.error('Video en fazla ' + AD_VIDEO_MAX_SEC + ' saniye olabilir. Seçilen: ' + video.duration.toFixed(1) + ' sn.');
+                input.value = '';
+            } else {
+                toastr.info('Video süresi uygun: ' + video.duration.toFixed(1) + ' sn.');
+            }
+        };
+        video.onerror = function () {
+            URL.revokeObjectURL(url);
+            toastr.warning('Video süresi okunamadı. Sunucu kontrolü uygulanacak.');
+        };
+        video.src = url;
+    });
+    */
 });
 </script>
 @endpush

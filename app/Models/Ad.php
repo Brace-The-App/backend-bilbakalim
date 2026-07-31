@@ -9,6 +9,8 @@ class Ad extends Model
     protected $fillable = [
         'title',
         'image_path',
+        'link',
+        'video_path',
         'is_active',
         'sort_order',
     ];
@@ -30,14 +32,24 @@ class Ad extends Model
 
     public function getImageUrlAttribute(): ?string
     {
-        if (!$this->image_path || $this->image_path === '0') {
+        return $this->publicUrlFor($this->image_path);
+    }
+
+    public function getVideoUrlAttribute(): ?string
+    {
+        return $this->publicUrlFor($this->video_path);
+    }
+
+    private function publicUrlFor(?string $path): ?string
+    {
+        if (!$path || $path === '0') {
             return null;
         }
 
-        if (filter_var($this->image_path, FILTER_VALIDATE_URL)) {
-            return $this->image_path;
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
         }
 
-        return asset('storage/' . $this->image_path);
+        return asset('storage/' . $path);
     }
 }

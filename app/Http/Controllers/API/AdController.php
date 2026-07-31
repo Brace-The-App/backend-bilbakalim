@@ -34,8 +34,10 @@ class AdController extends Controller
      *                 type="object",
      *                 nullable=true,
      *                 @OA\Property(property="id", type="integer", example=1),
-     *                 @OA\Property(property="title", type="string", nullable=true, example="Reklam Kırmızı"),
-     *                 @OA\Property(property="image_url", type="string", example="https://bil-bakalim.com/storage/ads/dummy-red.png")
+     *                 @OA\Property(property="title", type="string", nullable=true, example="Yuden Games"),
+     *                 @OA\Property(property="image_url", type="string", example="https://bil-bakalim.com/storage/ads/yuden-games.png"),
+     *                 @OA\Property(property="link", type="string", nullable=true, example="https://yudengames.com/"),
+     *                 @OA\Property(property="video_url", type="string", nullable=true, example="https://bil-bakalim.com/storage/ads/videos/promo.mp4")
      *             )
      *         )
      *     )
@@ -81,6 +83,8 @@ class AdController extends Controller
                     'id' => $ad->id,
                     'title' => $ad->title,
                     'image_url' => $ad->image_url,
+                    'link' => $ad->link,
+                    'video_url' => $ad->video_url,
                 ],
             ], $status));
         });
