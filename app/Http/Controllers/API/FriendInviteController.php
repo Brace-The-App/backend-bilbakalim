@@ -83,7 +83,7 @@ class FriendInviteController extends Controller
                 'invite_link' => $inviteLink,
                 'phone_number' => $request->phone_number,
                 'email' => $request->email,
-                'reward_coins' => $request->reward_coins ?? 5,
+                'reward_coins' => $request->reward_coins ?? (int) config('app.friend_invite_reward_coins', 25),
                 'bonus_coins' => $request->bonus_coins ?? 0,
                 'expires_at' => $expiresAt,
                 'metadata' => [

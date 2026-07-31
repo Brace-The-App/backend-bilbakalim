@@ -91,8 +91,7 @@ return [
     'quiz_normal_time_limit' => env('QUIZ_NORMAL_TIME_LIMIT', 600),
     'quiz_premium_question_count' => env('QUIZ_PREMIUM_QUESTION_COUNT', 15),
     'quiz_premium_time_limit' => env('QUIZ_PREMIUM_TIME_LIMIT', 1800),
-   // 'quiz_answer_time_limit' => env('QUIZ_ANSWER_TIME_LIMIT', 20),
-    'quiz_answer_time_limit' => (int) env('QUIZ_ANSWER_TIME_LIMIT', 20),
+    'quiz_answer_time_limit' => (int) env('QUIZ_ANSWER_TIME_LIMIT', 25),
     'tournament_min_participants' => env('TOURNAMENT_MIN_PARTICIPANTS', 2),
     'tournament_max_participants' => env('TOURNAMENT_MAX_PARTICIPANTS', 100),
     'quiz_dev_mode' => env('QUIZ_DEV_MODE', false),
@@ -286,6 +285,11 @@ return [
     // Hediye / ödül talep şartları
     'gift_claim_min_coins' => env('GIFT_CLAIM_MIN_COINS', 100),
     'gift_claim_min_games' => env('GIFT_CLAIM_MIN_GAMES', 3),
+
+    // Kayıt / davet coinleri
+    'registration_bonus_coins' => (int) env('REGISTRATION_BONUS_COINS', 50),
+    'referral_reward_coins' => (int) env('REFERRAL_REWARD_COINS', 25),
+    'friend_invite_reward_coins' => (int) env('FRIEND_INVITE_REWARD_COINS', 25),
 
     // Soru cevap istatistikleri
     'question_stats_min_answers' => env('QUESTION_STATS_MIN_ANSWERS', 1),

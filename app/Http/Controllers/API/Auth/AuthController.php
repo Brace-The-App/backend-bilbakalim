@@ -220,7 +220,7 @@ class AuthController extends Controller
         $user->phone = $request->phone;
         $user->role_id = 3;
         $user->account_status = 'active';
-        $registrationBonus = 10;
+        $registrationBonus = (int) config('app.registration_bonus_coins', 50);
         $user->coins = $registrationBonus;
 
         // Unique referral kodu oluştur
@@ -264,7 +264,7 @@ class AuthController extends Controller
             $referrer = User::where('referral_code', $request->referral_code)->first();
 
             if ($referrer && $referrer->id !== $user->id) {
-                $referralReward = 5;
+                $referralReward = (int) config('app.referral_reward_coins', 25);
 
                 // Yeni kullanıcıya coin ekle
                 $user->increment('coins', $referralReward);
