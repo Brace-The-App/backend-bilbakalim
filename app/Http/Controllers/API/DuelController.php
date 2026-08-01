@@ -2092,6 +2092,8 @@ class DuelController extends Controller
             'question_level' => $question->question_level,
             'coin_value' => $question->coin_value,
             'image' => $imageUrl,
+            // Client: We(e?.duration ?? 20) — quiz ile aynı süre
+            'duration' => (int) config('app.quiz_answer_time_limit', 25),
             'category' => $question->category ? [
                 'id' => $question->category->id,
                 'name' => [
@@ -2158,6 +2160,7 @@ class DuelController extends Controller
                 'challenger_id' => $duel->challenger_id,
                 'opponent_id' => $duel->opponent_id,
                 'multiplier' => $duel->multiplier,
+                'duration' => (int) config('app.quiz_answer_time_limit', 25),
                 'question' => $question ? $this->formatQuestionMultilingual($question) : null,
                 'challenger' => $duel->challenger ? [
                     'id' => $duel->challenger->id,
@@ -2202,6 +2205,7 @@ class DuelController extends Controller
                 'duel_id' => $duel->id,
                 'challenger_id' => $duel->challenger_id,
                 'opponent_id' => $duel->opponent_id,
+                'duration' => (int) config('app.quiz_answer_time_limit', 25),
                 'question' => $this->formatQuestionMultilingual($question),
                 'question_number' => $duel->current_question_number,
                 'timestamp' => now()->toISOString()
