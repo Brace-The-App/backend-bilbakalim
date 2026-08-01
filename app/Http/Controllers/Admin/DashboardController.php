@@ -4,9 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ad;
-use App\Models\Answer;
 use App\Models\Category;
 use App\Models\Duel;
+use App\Models\DuelAnswer;
+use App\Models\GameAnswer;
 use App\Models\Question;
 use App\Models\RewardRequest;
 use App\Models\User;
@@ -41,9 +42,29 @@ class DashboardController extends Controller
             'total_questions' => Question::count(),
             'total_categories' => Category::count(),
             'pending_rewards' => RewardRequest::where('status', 'pending')->count(),
-            'finished_duels' => Duel::where('status', 'finished')->count(),
-            'total_answers' => Answer::count(),
-            'correct_answers' => Answer::where('is_correct', true)->count(),
+            // Bugün biten meydan okumalar
+            'finished_duels' => Duel::where('status', 'finished')
+                ->where(function ($q) {
+                    $today = Carbon::today();
+                    $q->whereDate('finished_at', $today)
+                        ->orWhere(function ($q2) use ($today) {
+                            $q2->whereNull('finished_at')->whereDate('updated_at', $today);
+                        });
+                })
+                ->count(),
+            // Bugünkü doğru / yanlış (quiz + düello)
+            'correct_answers' => GameAnswer::where('is_correct', true)
+                    ->whereDate('answered_at', Carbon::today())
+                    ->count()
+                + DuelAnswer::where('is_correct', true)
+                    ->whereDate('answered_at', Carbon::today())
+                    ->count(),
+            'wrong_answers' => GameAnswer::where('is_correct', false)
+                    ->whereDate('answered_at', Carbon::today())
+                    ->count()
+                + DuelAnswer::where('is_correct', false)
+                    ->whereDate('answered_at', Carbon::today())
+                    ->count(),
             'active_ads' => Ad::where('is_active', true)->count(),
             'today_users' => User::notBot()->whereDate('created_at', Carbon::today())->count(),
         ];

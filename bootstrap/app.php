@@ -16,6 +16,15 @@ return Application::configure(basePath: dirname(__DIR__))
             ->hourly()
             ->withoutOverlapping()
             ->runInBackground();
+
+        // Gece Claude soru kalite kontrolü — günde max 100 (komut içi limit)
+        $at = (string) config('ai_question_review.schedule_at', '02:00');
+        $schedule->command('question:ai-review --limit=100')
+            ->dailyAt($at)
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(240)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/question-ai-review.log'));
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', [

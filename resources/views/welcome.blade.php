@@ -627,8 +627,8 @@
             <h1 class="hero-brand"><span>BilBakalım</span></h1>
             <p class="hero-lead">Binlerce soru, canlı turnuvalar ve arkadaşlarınla gerçek zamanlı yarışma — bilgini sahneye çıkar.</p>
             <div class="hero-actions">
-                <a class="btn btn-primary" href="#ozellikler">Keşfet</a>
-                <a class="btn btn-ghost" href="#basla">Nasıl çalışır?</a>
+                <a class="btn btn-primary" href="https://bilbakalim.online/profile">Oyna</a>
+                <a class="btn btn-ghost" href="#ozellikler">Keşfet</a>
             </div>
         </div>
     </section>
@@ -712,7 +712,7 @@
         <div class="wrap">
             <h2>Sahneye çıkmaya hazır mısın?</h2>
             <p>Bilgini test et, turnuvalara katıl ve zirveye oynamaya başla.</p>
-            <a class="btn btn-primary" href="#ozellikler">Özellikleri gör</a>
+            <a class="btn btn-primary" href="https://bilbakalim.online/profile">Oyna</a>
         </div>
     </section>
 

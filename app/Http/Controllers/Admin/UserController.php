@@ -26,6 +26,18 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
+        // İlk açılışta varsayılan: çevrimiçi filtre seçili
+        // (?online= veya status/premium/search/role ile "tümü" / başka filtre korunur)
+        if (
+            !$request->has('online')
+            && !$request->hasAny(['status', 'premium', 'search', 'role', 'package_id'])
+        ) {
+            return redirect()->route('admin.users.index', array_merge(
+                $request->query(),
+                ['online' => 1]
+            ));
+        }
+
         $perPage = (int) $request->input('per_page', 25);
         if (!in_array($perPage, [10, 25, 50], true)) {
             $perPage = 25;

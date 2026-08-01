@@ -29,7 +29,7 @@
 
 {{-- 1) Özet şerit --}}
 <div class="users-summary mb-3">
-    <a href="{{ route('admin.users.index') }}" class="users-summary__card {{ !request()->hasAny(['online','status','premium']) ? 'is-active' : '' }}">
+    <a href="{{ route('admin.users.index', ['online' => '']) }}" class="users-summary__card {{ request()->has('online') && request('online') !== '1' && !request()->hasAny(['status','premium']) ? 'is-active' : '' }}">
         <span class="users-summary__label">Toplam</span>
         <strong class="users-summary__value">{{ number_format($summary['total']) }}</strong>
     </a>
@@ -115,7 +115,7 @@
                     <button type="submit" class="btn btn-primary users-filter__btn">
                         <i data-feather="filter"></i><span>Filtrele</span>
                     </button>
-                    <a href="{{ route('admin.users.index') }}" class="btn btn-outline-secondary users-filter__btn {{ $hasFilters ? '' : 'disabled' }}">
+                    <a href="{{ route('admin.users.index', ['online' => '']) }}" class="btn btn-outline-secondary users-filter__btn {{ $hasFilters ? '' : 'disabled' }}">
                         <i data-feather="x"></i><span>Temizle</span>
                     </a>
                 </div>

@@ -154,6 +154,14 @@
                             <span>Düello Bot</span>
                         </a>
                     </li>
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.question-quality-reviews.*') ? 'active' : '' }}"
+                           href="{{ route('admin.question-quality-reviews.index') }}">
+                            <i data-feather="check-square"></i>
+                            <span>AI Soru Kontrol</span>
+                        </a>
+                    </li>
                     @endif
 
                     @can('view reward requests')

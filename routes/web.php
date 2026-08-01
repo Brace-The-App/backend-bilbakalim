@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppDownloadController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\UserController;
@@ -19,11 +20,15 @@ use App\Http\Controllers\Admin\LandingNewsController;
 use App\Http\Controllers\Admin\LandingV2Controller;
 use App\Http\Controllers\Admin\SmsVitriniTestController;
 use App\Http\Controllers\Admin\DuelBotController;
+use App\Http\Controllers\Admin\QuestionQualityReviewController;
 
 // Welcome page
 Route::get('/', function () {
     return view('welcome');
 })->name('welcome');
+
+// Tek indirme linki — iOS/Android mağazaya, diğer cihazlarda seçim sayfası
+Route::get('/download', AppDownloadController::class)->name('app.download');
 
 // Admin login redirect
 Route::get('/admin', function () {
@@ -114,6 +119,14 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::put('duel-bot/profile', [DuelBotController::class, 'updateProfile'])->name('duel-bot.profile');
     Route::put('duel-bot/avatar', [DuelBotController::class, 'updateAvatar'])->name('duel-bot.avatar');
     Route::put('duel-bot', [DuelBotController::class, 'update'])->name('duel-bot.update');
+
+    // AI soru kalite review (yalnızca user #15 — DuelBotSettings::canManage)
+    Route::get('question-quality-reviews', [QuestionQualityReviewController::class, 'index'])->name('question-quality-reviews.index');
+    Route::get('question-quality-reviews/poll', [QuestionQualityReviewController::class, 'poll'])->name('question-quality-reviews.poll');
+    Route::get('question-quality-reviews/{id}', [QuestionQualityReviewController::class, 'show'])->name('question-quality-reviews.show')->whereNumber('id');
+    Route::post('question-quality-reviews/{id}/deactivate', [QuestionQualityReviewController::class, 'deactivateQuestion'])->name('question-quality-reviews.deactivate')->whereNumber('id');
+    Route::post('question-quality-reviews/{id}/activate', [QuestionQualityReviewController::class, 'activateQuestion'])->name('question-quality-reviews.activate')->whereNumber('id');
+    Route::post('question-quality-reviews/{id}/apply-revision', [QuestionQualityReviewController::class, 'applyRevision'])->name('question-quality-reviews.apply-revision')->whereNumber('id');
 
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');

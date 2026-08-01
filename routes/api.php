@@ -24,6 +24,7 @@ use App\Http\Controllers\API\GiftCardStoreController;
 use App\Http\Controllers\API\LeaderboardController;
 use App\Http\Controllers\API\RewardController;
 use App\Http\Controllers\API\AiQuestionController;
+use App\Http\Controllers\API\AiQuestionReviewController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
@@ -45,6 +46,12 @@ Route::post('users/socket-presence', [AuthController::class, 'socketPresence']);
 // Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-questions'])->group(function () {
 //     Route::post('questions', [AiQuestionController::class, 'store']);
 // });
+
+// AI soru kalite kontrolü (yeni tablo; questions'a yazmaz)
+Route::prefix('ai')->middleware(['ai.questions.token', 'throttle:ai-question-reviews'])->group(function () {
+    Route::get('question-reviews/next', [AiQuestionReviewController::class, 'next']);
+    Route::post('question-reviews', [AiQuestionReviewController::class, 'store']);
+});
 
 // Referral routes (auth required)
 Route::middleware('auth:sanctum')->group(function () {
@@ -89,7 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Payment routes
     Route::prefix('payments')->group(function () {
-        Route::post('initiate', [PaymentController::class, 'initiatePayment']);
+        Route::post('initiate', [PaymentController::class, 'initiatePayment'])->middleware('throttle:store-purchase');
         Route::get('status/{payment_id}', [PaymentController::class, 'checkPaymentStatus']);
         Route::get('history', [PaymentController::class, 'paymentHistory']);
         Route::post('cancel', [PaymentController::class, 'cancelPayment']);
@@ -119,7 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{coinPurchase}', [CoinPurchaseController::class, 'show']);
         Route::get('stats/total', [CoinPurchaseController::class, 'totalPurchased']);
         Route::get('stats/monthly', [CoinPurchaseController::class, 'monthlyStats']);
-        Route::post('purchase', [CoinPurchaseController::class, 'purchase']);
+        Route::post('purchase', [CoinPurchaseController::class, 'purchase'])->middleware('throttle:store-purchase');
         Route::post('{coinPurchase}/refund', [CoinPurchaseController::class, 'requestRefund']);
         Route::post('{coinPurchase}/cancel', [CoinPurchaseController::class, 'cancel']);
     });
@@ -237,7 +244,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Reward routes
     Route::prefix('reward')->group(function () {
         Route::get('check-eligibility', [RewardController::class, 'checkEligibility']);
-        Route::post('claim', [RewardController::class, 'claim']);
+        Route::post('claim', [RewardController::class, 'claim'])->middleware('throttle:reward-claim');
     });
 });
 

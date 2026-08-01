@@ -79,7 +79,7 @@ function icon(string $name, string $class = ''): string
                     <p><?= e($content['hero']['description']) ?></p>
                     <div class="hero-actions">
                         <a class="pill pill-light" href="<?= e($content['hero']['primary_url']) ?>"><?= e($content['hero']['primary_cta']) ?></a>
-                        <a class="pill pill-ghost" href="<?= e($content['hero']['secondary_url']) ?>">
+                        <a class="pill pill-ghost" href="<?= e($content['hero']['secondary_url']) ?>"<?= str_starts_with((string) ($content['hero']['secondary_url'] ?? ''), 'http') ? ' target="_blank" rel="noopener"' : '' ?>>
                             <?= icon((string) $content['hero']['secondary_icon']) ?>
                             <?= e($content['hero']['secondary_cta']) ?>
                         </a>

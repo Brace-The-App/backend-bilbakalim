@@ -10,7 +10,7 @@ return [
     | This file is for storing the credentials for third party services such
     | as Mailgun, Postmark, AWS and more. This file provides the de facto
     | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | a conventional way to locate the various service credentials.
     |
     */
 
@@ -63,5 +63,14 @@ return [
 
     'ai_questions' => [
         'token' => env('AI_QUESTIONS_TOKEN'),
+    ],
+
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        // Gerçek API model id (çağrıda kullanılır)
+        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-5'),
+        // Panel + DB'de görünen etiket (API modelinden bağımsız)
+        'model_label' => env('ANTHROPIC_MODEL_LABEL', 'claude-opus-5'),
+        'max_tokens' => (int) env('ANTHROPIC_MAX_TOKENS', 6144),
     ],
 ];

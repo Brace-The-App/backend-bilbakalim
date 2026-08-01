@@ -93,7 +93,7 @@
             <div class="card-body">
                 <div class="dash-kpi__icon"><i data-feather="zap"></i></div>
                 <div>
-                    <span class="dash-kpi__label">Meydan Okuma</span>
+                    <span class="dash-kpi__label">Bugünkü Meydan Okuma</span>
                     <h4 class="dash-kpi__value counter mb-0">{{ $stats['finished_duels'] }}</h4>
                 </div>
             </div>
@@ -104,8 +104,12 @@
             <div class="card-body">
                 <div class="dash-kpi__icon"><i data-feather="check-circle"></i></div>
                 <div>
-                    <span class="dash-kpi__label">Doğru Cevap</span>
-                    <h4 class="dash-kpi__value counter mb-0">{{ $stats['correct_answers'] }}</h4>
+                    <span class="dash-kpi__label">Bugün Doğru / Yanlış</span>
+                    <h4 class="dash-kpi__value mb-0">
+                        <span class="text-success">{{ number_format($stats['correct_answers']) }}</span>
+                        <span class="text-muted mx-1">/</span>
+                        <span class="text-danger">{{ number_format($stats['wrong_answers']) }}</span>
+                    </h4>
                 </div>
             </div>
         </div>

@@ -232,11 +232,17 @@ function direct_textarea(string $name, string $label, ?string $value, bool $wide
                         <?php input_field('hero.highlight', 'Vurgulanacak Kelime', $content['hero']['highlight']); ?>
                         <?php textarea_field('hero.title', 'Başlık', $content['hero']['title']); ?>
                         <?php textarea_field('hero.description', 'Açıklama', $content['hero']['description']); ?>
-                        <?php input_field('hero.primary_cta', 'Ana Buton Metni', $content['hero']['primary_cta']); ?>
-                        <?php input_field('hero.primary_url', 'Ana Buton Linki', $content['hero']['primary_url']); ?>
-                        <?php input_field('hero.secondary_cta', 'İkincil Buton Metni', $content['hero']['secondary_cta']); ?>
-                        <?php input_field('hero.secondary_url', 'İkincil Buton Linki', $content['hero']['secondary_url']); ?>
-                        <?php icon_select(field_name('hero.secondary_icon'), 'İkincil Buton İkonu', $content['hero']['secondary_icon'], $icons); ?>
+                        <?php input_field('hero.primary_cta', 'Oyna butonu metni', $content['hero']['primary_cta']); ?>
+                        <?php input_field('hero.primary_url', 'Oyna butonu linki', $content['hero']['primary_url'], 'url'); ?>
+                        <div class="field wide" style="grid-column:1/-1;margin:-.25rem 0 .5rem;color:#64748b;font-size:.9rem">
+                            Örn. metin: <strong>Oyna</strong> · link: <code>https://bilbakalim.online/profile</code>
+                        </div>
+                        <?php input_field('hero.secondary_cta', 'Hemen İndir butonu metni', $content['hero']['secondary_cta']); ?>
+                        <?php input_field('hero.secondary_url', 'Hemen İndir butonu linki', $content['hero']['secondary_url'], 'url'); ?>
+                        <?php icon_select(field_name('hero.secondary_icon'), 'Hemen İndir buton ikonu', $content['hero']['secondary_icon'], $icons); ?>
+                        <div class="field wide" style="grid-column:1/-1;margin:-.25rem 0 .5rem;color:#64748b;font-size:.9rem">
+                            Örn. metin: <strong>Hemen İndir</strong> · link: <code>https://bilbakalim.online/download</code>
+                        </div>
                         <?php input_field('hero.phone_image', 'Ön Telefon Görseli URL', $content['hero']['phone_image'], 'url', true); ?>
                         <?php input_field('hero.phone_image_secondary', 'Arka Telefon Görseli URL', $content['hero']['phone_image_secondary'], 'url', true); ?>
                         <?php input_field('hero.trust_text', 'Güven Satırı', $content['hero']['trust_text'], 'text', true); ?>
