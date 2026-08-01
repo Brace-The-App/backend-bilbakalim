@@ -64,6 +64,10 @@ class QuestionQualityReviewController extends Controller
             'reviewed' => QuestionQualityReview::query()->where('status', 'reviewed')->count(),
             'pending' => QuestionQualityReview::query()->where('status', 'pending')->count(),
             'failed' => QuestionQualityReview::query()->where('status', 'failed')->count(),
+            'questions_reviewed' => (int) QuestionQualityReview::query()
+                ->where('status', 'reviewed')
+                ->selectRaw('COUNT(DISTINCT question_id) as aggregate')
+                ->value('aggregate'),
             'avg_score' => (float) (QuestionQualityReview::query()
                 ->where('status', 'reviewed')
                 ->whereNotNull('quality_score')

@@ -61,6 +61,12 @@
     <div class="aqr-hero">
         <h3>AI Soru Kalite Kontrolleri</h3>
         <p>Claude inceleme sonuçları. Sadece bu hesap görür.</p>
+        <p class="mt-2 mb-0" style="font-size:1.15rem;font-weight:650;color:#fff">
+            Toplam <span style="color:#4ade80">{{ number_format($stats['questions_reviewed']) }}</span> soru kontrol edilmiş
+            <span style="opacity:.75;font-weight:500;font-size:.95rem">
+                ({{ number_format($stats['reviewed']) }} tamamlanan inceleme)
+            </span>
+        </p>
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <div class="aqr-model">Aktif model (API): {{ $configuredModel }}</div>
             <div class="aqr-model" id="aqrLiveBadge"
@@ -80,12 +86,14 @@
     <div class="row g-2 mb-3">
         <div class="col-6 col-md-3">
             <div class="card aqr-stat"><div class="card-body py-3">
-                <div class="label">Toplam</div><div class="value">{{ $stats['total'] }}</div>
+                <div class="label">Kontrol edilen soru</div>
+                <div class="value" style="color:#166534">{{ number_format($stats['questions_reviewed']) }}</div>
             </div></div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card aqr-stat"><div class="card-body py-3">
-                <div class="label">Reviewed</div><div class="value" style="color:#166534">{{ $stats['reviewed'] }}</div>
+                <div class="label">Tamamlanan inceleme</div>
+                <div class="value">{{ number_format($stats['reviewed']) }}</div>
             </div></div>
         </div>
         <div class="col-6 col-md-3">
