@@ -2448,6 +2448,16 @@ class DuelController extends Controller
         $user->decrement('coins', $amount);
 
         if ($duel) {
+            // Net düello: kayıp düşer ama 0 altına inmez.
+            // 0 iken kaybetmeye devam → 0 kalır; sonra kazanırsa soru değeri kadar tekrar artar.
+            DB::table('users')
+                ->where('id', $user->id)
+                ->update([
+                    'duel_earned_coins' => DB::raw(
+                        'GREATEST(0, CAST(duel_earned_coins AS SIGNED) - ' . (int) $amount . ')'
+                    ),
+                ]);
+
             CoinHistory::create([
                 'user_id' => $user->id,
                 'coin_amount' => -$amount,

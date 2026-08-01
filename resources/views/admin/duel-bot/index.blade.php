@@ -668,6 +668,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             </div>
             <div class="modal-body">
                 <div class="small text-muted mb-2" id="duelBotDetailMeta"></div>
+                <div class="d-none mb-3" id="duelBotDetailStats"></div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
@@ -1368,10 +1369,15 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         var modalEl = document.getElementById('duelBotDetailModal');
         var title = document.getElementById('duelBotDetailTitle');
         var meta = document.getElementById('duelBotDetailMeta');
+        var statsEl = document.getElementById('duelBotDetailStats');
         var body = document.getElementById('duelBotDetailBody');
         if (!modalEl || !body) return;
         if (title) title.textContent = 'Soru detayı · düello #' + duelId;
         if (meta) meta.textContent = 'Yükleniyor…';
+        if (statsEl) {
+            statsEl.className = 'd-none mb-3';
+            statsEl.innerHTML = '';
+        }
         body.innerHTML = '<tr><td colspan="5" class="text-muted">Yükleniyor…</td></tr>';
         var modal = window.bootstrap && bootstrap.Modal
             ? bootstrap.Modal.getOrCreateInstance(modalEl)
@@ -1393,6 +1399,47 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                         + (d.multiplier || 'x1')
                         + (d.finished_at ? (' · ' + d.finished_at) : '')
                         + (d.forfeit_reason ? (' · ' + d.forfeit_reason) : '');
+                }
+                if (statsEl) {
+                    var hs = d.opponent_stats || {};
+                    var bs = d.bot_stats || {};
+                    var netHuman = Number(hs.coins_net || 0);
+                    var netBot = Number(bs.coins_net || 0);
+                    var humanBal = (hs.coins_before != null && hs.coins_after != null)
+                        ? (hs.coins_before + ' → ' + hs.coins_after)
+                        : '—';
+                    var botBal = (bs.coins_before != null && bs.coins_after != null)
+                        ? (bs.coins_before + ' → ' + bs.coins_after)
+                        : '—';
+                    statsEl.className = 'mb-3';
+                    statsEl.innerHTML =
+                        '<div class="row g-2">'
+                        + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
+                        + '<div class="fw-semibold mb-1" style="color:#212529">Rakip'
+                        + (d.opponent_name ? (' · ' + esc(d.opponent_name)) : '') + '</div>'
+                        + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (hs.correct ?? 0) + '</span>'
+                        + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (hs.wrong ?? 0) + '</span>'
+                        + ' · Cevap: ' + (hs.answered ?? 0) + '</div>'
+                        + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (hs.coins_gained ?? 0) + '</span>'
+                        + ' / <span style="color:#dc3545">−' + (hs.coins_lost ?? 0) + '</span>'
+                        + ' · Net: <span style="color:' + (netHuman > 0 ? '#198754' : (netHuman < 0 ? '#dc3545' : '#212529')) + '">'
+                        + (netHuman > 0 ? '+' : '') + netHuman + '</span></div>'
+                        + '<div style="color:#495057">Bakiye: ' + humanBal
+                        + (hs.coins_now != null ? (' · Şu an: ' + hs.coins_now) : '')
+                        + '</div>'
+                        + '</div></div>'
+                        + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
+                        + '<div class="fw-semibold mb-1" style="color:#212529">Bot</div>'
+                        + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (bs.correct ?? 0) + '</span>'
+                        + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (bs.wrong ?? 0) + '</span>'
+                        + ' · Cevap: ' + (bs.answered ?? 0) + '</div>'
+                        + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (bs.coins_gained ?? 0) + '</span>'
+                        + ' / <span style="color:#dc3545">−' + (bs.coins_lost ?? 0) + '</span>'
+                        + ' · Net: <span style="color:' + (netBot > 0 ? '#198754' : (netBot < 0 ? '#dc3545' : '#212529')) + '">'
+                        + (netBot > 0 ? '+' : '') + netBot + '</span></div>'
+                        + '<div style="color:#495057">Bakiye: ' + botBal + '</div>'
+                        + '</div></div>'
+                        + '</div>';
                 }
                 var qs = d.questions || [];
                 if (!qs.length) {

@@ -28,7 +28,7 @@ class GiftCardStoreController extends Controller
      *         description="Başarılı",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="duel_earned_coins", type="integer", example=120, description="Kullanıcının meydan okumadan kazandığı jeton"),
+     *             @OA\Property(property="duel_earned_coins", type="integer", example=120, description="Meydan okumadan net jeton (kazanç − kayıp)"),
      *             @OA\Property(
      *                 property="data",
      *                 type="array",

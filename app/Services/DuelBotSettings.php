@@ -1114,7 +1114,7 @@ class DuelBotSettings
     public static function botDuelDetail(int $botUserId, int $duelId): ?array
     {
         $duel = Duel::query()
-            ->with(['challenger:id,name', 'opponent:id,name', 'answers.question'])
+            ->with(['challenger:id,name,coins,duel_earned_coins', 'opponent:id,name,coins,duel_earned_coins', 'answers.question'])
             ->find($duelId);
 
         if (!$duel) {
@@ -1172,6 +1172,40 @@ class DuelBotSettings
         }
 
         $opp = (int) $duel->challenger_id === $botUserId ? $duel->opponent : $duel->challenger;
+        $botIsChallenger = (int) $duel->challenger_id === $botUserId;
+
+        $sumSide = static function (int $uid) use ($duel): array {
+            $rows = $duel->answers->where('user_id', $uid);
+            $gained = (int) $rows->filter(fn ($a) => (int) $a->coins_change > 0)->sum('coins_change');
+            $lost = (int) abs($rows->filter(fn ($a) => (int) $a->coins_change < 0)->sum('coins_change'));
+
+            return [
+                'correct' => (int) $rows->where('is_correct', true)->count(),
+                'wrong' => (int) $rows->where('is_correct', false)->count(),
+                'answered' => (int) $rows->count(),
+                'coins_gained' => $gained,
+                'coins_lost' => $lost,
+                'coins_net' => $gained - $lost,
+            ];
+        };
+
+        $botStats = $sumSide($botUserId);
+        $botStats['coins_before'] = $botIsChallenger
+            ? $duel->challenger_coins_before
+            : $duel->opponent_coins_before;
+        $botStats['coins_after'] = $botIsChallenger
+            ? $duel->challenger_coins_after
+            : $duel->opponent_coins_after;
+
+        $humanStats = $sumSide($humanId);
+        $humanStats['coins_before'] = $botIsChallenger
+            ? $duel->opponent_coins_before
+            : $duel->challenger_coins_before;
+        $humanStats['coins_after'] = $botIsChallenger
+            ? $duel->opponent_coins_after
+            : $duel->challenger_coins_after;
+        $humanStats['coins_now'] = $opp ? (int) $opp->coins : null;
+        $humanStats['duel_earned_coins'] = $opp ? (int) ($opp->duel_earned_coins ?? 0) : null;
 
         return [
             'duel_id' => $duel->id,
@@ -1182,6 +1216,8 @@ class DuelBotSettings
             'opponent_id' => $opp?->id,
             'opponent_name' => $opp?->name,
             'finished_at' => optional($duel->finished_at)->format('Y-m-d H:i:s'),
+            'bot_stats' => $botStats,
+            'opponent_stats' => $humanStats,
             'questions' => $questions,
         ];
     }
@@ -1217,6 +1253,17 @@ class DuelBotSettings
                 'busy' => $busy,
             ];
         }
+
+        $tierOrder = ['easy' => 1, 'medium' => 2, 'hard' => 3, 'professor' => 4];
+        usort($items, static function ($a, $b) use ($tierOrder) {
+            $pa = $tierOrder[$a['difficulty'] ?? ''] ?? 99;
+            $pb = $tierOrder[$b['difficulty'] ?? ''] ?? 99;
+            if ($pa !== $pb) {
+                return $pa <=> $pb;
+            }
+
+            return ((int) ($a['user_id'] ?? 0)) <=> ((int) ($b['user_id'] ?? 0));
+        });
 
         return $items;
     }
@@ -1288,6 +1335,17 @@ class DuelBotSettings
 
                 $out[] = $row;
             }
+
+            $tierOrder = ['easy' => 1, 'medium' => 2, 'hard' => 3, 'professor' => 4];
+            usort($out, static function ($a, $b) use ($tierOrder) {
+                $pa = $tierOrder[$a['difficulty'] ?? ''] ?? 99;
+                $pb = $tierOrder[$b['difficulty'] ?? ''] ?? 99;
+                if ($pa !== $pb) {
+                    return $pa <=> $pb;
+                }
+
+                return ((int) ($a['user_id'] ?? 0)) <=> ((int) ($b['user_id'] ?? 0));
+            });
 
             return $out;
         });

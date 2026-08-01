@@ -533,7 +533,7 @@ class RewardController extends Controller
 
     /**
      * Hediye / ödül talep şartları:
-     * - Meydan okumadan (düello) kazanılmış en az 100 jeton (duel_earned_coins)
+     * - Meydan okumadan net en az 100 jeton (duel_earned_coins = kazanılan − kaybedilen, min 0)
      * - En az 3 tamamlanmış oyun
      */
     private function validateGiftClaimRequirements(User $user): array
@@ -547,7 +547,7 @@ class RewardController extends Controller
         if ($duelEarnedCoins < $minCoins) {
             return [
                 'eligible' => false,
-                'message' => "Hediye talep etmek için meydan okumadan en az {$minCoins} jeton kazanmış olmalısınız. Düello kazancınız: {$duelEarnedCoins}.",
+                'message' => "Hediye talep etmek için meydan okumadan net en az {$minCoins} jeton kazanmış olmalısınız. Net düello kazancınız: {$duelEarnedCoins}.",
                 'current_coins' => $currentCoins,
                 'duel_earned_coins' => $duelEarnedCoins,
                 'games_played' => $gamesPlayed,
