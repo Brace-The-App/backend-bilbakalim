@@ -34,6 +34,8 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'coins' => $this->coins,
             'duel_earned_coins' => (int) ($this->duel_earned_coins ?? 0),
+            'gift_claim_min_coins' => (int) config('app.gift_claim_min_coins', 100),
+            'gift_claim_min_games' => (int) config('app.gift_claim_min_games', 3),
             'diamonds' => $diamondBalance,
             'role_id' => $this->role_id,
             'phone' => $this->phone,

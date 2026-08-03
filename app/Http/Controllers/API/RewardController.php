@@ -75,8 +75,8 @@ class RewardController extends Controller
                 'current_coins' => $claimGate['current_coins'],
                 'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
                 'games_played' => $claimGate['games_played'],
-                'min_coins' => $claimGate['min_coins'],
-                'min_games' => $claimGate['min_games'],
+                'gift_claim_min_coins' => $claimGate['min_coins'],
+                'gift_claim_min_games' => $claimGate['min_games'],
                 'message' => $claimGate['message'],
             ]);
         }
@@ -339,8 +339,8 @@ class RewardController extends Controller
             'current_coins' => $claimGate['current_coins'],
             'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
             'games_played' => $claimGate['games_played'],
-            'min_coins' => $claimGate['min_coins'],
-            'min_games' => $claimGate['min_games'],
+            'gift_claim_min_coins' => $claimGate['min_coins'],
+            'gift_claim_min_games' => $claimGate['min_games'],
             'message' => $message
         ];
 
@@ -431,18 +431,18 @@ class RewardController extends Controller
                 'current_coins' => $claimGate['current_coins'],
                 'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
                 'games_played' => $claimGate['games_played'],
-                'min_coins' => $claimGate['min_coins'],
-                'min_games' => $claimGate['min_games'],
+                'gift_claim_min_coins' => $claimGate['min_coins'],
+                'gift_claim_min_games' => $claimGate['min_games'],
             ], 400);
         }
 
-        $coinsEarned = (int) $user->coins;
+        $claimAmount = (int) config('app.gift_claim_min_coins', 100);
         $rewardDate = Carbon::today()->format('Y-m-d');
-        $metadata = [
+        $baseMetadata = [
             'gift_card_store_id' => (int) $store->id,
             'gift_card_store_type' => $store->type,
             'gift_card_store_image_url' => $store->image_url,
-            'source' => 'duel',
+            'source' => $type === 'duel' ? 'duel' : $type,
         ];
 
         if ($type === 'weekly') {
@@ -455,38 +455,86 @@ class RewardController extends Controller
                     $rewardDate = $tournament->end_date
                         ? Carbon::parse($tournament->end_date)->format('Y-m-d')
                         : Carbon::today()->format('Y-m-d');
-                    $metadata['tournament_id'] = (int) $tournamentId;
+                    $baseMetadata['tournament_id'] = (int) $tournamentId;
                 }
             }
         }
 
         try {
-            $rewardRequest = DB::transaction(function () use ($user, $type, $rewardDate, $coinsEarned, $metadata, $store) {
-                // Çift tık / paralel istek: aynı user satırını kilitle
-                User::query()->where('id', $user->id)->lockForUpdate()->first();
+            $rewardRequest = DB::transaction(function () use ($user, $type, $rewardDate, $baseMetadata, $store, $claimAmount) {
+                /** @var User $lockedUser */
+                $lockedUser = User::query()->where('id', $user->id)->lockForUpdate()->firstOrFail();
 
-                $existing = RewardRequest::query()
-                    ->where('user_id', $user->id)
-                    ->where('reward_type', $type)
-                    ->where('reward_date', $rewardDate)
-                    ->whereIn('status', ['pending', 'approved'])
-                    ->orderByDesc('id')
-                    ->first();
+                // Günlük / haftalık / turnuva: aynı gün tek talep
+                if ($type !== 'duel') {
+                    $existing = RewardRequest::query()
+                        ->where('user_id', $lockedUser->id)
+                        ->where('reward_type', $type)
+                        ->where('reward_date', $rewardDate)
+                        ->whereIn('status', ['pending', 'approved'])
+                        ->orderByDesc('id')
+                        ->first();
 
-                if ($existing) {
-                    return $existing;
+                    if ($existing) {
+                        return $existing;
+                    }
+
+                    return RewardRequest::create([
+                        'user_id' => $lockedUser->id,
+                        'reward_type' => $type,
+                        'coins_earned' => (int) ($lockedUser->coins ?? 0),
+                        'reward_date' => $rewardDate,
+                        'status' => 'pending',
+                        'requested_at' => now(),
+                        'metadata' => array_merge($baseMetadata, [
+                            'wallet_coins_at_claim' => (int) ($lockedUser->coins ?? 0),
+                        ]),
+                    ]);
                 }
 
+                // Meydan okuma hediyesi:
+                // - Eşik kadar (100) duel_earned düşülür, talep panele düşer
+                // - Kalan durur; ≥100 ise aynı gün arka arkaya tekrar talep edilebilir
+                // - Onayda ekstra sıfırlama yok; redde iade
+                $duelBefore = max(0, (int) ($lockedUser->duel_earned_coins ?? 0));
+                if ($duelBefore < $claimAmount) {
+                    throw new \RuntimeException('INSUFFICIENT_DUEL_EARNED');
+                }
+
+                $duelAfter = $duelBefore - $claimAmount;
+                $lockedUser->duel_earned_coins = $duelAfter;
+                $lockedUser->save();
+
                 return RewardRequest::create([
-                    'user_id' => $user->id,
+                    'user_id' => $lockedUser->id,
                     'reward_type' => $type,
-                    'coins_earned' => $coinsEarned,
+                    'coins_earned' => $claimAmount,
                     'reward_date' => $rewardDate,
                     'status' => 'pending',
                     'requested_at' => now(),
-                    'metadata' => $metadata,
+                    'metadata' => array_merge($baseMetadata, [
+                        'claimed_amount' => $claimAmount,
+                        'duel_earned_at_claim_before' => $duelBefore,
+                        'duel_earned_at_claim_after' => $duelAfter,
+                        'wallet_coins_at_claim' => (int) ($lockedUser->coins ?? 0),
+                        'completed_games_at_claim' => (int) ($lockedUser->total_completed_games ?? 0),
+                    ]),
                 ]);
             });
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'INSUFFICIENT_DUEL_EARNED') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Hediye talep etmek için meydan okumadan net en az {$claimAmount} jeton kazanmış olmalısınız.",
+                    'duel_earned_coins' => (int) ($user->fresh()->duel_earned_coins ?? 0),
+                    'gift_claim_min_coins' => $claimAmount,
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Ödül talebi oluşturulamadı. Lütfen tekrar deneyin.',
+            ], 500);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
@@ -516,11 +564,16 @@ class RewardController extends Controller
             ]);
         }
 
+        $user->refresh();
+
         return response()->json([
             'success' => true,
             'message' => 'Ödül talebi başarıyla oluşturuldu.',
             'data' => [
                 'id' => $rewardRequest->id,
+                'claimed_amount' => (int) ($rewardRequest->coins_earned ?? $claimAmount),
+                'duel_earned_coins' => (int) ($user->duel_earned_coins ?? 0),
+                'gift_claim_min_coins' => $claimAmount,
                 'gift_card_store_id' => (int) $store->id,
                 'gift_card_store' => [
                     'id' => (int) $store->id,

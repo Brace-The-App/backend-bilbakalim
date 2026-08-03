@@ -4,12 +4,13 @@
 
 @push('css')
 <style>
-.aqr-wrap { max-width: 100%; margin-top: 1.25rem; }
+.aqr-wrap { max-width: 100%; margin-top: 2.25rem; }
 .aqr-hero {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #334155 100%);
     border-radius: 16px;
     color: #fff;
     padding: 1.5rem 1.75rem;
+    margin-top: 0.5rem;
     margin-bottom: 1.25rem;
 }
 .aqr-hero h3 { color: #fff !important; margin: 0 0 .4rem; font-weight: 650; font-size: 1.55rem; }
