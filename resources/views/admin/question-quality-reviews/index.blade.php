@@ -6,17 +6,12 @@
 <style>
 .aqr-wrap {
     max-width: 100%;
-    /* Header fixed → margin header'a göre değil; page-body zaten margin-top:136px.
-       Ek boşluk için padding kullan (margin collapse / referans karışıklığı olmasın). */
-    padding-top: 1.75rem !important;
-    margin-top: 0 !important;
 }
 .aqr-hero {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #334155 100%);
     border-radius: 16px;
     color: #fff;
     padding: 1.5rem 1.75rem;
-    margin-top: 0;
     margin-bottom: 1.25rem;
 }
 .aqr-hero h3 { color: #fff !important; margin: 0 0 .4rem; font-weight: 650; font-size: 1.55rem; }

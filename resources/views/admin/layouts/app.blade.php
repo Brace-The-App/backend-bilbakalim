@@ -44,6 +44,13 @@
     @stack('css')
     @stack('styles')
 
+    {{-- Fixed page-header akışta değil; tüm admin sayfalarında içerik üst boşluğu --}}
+    <style>
+        .page-wrapper .page-body-wrapper .page-body > .container-fluid {
+            padding-top: 1.5rem;
+        }
+    </style>
+
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
 </head>
