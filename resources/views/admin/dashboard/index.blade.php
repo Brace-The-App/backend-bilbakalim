@@ -44,6 +44,19 @@
             </div>
         </div>
     </a>
+    @if(\App\Services\DuelBotSettings::canManage(auth()->user()))
+    <a href="{{ route('admin.duel-bot.index') }}" class="dash-kpi-link">
+        <div class="card dash-kpi dash-kpi--slate">
+            <div class="card-body">
+                <div class="dash-kpi__icon"><i data-feather="cpu"></i></div>
+                <div>
+                    <span class="dash-kpi__label">Aktif Bot</span>
+                    <h4 class="dash-kpi__value counter mb-0">{{ $stats['active_bots'] }}</h4>
+                </div>
+            </div>
+        </div>
+    </a>
+    @else
     <div class="dash-kpi-link dash-kpi-link--static">
         <div class="card dash-kpi dash-kpi--slate">
             <div class="card-body">
@@ -55,6 +68,7 @@
             </div>
         </div>
     </div>
+    @endif
     <a href="{{ route('admin.questions.index') }}" class="dash-kpi-link">
         <div class="card dash-kpi dash-kpi--amber">
             <div class="card-body">

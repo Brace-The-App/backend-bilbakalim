@@ -100,12 +100,22 @@
     <div class="aqr-top">
         <div class="d-flex flex-wrap justify-content-between gap-2">
             <div>
-                <h3>Review #{{ $review->id }} · Soru #{{ $review->question_id }}</h3>
+            @php
+                $h3Attempt = (int) ($review->attempt ?? 1);
+            @endphp
+                <h3>Review #{{ $review->id }} · Soru #{{ $review->question_id }}
+                    @if ($h3Attempt > 1)
+                        · Deneme {{ $h3Attempt }}
+                    @endif
+                </h3>
                 <div class="meta">
                     Kayıt model: <strong>{{ $review->model ?: '—' }}</strong>
                     · paket {{ $review->package ?: '—' }}
                     · API şu an: <strong>{{ $configuredModel }}</strong>
                     · {{ optional($review->reviewed_at)->format('d.m.Y H:i') ?: 'henüz tamamlanmadı' }}
+                    @if ($review->previous_review_id)
+                        · önceki: <a class="link-light" href="{{ route('admin.question-quality-reviews.show', $review->previous_review_id) }}">#{{ $review->previous_review_id }}</a>
+                    @endif
                 </div>
             </div>
             <div>
@@ -144,6 +154,13 @@
     @endif
     @if(session('error'))
         <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
+
+    @if ($review->status === 'failed')
+        <div class="alert alert-danger">
+            <div class="fw-semibold mb-1">Failed · inceleme başarısız</div>
+            <div>{{ $editReason ?: (data_get($raw, 'fail_reason') ?: data_get($raw, 'error') ?: 'Sebep kaydı yok.') }}</div>
+        </div>
     @endif
 
     <div class="aqr-kpi mb-3">

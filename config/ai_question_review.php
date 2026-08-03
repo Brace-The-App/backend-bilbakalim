@@ -13,6 +13,9 @@ return [
     /** Gece job: günde en fazla kaç soru (Claude). */
     'daily_limit' => (int) env('AI_QUESTION_REVIEW_DAILY_LIMIT', 100),
 
+    /** Fail sonrası max deneme (1 = ilk, 2 = 1. retry …). */
+    'max_attempts' => (int) env('AI_QUESTION_REVIEW_MAX_ATTEMPTS', 3),
+
     /** Schedule saati (Europe/Istanbul). */
     'schedule_at' => env('AI_QUESTION_REVIEW_SCHEDULE_AT', '02:00'),
 

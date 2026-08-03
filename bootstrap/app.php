@@ -17,12 +17,19 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->runInBackground();
 
-        // Gece Claude soru kalite kontrolü — günde max 100 (komut içi limit)
+        // Gece Claude soru kalite kontrolü — günde max 100 (komut içi limit); fail'ler önce denenir
         $at = (string) config('ai_question_review.schedule_at', '02:00');
         $schedule->command('question:ai-review --limit=100')
             ->dailyAt($at)
             ->timezone('Europe/Istanbul')
             ->withoutOverlapping(240)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/question-ai-review.log'));
+
+        $schedule->command('question:ai-review --retry-failed --limit=20')
+            ->dailyAt('14:30')
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(120)
             ->runInBackground()
             ->appendOutputTo(storage_path('logs/question-ai-review.log'));
     })

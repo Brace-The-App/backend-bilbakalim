@@ -105,7 +105,9 @@ class DuelBotController extends Controller
         }
 
         $bot = User::query()->find($userId);
-        $limit = (int) $request->query('limit', 40);
+        $perPage = (int) $request->query('per_page', 50);
+        $page = (int) $request->query('page', 1);
+        $history = DuelBotSettings::botDuelHistory($userId, $perPage, $page);
 
         return response()->json([
             'success' => true,
@@ -115,13 +117,14 @@ class DuelBotController extends Controller
                 'difficulty' => $cfg['difficulty'],
                 'coins' => (int) ($bot?->coins ?? 0),
             ],
-            'duels' => DuelBotSettings::botDuelHistory($userId, $limit),
+            'duels' => $history['items'] ?? [],
+            'pagination' => $history['pagination'] ?? null,
             'server_time' => now()->toDateTimeString(),
         ]);
     }
 
     /** Tek düello soru detayı (modal) */
-    public function duelDetail(int $userId, int $duelId)
+    public function duelDetail(Request $request, int $userId, int $duelId)
     {
         $cfg = DuelBotSettings::findBotConfig($userId);
         if (!$cfg) {
@@ -133,10 +136,19 @@ class DuelBotController extends Controller
             return response()->json(['success' => false, 'message' => 'Düello bulunamadı.'], 404);
         }
 
+        // Tüm sorular döner; modal JS 50'şer sayfalar (pager üstte görünür).
+        $total = count($detail['questions'] ?? []);
+
         return response()->json([
             'success' => true,
             'bot_user_id' => $userId,
             'detail' => $detail,
+            'pagination' => [
+                'total' => $total,
+                'per_page' => 50,
+                'current_page' => 1,
+                'last_page' => max(1, (int) ceil($total / 50)),
+            ],
         ]);
     }
 

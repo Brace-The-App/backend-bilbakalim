@@ -114,6 +114,24 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
     display: block;
 }
 .duel-bot-avatar-option input { position: absolute; opacity: 0; pointer-events: none; }
+.duel-bot-modal-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-top: .5rem;
+    border-top: 1px solid #e9ecef;
+}
+.duel-bot-modal-pager .pagination { margin-bottom: 0; flex-wrap: wrap; }
+.duel-bot-modal-pager .page-link {
+    min-width: 2.25rem;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+}
+.duel-bot-modal-pager .page-item.disabled .page-link { cursor: default; }
+.duel-bot-modal-pager .pager-meta { font-size: .875rem; color: #6c757d; }
 .duel-bot-preview {
     width: 72px;
     height: 72px;
@@ -650,8 +668,13 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                     </table>
                 </div>
                 <div class="form-text mt-2">Satıra tıkla → soru detayı</div>
+                <div class="duel-bot-modal-pager mt-3" id="duelBotHistoryPager"></div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-wrap justify-content-between gap-2">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="duelBotHistoryPrev" disabled>‹ Önceki</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="duelBotHistoryNext" disabled>Sonraki ›</button>
+                </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
             </div>
         </div>
@@ -669,11 +692,13 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             <div class="modal-body">
                 <div class="small text-muted mb-2" id="duelBotDetailMeta"></div>
                 <div class="d-none mb-3" id="duelBotDetailStats"></div>
+                <div class="duel-bot-modal-pager mb-3" id="duelBotDetailPagerTop"></div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                         <tr class="small text-muted">
                             <th>#</th>
+                            <th>x</th>
                             <th>Soru</th>
                             <th>Doğru şık</th>
                             <th>Bot</th>
@@ -681,12 +706,17 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                         </tr>
                         </thead>
                         <tbody id="duelBotDetailBody">
-                        <tr><td colspan="5" class="text-muted">Yükleniyor…</td></tr>
+                        <tr><td colspan="6" class="text-muted">Yükleniyor…</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <div class="duel-bot-modal-pager mt-3" id="duelBotDetailPager"></div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-wrap justify-content-between gap-2">
+                <div class="d-flex gap-2" id="duelBotDetailPagerBtns">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="duelBotDetailPrev" disabled>‹ Önceki</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="duelBotDetailNext" disabled>Sonraki ›</button>
+                </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
             </div>
         </div>
@@ -1287,27 +1317,101 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         return '<span class="badge bg-warning text-dark">Devam</span>';
     }
 
-    function openBotHistory(botId, botName) {
-        var modalEl = document.getElementById('duelBotHistoryModal');
-        var title = document.getElementById('duelBotHistoryTitle');
-        var meta = document.getElementById('duelBotHistoryMeta');
-        var body = document.getElementById('duelBotHistoryBody');
-        if (!modalEl || !body) return;
+    var historyState = { botId: null, botName: '', page: 1, perPage: 50, lastPage: 1 };
+    var detailState = {
+        botId: null,
+        duelId: null,
+        page: 1,
+        perPage: 50,
+        lastPage: 1,
+        allQuestions: [],
+        detail: null,
+        loaded: false
+    };
 
-        if (title) title.textContent = 'Düello geçmişi · #' + botId + ' ' + (botName || '');
-        if (meta) meta.textContent = 'Yükleniyor…';
-        body.innerHTML = '<tr><td colspan="12" class="text-muted">Yükleniyor…</td></tr>';
+    function renderModalPager(el, pagination, onPage) {
+        if (!el) return;
+        el.innerHTML = '';
+        if (!pagination) return;
+        var cur = Number(pagination.current_page || 1);
+        var last = Number(pagination.last_page || 1);
+        var total = Number(pagination.total || 0);
+        var per = Number(pagination.per_page || 50);
+        var from = total ? ((cur - 1) * per + 1) : 0;
+        var to = Math.min(cur * per, total);
 
-        var modal = window.bootstrap && bootstrap.Modal
-            ? bootstrap.Modal.getOrCreateInstance(modalEl)
-            : null;
-        if (modal) modal.show();
-        else {
-            modalEl.classList.add('show');
-            modalEl.style.display = 'block';
+        var meta = document.createElement('div');
+        meta.className = 'pager-meta';
+        meta.textContent = (total ? (from + '–' + to + ' / ' + total) : 'Toplam 0')
+            + (last > 1 ? (' · sayfa ' + cur + '/' + last) : '');
+        el.appendChild(meta);
+
+        if (last <= 1) return;
+
+        var ul = document.createElement('ul');
+        ul.className = 'pagination pagination-sm mb-0';
+
+        function addItem(label, page, disabled, active) {
+            var li = document.createElement('li');
+            li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+            var a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = label;
+            if (!disabled && !active) {
+                a.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    onPage(page);
+                });
+            } else {
+                a.addEventListener('click', function (ev) { ev.preventDefault(); });
+            }
+            li.appendChild(a);
+            ul.appendChild(li);
         }
 
-        fetch(duelsUrlTpl + '/' + botId + '/duels?limit=50', {
+        addItem('‹', cur - 1, cur <= 1, false);
+        var startP = Math.max(1, cur - 2);
+        var endP = Math.min(last, cur + 2);
+        if (startP > 1) {
+            addItem('1', 1, false, cur === 1);
+            if (startP > 2) addItem('…', cur, true, false);
+        }
+        for (var p = startP; p <= endP; p++) {
+            addItem(String(p), p, false, p === cur);
+        }
+        if (endP < last) {
+            if (endP < last - 1) addItem('…', cur, true, false);
+            addItem(String(last), last, false, cur === last);
+        }
+        addItem('›', cur + 1, cur >= last, false);
+        el.appendChild(ul);
+    }
+
+    function setFooterPager(prevId, nextId, page, lastPage, onPrev, onNext) {
+        var prev = document.getElementById(prevId);
+        var next = document.getElementById(nextId);
+        if (prev) {
+            prev.disabled = page <= 1 || lastPage <= 1;
+            prev.onclick = function () { if (page > 1) onPrev(page - 1); };
+        }
+        if (next) {
+            next.disabled = page >= lastPage || lastPage <= 1;
+            next.onclick = function () { if (page < lastPage) onNext(page + 1); };
+        }
+    }
+
+    function loadBotHistory(page) {
+        var botId = historyState.botId;
+        var body = document.getElementById('duelBotHistoryBody');
+        var meta = document.getElementById('duelBotHistoryMeta');
+        var pager = document.getElementById('duelBotHistoryPager');
+        if (!botId || !body) return;
+        historyState.page = page || 1;
+        body.innerHTML = '<tr><td colspan="12" class="text-muted">Yükleniyor…</td></tr>';
+        if (pager) pager.innerHTML = '';
+
+        fetch(duelsUrlTpl + '/' + botId + '/duels?per_page=' + historyState.perPage + '&page=' + historyState.page, {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
             .then(function (r) { return r.json(); })
@@ -1316,44 +1420,76 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                     body.innerHTML = '<tr><td colspan="12" class="text-danger">Yüklenemedi</td></tr>';
                     return;
                 }
+                var pag = data.pagination || {};
+                historyState.lastPage = Number(pag.last_page || 1);
                 if (meta) {
                     meta.textContent = (data.bot && data.bot.difficulty ? String(data.bot.difficulty).toUpperCase() + ' · ' : '')
-                        + (data.duels || []).length + ' maç · jeton '
-                        + Number((data.bot && data.bot.coins) || 0).toLocaleString('tr-TR');
+                        + (pag.total != null ? (pag.total + ' maç') : ((data.duels || []).length + ' maç'))
+                        + ' · jeton '
+                        + Number((data.bot && data.bot.coins) || 0).toLocaleString('tr-TR')
+                        + (historyState.lastPage > 1 ? (' · sayfa ' + historyState.page + '/' + historyState.lastPage) : '');
                 }
                 var rows = data.duels || [];
                 if (!rows.length) {
                     body.innerHTML = '<tr><td colspan="12" class="text-muted">Henüz düello yok</td></tr>';
-                    return;
+                } else {
+                    body.innerHTML = rows.map(function (d) {
+                        var net = d.coins_net;
+                        var netCls = net > 0 ? 'text-success' : (net < 0 ? 'text-danger' : '');
+                        var netTxt = net == null ? '—' : ((net > 0 ? '+' : '') + net);
+                        var bal = (d.coins_before != null && d.coins_after != null)
+                            ? (d.coins_before + ' → ' + d.coins_after)
+                            : '—';
+                        var opp = d.opponent_name ? ('#' + d.opponent_id + ' ' + d.opponent_name) : '—';
+                        return '<tr class="js-duel-row" style="cursor:pointer" data-bot-id="' + botId
+                            + '" data-duel-id="' + d.duel_id + '" title="Soru detayı">'
+                            + '<td>#' + d.duel_id + '</td>'
+                            + '<td class="small">' + esc(d.finished_at || d.started_at || d.created_at || '') + '</td>'
+                            + '<td>' + esc(opp) + '</td>'
+                            + '<td>' + esc(d.multiplier || 'x1') + '</td>'
+                            + '<td>' + resultBadge(d.result) + '</td>'
+                            + '<td class="text-success">' + d.correct + '</td>'
+                            + '<td class="text-danger">' + d.wrong + '</td>'
+                            + '<td>' + (d.accuracy_pct != null ? ('%' + d.accuracy_pct) : '—') + '</td>'
+                            + '<td class="text-success">+' + d.coins_gained + '</td>'
+                            + '<td class="text-danger">−' + d.coins_lost + '</td>'
+                            + '<td class="' + netCls + '">' + netTxt + '</td>'
+                            + '<td class="small">' + bal + '</td>'
+                            + '</tr>';
+                    }).join('');
                 }
-                body.innerHTML = rows.map(function (d) {
-                    var net = d.coins_net;
-                    var netCls = net > 0 ? 'text-success' : (net < 0 ? 'text-danger' : '');
-                    var netTxt = net == null ? '—' : ((net > 0 ? '+' : '') + net);
-                    var bal = (d.coins_before != null && d.coins_after != null)
-                        ? (d.coins_before + ' → ' + d.coins_after)
-                        : '—';
-                    var opp = d.opponent_name ? ('#' + d.opponent_id + ' ' + d.opponent_name) : '—';
-                    return '<tr class="js-duel-row" style="cursor:pointer" data-bot-id="' + botId
-                        + '" data-duel-id="' + d.duel_id + '" title="Soru detayı">'
-                        + '<td>#' + d.duel_id + '</td>'
-                        + '<td class="small">' + esc(d.finished_at || d.started_at || d.created_at || '') + '</td>'
-                        + '<td>' + esc(opp) + '</td>'
-                        + '<td>' + esc(d.multiplier || 'x1') + '</td>'
-                        + '<td>' + resultBadge(d.result) + '</td>'
-                        + '<td class="text-success">' + d.correct + '</td>'
-                        + '<td class="text-danger">' + d.wrong + '</td>'
-                        + '<td>' + (d.accuracy_pct != null ? ('%' + d.accuracy_pct) : '—') + '</td>'
-                        + '<td class="text-success">+' + d.coins_gained + '</td>'
-                        + '<td class="text-danger">−' + d.coins_lost + '</td>'
-                        + '<td class="' + netCls + '">' + netTxt + '</td>'
-                        + '<td class="small">' + bal + '</td>'
-                        + '</tr>';
-                }).join('');
+                renderModalPager(pager, {
+                    total: pag.total != null ? pag.total : rows.length,
+                    per_page: historyState.perPage,
+                    current_page: historyState.page,
+                    last_page: historyState.lastPage
+                }, loadBotHistory);
+                setFooterPager('duelBotHistoryPrev', 'duelBotHistoryNext', historyState.page, historyState.lastPage, loadBotHistory, loadBotHistory);
             })
             .catch(function () {
                 body.innerHTML = '<tr><td colspan="12" class="text-danger">Bağlantı hatası</td></tr>';
             });
+    }
+
+    function openBotHistory(botId, botName) {
+        var modalEl = document.getElementById('duelBotHistoryModal');
+        var title = document.getElementById('duelBotHistoryTitle');
+        if (!modalEl) return;
+
+        historyState.botId = botId;
+        historyState.botName = botName || '';
+        historyState.page = 1;
+
+        if (title) title.textContent = 'Düello geçmişi · #' + botId + ' ' + (botName || '');
+        var modal = window.bootstrap && bootstrap.Modal
+            ? bootstrap.Modal.getOrCreateInstance(modalEl)
+            : null;
+        if (modal) modal.show();
+        else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+        }
+        loadBotHistory(1);
     }
 
     function ansCell(a) {
@@ -1365,24 +1501,118 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         return '<span class="' + cls + '">' + mark + ' şık ' + esc(String(a.selected || '')) + coin + '</span>';
     }
 
-    function openDuelDetail(botId, duelId) {
-        var modalEl = document.getElementById('duelBotDetailModal');
+    function paintDetailStats(d) {
+        var statsEl = document.getElementById('duelBotDetailStats');
+        if (!statsEl || !d) return;
+        var hs = d.opponent_stats || {};
+        var bs = d.bot_stats || {};
+        var netHuman = Number(hs.coins_net || 0);
+        var netBot = Number(bs.coins_net || 0);
+        var humanBal = (hs.coins_before != null && hs.coins_after != null)
+            ? (hs.coins_before + ' → ' + hs.coins_after)
+            : '—';
+        var botBal = (bs.coins_before != null && bs.coins_after != null)
+            ? (bs.coins_before + ' → ' + bs.coins_after)
+            : '—';
+        statsEl.className = 'mb-3';
+        statsEl.innerHTML =
+            '<div class="row g-2">'
+            + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
+            + '<div class="fw-semibold mb-1" style="color:#212529">Rakip'
+            + (d.opponent_name ? (' · ' + esc(d.opponent_name)) : '') + '</div>'
+            + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (hs.correct != null ? hs.correct : 0) + '</span>'
+            + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (hs.wrong != null ? hs.wrong : 0) + '</span>'
+            + ' · Cevap: ' + (hs.answered != null ? hs.answered : 0) + '</div>'
+            + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (hs.coins_gained != null ? hs.coins_gained : 0) + '</span>'
+            + ' / <span style="color:#dc3545">−' + (hs.coins_lost != null ? hs.coins_lost : 0) + '</span>'
+            + ' · Net: <span style="color:' + (netHuman > 0 ? '#198754' : (netHuman < 0 ? '#dc3545' : '#212529')) + '">'
+            + (netHuman > 0 ? '+' : '') + netHuman + '</span></div>'
+            + '<div style="color:#495057">Bakiye: ' + humanBal
+            + (hs.coins_now != null ? (' · Şu an: ' + hs.coins_now) : '')
+            + '</div>'
+            + '</div></div>'
+            + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
+            + '<div class="fw-semibold mb-1" style="color:#212529">Bot</div>'
+            + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (bs.correct != null ? bs.correct : 0) + '</span>'
+            + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (bs.wrong != null ? bs.wrong : 0) + '</span>'
+            + ' · Cevap: ' + (bs.answered != null ? bs.answered : 0) + '</div>'
+            + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (bs.coins_gained != null ? bs.coins_gained : 0) + '</span>'
+            + ' / <span style="color:#dc3545">−' + (bs.coins_lost != null ? bs.coins_lost : 0) + '</span>'
+            + ' · Net: <span style="color:' + (netBot > 0 ? '#198754' : (netBot < 0 ? '#dc3545' : '#212529')) + '">'
+            + (netBot > 0 ? '+' : '') + netBot + '</span></div>'
+            + '<div style="color:#495057">Bakiye: ' + botBal + '</div>'
+            + '</div></div>'
+            + '</div>';
+    }
+
+    function renderDetailPage(page) {
+        var meta = document.getElementById('duelBotDetailMeta');
+        var body = document.getElementById('duelBotDetailBody');
+        var pager = document.getElementById('duelBotDetailPager');
+        var pagerTop = document.getElementById('duelBotDetailPagerTop');
+        var d = detailState.detail;
+        var all = detailState.allQuestions || [];
+        var per = detailState.perPage;
+        var total = all.length;
+        var last = Math.max(1, Math.ceil(total / per));
+        page = Math.max(1, Math.min(last, page || 1));
+        detailState.page = page;
+        detailState.lastPage = last;
+
+        if (meta && d) {
+            meta.textContent = (d.opponent_name ? ('Rakip #' + d.opponent_id + ' ' + d.opponent_name + ' · ') : '')
+                + (d.multiplier || 'x1')
+                + (d.finished_at ? (' · ' + d.finished_at) : '')
+                + (d.forfeit_reason ? (' · ' + d.forfeit_reason) : '')
+                + ' · ' + total + ' soru'
+                + (last > 1 ? (' · sayfa ' + page + '/' + last) : '');
+        }
+
+        var slice = all.slice((page - 1) * per, page * per);
+        if (!slice.length) {
+            body.innerHTML = '<tr><td colspan="6" class="text-muted">Cevap yok</td></tr>';
+        } else {
+            body.innerHTML = slice.map(function (q) {
+                var mx = q.multiplier_label || (q.multiplier ? ('x' + q.multiplier) : 'x1');
+                return '<tr>'
+                    + '<td>Q' + q.n + '</td>'
+                    + '<td><span class="badge bg-secondary">' + esc(String(mx)) + '</span></td>'
+                    + '<td class="small" style="max-width:360px">' + esc(q.question || '') + '</td>'
+                    + '<td>' + esc(String(q.correct_answer || '')) + '</td>'
+                    + '<td>' + ansCell(q.bot) + '</td>'
+                    + '<td>' + ansCell(q.human) + '</td>'
+                    + '</tr>';
+            }).join('');
+        }
+
+        var pag = { total: total, per_page: per, current_page: page, last_page: last };
+        renderModalPager(pager, pag, renderDetailPage);
+        renderModalPager(pagerTop, pag, renderDetailPage);
+        setFooterPager('duelBotDetailPrev', 'duelBotDetailNext', page, last, renderDetailPage, renderDetailPage);
+
+        try {
+            var modalBody = document.querySelector('#duelBotDetailModal .modal-body');
+            if (modalBody) modalBody.scrollTop = 0;
+        } catch (e) {}
+    }
+
+    function loadDuelDetail() {
+        var botId = detailState.botId;
+        var duelId = detailState.duelId;
         var title = document.getElementById('duelBotDetailTitle');
         var meta = document.getElementById('duelBotDetailMeta');
-        var statsEl = document.getElementById('duelBotDetailStats');
         var body = document.getElementById('duelBotDetailBody');
-        if (!modalEl || !body) return;
+        var pager = document.getElementById('duelBotDetailPager');
+        var pagerTop = document.getElementById('duelBotDetailPagerTop');
+        if (!botId || !duelId || !body) return;
         if (title) title.textContent = 'Soru detayı · düello #' + duelId;
         if (meta) meta.textContent = 'Yükleniyor…';
-        if (statsEl) {
-            statsEl.className = 'd-none mb-3';
-            statsEl.innerHTML = '';
-        }
-        body.innerHTML = '<tr><td colspan="5" class="text-muted">Yükleniyor…</td></tr>';
-        var modal = window.bootstrap && bootstrap.Modal
-            ? bootstrap.Modal.getOrCreateInstance(modalEl)
-            : null;
-        if (modal) modal.show();
+        body.innerHTML = '<tr><td colspan="6" class="text-muted">Yükleniyor…</td></tr>';
+        if (pager) pager.innerHTML = '';
+        if (pagerTop) pagerTop.innerHTML = '';
+        detailState.loaded = false;
+        detailState.allQuestions = [];
+        detailState.detail = null;
 
         fetch(duelsUrlTpl + '/' + botId + '/duels/' + duelId, {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
@@ -1390,75 +1620,36 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data || !data.success || !data.detail) {
-                    body.innerHTML = '<tr><td colspan="5" class="text-danger">Yüklenemedi</td></tr>';
+                    body.innerHTML = '<tr><td colspan="6" class="text-danger">Yüklenemedi</td></tr>';
                     return;
                 }
-                var d = data.detail;
-                if (meta) {
-                    meta.textContent = (d.opponent_name ? ('Rakip #' + d.opponent_id + ' ' + d.opponent_name + ' · ') : '')
-                        + (d.multiplier || 'x1')
-                        + (d.finished_at ? (' · ' + d.finished_at) : '')
-                        + (d.forfeit_reason ? (' · ' + d.forfeit_reason) : '');
-                }
-                if (statsEl) {
-                    var hs = d.opponent_stats || {};
-                    var bs = d.bot_stats || {};
-                    var netHuman = Number(hs.coins_net || 0);
-                    var netBot = Number(bs.coins_net || 0);
-                    var humanBal = (hs.coins_before != null && hs.coins_after != null)
-                        ? (hs.coins_before + ' → ' + hs.coins_after)
-                        : '—';
-                    var botBal = (bs.coins_before != null && bs.coins_after != null)
-                        ? (bs.coins_before + ' → ' + bs.coins_after)
-                        : '—';
-                    statsEl.className = 'mb-3';
-                    statsEl.innerHTML =
-                        '<div class="row g-2">'
-                        + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
-                        + '<div class="fw-semibold mb-1" style="color:#212529">Rakip'
-                        + (d.opponent_name ? (' · ' + esc(d.opponent_name)) : '') + '</div>'
-                        + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (hs.correct ?? 0) + '</span>'
-                        + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (hs.wrong ?? 0) + '</span>'
-                        + ' · Cevap: ' + (hs.answered ?? 0) + '</div>'
-                        + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (hs.coins_gained ?? 0) + '</span>'
-                        + ' / <span style="color:#dc3545">−' + (hs.coins_lost ?? 0) + '</span>'
-                        + ' · Net: <span style="color:' + (netHuman > 0 ? '#198754' : (netHuman < 0 ? '#dc3545' : '#212529')) + '">'
-                        + (netHuman > 0 ? '+' : '') + netHuman + '</span></div>'
-                        + '<div style="color:#495057">Bakiye: ' + humanBal
-                        + (hs.coins_now != null ? (' · Şu an: ' + hs.coins_now) : '')
-                        + '</div>'
-                        + '</div></div>'
-                        + '<div class="col-md-6"><div class="border rounded p-2 small" style="background:#f8f9fa;color:#212529!important">'
-                        + '<div class="fw-semibold mb-1" style="color:#212529">Bot</div>'
-                        + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (bs.correct ?? 0) + '</span>'
-                        + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (bs.wrong ?? 0) + '</span>'
-                        + ' · Cevap: ' + (bs.answered ?? 0) + '</div>'
-                        + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (bs.coins_gained ?? 0) + '</span>'
-                        + ' / <span style="color:#dc3545">−' + (bs.coins_lost ?? 0) + '</span>'
-                        + ' · Net: <span style="color:' + (netBot > 0 ? '#198754' : (netBot < 0 ? '#dc3545' : '#212529')) + '">'
-                        + (netBot > 0 ? '+' : '') + netBot + '</span></div>'
-                        + '<div style="color:#495057">Bakiye: ' + botBal + '</div>'
-                        + '</div></div>'
-                        + '</div>';
-                }
-                var qs = d.questions || [];
-                if (!qs.length) {
-                    body.innerHTML = '<tr><td colspan="5" class="text-muted">Cevap yok</td></tr>';
-                    return;
-                }
-                body.innerHTML = qs.map(function (q) {
-                    return '<tr>'
-                        + '<td>Q' + q.n + '</td>'
-                        + '<td class="small" style="max-width:360px">' + esc(q.question || '') + '</td>'
-                        + '<td>' + esc(String(q.correct_answer || '')) + '</td>'
-                        + '<td>' + ansCell(q.bot) + '</td>'
-                        + '<td>' + ansCell(q.human) + '</td>'
-                        + '</tr>';
-                }).join('');
+                detailState.detail = data.detail;
+                detailState.allQuestions = data.detail.questions || [];
+                detailState.loaded = true;
+                paintDetailStats(data.detail);
+                renderDetailPage(1);
             })
             .catch(function () {
-                body.innerHTML = '<tr><td colspan="5" class="text-danger">Bağlantı hatası</td></tr>';
+                body.innerHTML = '<tr><td colspan="6" class="text-danger">Bağlantı hatası</td></tr>';
             });
+    }
+
+    function openDuelDetail(botId, duelId) {
+        var modalEl = document.getElementById('duelBotDetailModal');
+        var statsEl = document.getElementById('duelBotDetailStats');
+        if (!modalEl) return;
+        detailState.botId = botId;
+        detailState.duelId = duelId;
+        detailState.page = 1;
+        if (statsEl) {
+            statsEl.className = 'd-none mb-3';
+            statsEl.innerHTML = '';
+        }
+        var modal = window.bootstrap && bootstrap.Modal
+            ? bootstrap.Modal.getOrCreateInstance(modalEl)
+            : null;
+        if (modal) modal.show();
+        loadDuelDetail();
     }
 
     document.addEventListener('click', function (e) {

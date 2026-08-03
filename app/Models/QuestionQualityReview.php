@@ -19,6 +19,8 @@ class QuestionQualityReview extends Model
     protected $fillable = [
         'question_id',
         'status',
+        'attempt',
+        'previous_review_id',
         'provider',
         'model',
         'package',
@@ -42,6 +44,8 @@ class QuestionQualityReview extends Model
 
     protected $casts = [
         'question_id' => 'integer',
+        'attempt' => 'integer',
+        'previous_review_id' => 'integer',
         'quality_score' => 'integer',
         'boredom_risk' => 'integer',
         'ambiguity_risk' => 'integer',
@@ -58,5 +62,10 @@ class QuestionQualityReview extends Model
     public function question(): BelongsTo
     {
         return $this->belongsTo(Question::class);
+    }
+
+    public function previousReview(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_review_id');
     }
 }

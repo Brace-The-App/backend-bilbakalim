@@ -145,7 +145,7 @@
                     </li>
                     @endif
 
-                    @if((int) auth()->id() === 15)
+                    @if(auth()->user()->hasRole('admin') || \App\Services\DuelBotSettings::canManage(auth()->user()))
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.duel-bot.*') ? 'active' : '' }}"

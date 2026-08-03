@@ -11,9 +11,16 @@ use RuntimeException;
 
 class ClaudeQuestionReviewService
 {
+    private ?string $lastRawText = null;
+
     public function apiKeyConfigured(): bool
     {
         return trim((string) config('services.anthropic.api_key', '')) !== '';
+    }
+
+    public function lastRawText(): ?string
+    {
+        return $this->lastRawText;
     }
 
     public function model(): string
@@ -42,10 +49,18 @@ class ClaudeQuestionReviewService
 
     /**
      * Sıradaki soruyu pending olarak ata.
+     * $retryFailed=true → önce fail olup henüz reviewed olmayanları yeniden dener.
      */
-    public function assignNext(): ?QuestionQualityReview
+    public function assignNext(bool $retryFailed = false): ?QuestionQualityReview
     {
         $this->expireStalePending();
+
+        if ($retryFailed) {
+            $retry = $this->assignNextFailedRetry();
+            if ($retry) {
+                return $retry;
+            }
+        }
 
         return DB::transaction(function () {
             $question = Question::query()
@@ -57,6 +72,7 @@ class ClaudeQuestionReviewService
                         ->whereIn('r.status', [
                             QuestionQualityReview::STATUS_PENDING,
                             QuestionQualityReview::STATUS_REVIEWED,
+                            QuestionQualityReview::STATUS_FAILED,
                         ]);
                 })
                 ->orderBy('questions.id')
@@ -72,6 +88,68 @@ class ClaudeQuestionReviewService
             return QuestionQualityReview::query()->create([
                 'question_id' => $question->id,
                 'status' => QuestionQualityReview::STATUS_PENDING,
+                'attempt' => 1,
+                'previous_review_id' => null,
+                'question_snapshot' => $snapshot,
+                'assigned_at' => now(),
+            ]);
+        });
+    }
+
+    /**
+     * En son kaydı failed olan ve max denemenin altında kalan soruları yeniden ata.
+     */
+    public function assignNextFailedRetry(): ?QuestionQualityReview
+    {
+        $this->expireStalePending();
+        $maxAttempts = max(1, (int) config('ai_question_review.max_attempts', 3));
+
+        return DB::transaction(function () use ($maxAttempts) {
+            $failed = QuestionQualityReview::query()
+                ->where('status', QuestionQualityReview::STATUS_FAILED)
+                ->where('attempt', '<', $maxAttempts)
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('question_quality_reviews as r2')
+                        ->whereColumn('r2.question_id', 'question_quality_reviews.question_id')
+                        ->whereIn('r2.status', [
+                            QuestionQualityReview::STATUS_PENDING,
+                            QuestionQualityReview::STATUS_REVIEWED,
+                        ]);
+                })
+                // Aynı soru için en yüksek attempt'li fail satırı
+                ->whereIn('id', function ($q) {
+                    $q->selectRaw('MAX(id)')
+                        ->from('question_quality_reviews')
+                        ->where('status', QuestionQualityReview::STATUS_FAILED)
+                        ->groupBy('question_id');
+                })
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$failed) {
+                return null;
+            }
+
+            $question = Question::query()
+                ->with('category')
+                ->whereKey($failed->question_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$question) {
+                return null;
+            }
+
+            $snapshot = $this->flattenQuestion($question);
+            $nextAttempt = max(1, (int) $failed->attempt) + 1;
+
+            return QuestionQualityReview::query()->create([
+                'question_id' => $question->id,
+                'status' => QuestionQualityReview::STATUS_PENDING,
+                'attempt' => $nextAttempt,
+                'previous_review_id' => $failed->id,
                 'question_snapshot' => $snapshot,
                 'assigned_at' => now(),
             ]);
@@ -117,10 +195,32 @@ class ClaudeQuestionReviewService
             return QuestionQualityReview::query()->create([
                 'question_id' => $question->id,
                 'status' => QuestionQualityReview::STATUS_PENDING,
+                'attempt' => $this->nextAttemptForQuestion($questionId),
+                'previous_review_id' => $this->lastFailedIdForQuestion($questionId),
                 'question_snapshot' => $snapshot,
                 'assigned_at' => now(),
             ]);
         });
+    }
+
+    private function nextAttemptForQuestion(int $questionId): int
+    {
+        $max = (int) QuestionQualityReview::query()
+            ->where('question_id', $questionId)
+            ->max('attempt');
+
+        return max(1, $max + 1);
+    }
+
+    private function lastFailedIdForQuestion(int $questionId): ?int
+    {
+        $id = QuestionQualityReview::query()
+            ->where('question_id', $questionId)
+            ->where('status', QuestionQualityReview::STATUS_FAILED)
+            ->orderByDesc('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
     }
 
     /**
@@ -203,6 +303,7 @@ class ClaudeQuestionReviewService
         );
 
         $rawText = $this->extractText($message->content ?? []);
+        $this->lastRawText = $rawText;
         $parsed = $this->parseJsonPayload($rawText);
 
         if (!isset($parsed['orjinal']) || !isset($parsed['analiz_sonucu'])) {
@@ -262,19 +363,26 @@ class ClaudeQuestionReviewService
         return $review->fresh();
     }
 
-    public function markFailed(QuestionQualityReview $review, string $reason, array $meta = []): QuestionQualityReview
+    public function markFailed(QuestionQualityReview $review, string $reason, array $meta = [], ?string $rawText = null): QuestionQualityReview
     {
+        $rawPayload = [
+            'failed' => true,
+            'fail_reason' => $reason,
+            'meta' => $meta,
+            'attempt' => (int) ($review->attempt ?? 1),
+        ];
+        if ($rawText !== null && $rawText !== '') {
+            $rawPayload['raw_text_excerpt'] = mb_substr($rawText, 0, 8000);
+            $rawPayload['raw_text_length'] = mb_strlen($rawText);
+        }
+
         $review->fill([
             'status' => QuestionQualityReview::STATUS_FAILED,
             'provider' => $meta['provider'] ?? 'anthropic',
             'model' => $meta['model'] ?? $this->modelLabel(),
             'package' => $meta['package'] ?? '4',
             'edit_reason' => mb_substr($reason, 0, 2000),
-            'raw_response' => [
-                'failed' => true,
-                'fail_reason' => $reason,
-                'meta' => $meta,
-            ],
+            'raw_response' => $rawPayload,
             'reviewed_at' => now(),
         ])->save();
 
@@ -314,23 +422,130 @@ class ClaudeQuestionReviewService
      */
     private function parseJsonPayload(string $rawText): array
     {
-        $text = trim($rawText);
+        $candidates = $this->jsonCandidates($rawText);
 
-        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) {
-            $text = trim($m[1]);
-        } else {
-            $start = strpos($text, '{');
-            $end = strrpos($text, '}');
-            if ($start !== false && $end !== false && $end > $start) {
-                $text = substr($text, $start, $end - $start + 1);
+        $lastError = 'boş yanıt';
+        foreach ($candidates as $candidate) {
+            $decoded = json_decode($candidate, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+            $lastError = json_last_error_msg();
+
+            $repaired = $this->repairJson($candidate);
+            if ($repaired !== $candidate) {
+                $decoded = json_decode($repaired, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+                $lastError = json_last_error_msg();
             }
         }
 
-        $decoded = json_decode($text, true);
-        if (!is_array($decoded)) {
-            throw new RuntimeException('Claude yanıtı geçerli JSON değil: ' . json_last_error_msg());
+        throw new RuntimeException('Claude yanıtı geçerli JSON değil: ' . $lastError);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function jsonCandidates(string $rawText): array
+    {
+        $text = trim($rawText);
+        $out = [];
+
+        if (preg_match('/```(?:json)?\s*([\s\S]*?)\s*```/i', $text, $m)) {
+            $out[] = trim($m[1]);
         }
 
-        return $decoded;
+        $balanced = $this->extractBalancedObject($text);
+        if ($balanced !== null) {
+            $out[] = $balanced;
+        }
+
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start !== false && $end !== false && $end > $start) {
+            $out[] = substr($text, $start, $end - $start + 1);
+        }
+
+        $out[] = $text;
+
+        // unique preserve order
+        $uniq = [];
+        foreach ($out as $c) {
+            $c = trim((string) $c);
+            if ($c === '' || isset($uniq[$c])) {
+                continue;
+            }
+            $uniq[$c] = true;
+        }
+
+        return array_keys($uniq);
+    }
+
+    private function extractBalancedObject(string $text): ?string
+    {
+        $start = strpos($text, '{');
+        if ($start === false) {
+            return null;
+        }
+
+        $depth = 0;
+        $inString = false;
+        $escape = false;
+        $len = strlen($text);
+
+        for ($i = $start; $i < $len; $i++) {
+            $ch = $text[$i];
+            if ($inString) {
+                if ($escape) {
+                    $escape = false;
+                    continue;
+                }
+                if ($ch === '\\') {
+                    $escape = true;
+                    continue;
+                }
+                if ($ch === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+
+            if ($ch === '"') {
+                $inString = true;
+                continue;
+            }
+            if ($ch === '{') {
+                $depth++;
+                continue;
+            }
+            if ($ch === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function repairJson(string $text): string
+    {
+        $text = trim($text);
+        // smart quotes
+        $text = str_replace(
+            ["\u{201C}", "\u{201D}", "\u{2018}", "\u{2019}", '„', '‟', '‹', '›'],
+            ['"', '"', "'", "'", '"', '"', "'", "'"],
+            $text
+        );
+        // trailing commas before } or ]
+        $text = preg_replace('/,\s*([}\]])/', '$1', $text) ?? $text;
+        // PHP/JS style comments
+        $text = preg_replace('~//[^\n]*~', '', $text) ?? $text;
+        $text = preg_replace('~/\*.*?\*/~s', '', $text) ?? $text;
+
+        return trim($text);
     }
 }

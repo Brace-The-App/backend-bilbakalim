@@ -55,7 +55,16 @@ class DuelBotSettings
 
     public static function canManage(?User $user): bool
     {
-        return $user && in_array((int) $user->id, self::allowedAdminIds(), true);
+        if (!$user) {
+            return false;
+        }
+
+        // Panel admin rolü (eskiden sadece user #15)
+        if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
+            return true;
+        }
+
+        return in_array((int) $user->id, self::allowedAdminIds(), true);
     }
 
     public static function defaults(): array
@@ -1132,14 +1141,27 @@ class DuelBotSettings
         foreach ($duel->answers->sortBy('id') as $ans) {
             $qid = (int) $ans->question_id;
             if (!isset($byQuestion[$qid])) {
+                $qv = max(1, (int) ($ans->question_value ?? 0));
+                if ((int) ($ans->question_value ?? 0) <= 0 && (int) $ans->coins_change !== 0) {
+                    $qv = max(1, abs((int) $ans->coins_change));
+                }
                 $byQuestion[$qid] = [
                     'question_id' => $qid,
                     'question' => null,
                     'correct_answer' => null,
+                    'multiplier' => $qv,
+                    'multiplier_label' => 'x' . $qv,
                     'bot' => null,
                     'human' => null,
                     'first_id' => (int) $ans->id,
                 ];
+            } else {
+                // Eksik/0 ise diğer cevaptan tamamla
+                $qv = max(1, (int) ($ans->question_value ?? 0));
+                if ($qv > (int) ($byQuestion[$qid]['multiplier'] ?? 0)) {
+                    $byQuestion[$qid]['multiplier'] = $qv;
+                    $byQuestion[$qid]['multiplier_label'] = 'x' . $qv;
+                }
             }
             $q = $ans->question;
             if ($q && $byQuestion[$qid]['question'] === null) {
@@ -1152,6 +1174,7 @@ class DuelBotSettings
                 'selected' => (string) $ans->selected_answer,
                 'is_correct' => (bool) $ans->is_correct,
                 'coins_change' => (int) $ans->coins_change,
+                'question_value' => (int) ($ans->question_value ?? 0),
                 'answered_at' => optional($ans->answered_at)->format('H:i:s'),
             ];
             if ((int) $ans->user_id === $botUserId) {
@@ -1354,21 +1377,40 @@ class DuelBotSettings
     /**
      * Botun düello geçmişi (admin modal).
      *
-     * @return list<array<string,mixed>>
+     * @return array{items: list<array<string,mixed>>, pagination: array{total:int,per_page:int,current_page:int,last_page:int}}
      */
-    public static function botDuelHistory(int $botUserId, int $limit = 40): array
+    public static function botDuelHistory(int $botUserId, int $perPage = 50, int $page = 1): array
     {
-        $duels = Duel::query()
+        $perPage = max(10, min(100, $perPage));
+        $page = max(1, $page);
+
+        $base = Duel::query()
             ->where(function ($q) use ($botUserId) {
                 $q->where('challenger_id', $botUserId)->orWhere('opponent_id', $botUserId);
-            })
+            });
+
+        $total = (clone $base)->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        if ($page > $lastPage) {
+            $page = $lastPage;
+        }
+
+        $duels = (clone $base)
             ->with(['challenger:id,name', 'opponent:id,name', 'winner:id,name'])
             ->orderByDesc('id')
-            ->limit(max(1, min(100, $limit)))
+            ->forPage($page, $perPage)
             ->get();
 
         if ($duels->isEmpty()) {
-            return [];
+            return [
+                'items' => [],
+                'pagination' => [
+                    'total' => $total,
+                    'per_page' => $perPage,
+                    'current_page' => $page,
+                    'last_page' => $lastPage,
+                ],
+            ];
         }
 
         $duelIds = $duels->pluck('id')->all();
@@ -1460,7 +1502,15 @@ class DuelBotSettings
             ];
         }
 
-        return $rows;
+        return [
+            'items' => $rows,
+            'pagination' => [
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => $lastPage,
+            ],
+        ];
     }
 
     public static function save(array $data): array

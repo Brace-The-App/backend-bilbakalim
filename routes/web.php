@@ -120,9 +120,10 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::put('duel-bot/avatar', [DuelBotController::class, 'updateAvatar'])->name('duel-bot.avatar');
     Route::put('duel-bot', [DuelBotController::class, 'update'])->name('duel-bot.update');
 
-    // AI soru kalite review (yalnızca user #15 — DuelBotSettings::canManage)
+    // AI soru kalite review (admin rolü — DuelBotSettings::canManage)
     Route::get('question-quality-reviews', [QuestionQualityReviewController::class, 'index'])->name('question-quality-reviews.index');
     Route::get('question-quality-reviews/poll', [QuestionQualityReviewController::class, 'poll'])->name('question-quality-reviews.poll');
+    Route::post('question-quality-reviews/bulk-apply-revision', [QuestionQualityReviewController::class, 'bulkApplyRevision'])->name('question-quality-reviews.bulk-apply-revision');
     Route::get('question-quality-reviews/{id}', [QuestionQualityReviewController::class, 'show'])->name('question-quality-reviews.show')->whereNumber('id');
     Route::post('question-quality-reviews/{id}/deactivate', [QuestionQualityReviewController::class, 'deactivateQuestion'])->name('question-quality-reviews.deactivate')->whereNumber('id');
     Route::post('question-quality-reviews/{id}/activate', [QuestionQualityReviewController::class, 'activateQuestion'])->name('question-quality-reviews.activate')->whereNumber('id');

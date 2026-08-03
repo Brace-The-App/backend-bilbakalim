@@ -28,6 +28,7 @@
                                 <th>Seçilen Marka</th>
                                 <th>Ödül Tipi</th>
                                 <th>Kazanılan Coin</th>
+                                <th>Kalan düello coin</th>
                                 <th>Tarih</th>
                                 <th>Talep Tarihi</th>
                                 <th>Durum</th>
@@ -36,10 +37,15 @@
                         </thead>
                         <tbody>
                             @foreach($requests as $request)
+                            @php
+                                $remainingDuel = $request->status === 'approved'
+                                    ? (int) data_get($request->metadata, 'duel_earned_coins_after', $request->user->duel_earned_coins ?? 0)
+                                    : (int) ($request->user->duel_earned_coins ?? 0);
+                            @endphp
                             <tr>
                                 <td>{{ $request->id }}</td>
                                 <td>
-                                    {{ $request->user ? ($request->user->name . ' ' . $request->user->surname) : 'Bilinmeyen' }}
+                                    {{ $request->user ? trim($request->user->name . ' ' . ($request->user->surname ?? '')) : 'Bilinmeyen' }}
                                     <br>
                                     <small class="text-muted">{{ $request->user->email ?? '' }}</small>
                                     @if($request->user && $request->user->phone)
@@ -75,6 +81,12 @@
                                 <td>
                                     <strong>{{ number_format($request->coins_earned, 0, ',', '.') }}</strong>
                                     <i class="fa fa-coins text-warning"></i>
+                                </td>
+                                <td>
+                                    <strong class="{{ $remainingDuel <= 0 ? 'text-muted' : 'text-success' }}">{{ number_format($remainingDuel, 0, ',', '.') }}</strong>
+                                    @if($request->status === 'approved')
+                                        <br><small class="text-muted">ödül sonrası</small>
+                                    @endif
                                 </td>
                                 <td>{{ $request->reward_date ? \Carbon\Carbon::parse($request->reward_date)->format('d.m.Y') : '-' }}</td>
                                 <td>{{ $request->requested_at ? $request->requested_at->format('d.m.Y H:i') : '-' }}</td>
