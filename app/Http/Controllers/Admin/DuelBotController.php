@@ -258,6 +258,38 @@ class DuelBotController extends Controller
         ]);
     }
 
+    /** Zorluğa göre toplu aktif/pasif */
+    public function bulkActive(Request $request)
+    {
+        $validated = $request->validate([
+            'difficulty' => 'required|in:easy,medium,hard,professor',
+            'is_active' => 'required|boolean',
+        ]);
+
+        $result = DuelBotSettings::bulkSetActiveByDifficulty(
+            $validated['difficulty'],
+            (bool) $validated['is_active']
+        );
+
+        $label = match ($result['difficulty']) {
+            'easy' => 'Kolay',
+            'medium' => 'Orta',
+            'hard' => 'Zor',
+            'professor' => 'Terminatör',
+            default => $result['difficulty'],
+        };
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['is_active']
+                ? "{$label} botları açıldı ({$result['updated']})."
+                : "{$label} botları kapatıldı ({$result['updated']}).",
+            'updated' => $result['updated'],
+            'difficulty' => $result['difficulty'],
+            'is_active' => $result['is_active'],
+        ]);
+    }
+
     /** Zorluk / bekleme — anında (AJAX) */
     public function updateBehavior(Request $request)
     {
@@ -297,6 +329,7 @@ class DuelBotController extends Controller
             'email' => 'nullable|email|max:191|unique:users,email,' . $bot->id,
             'phone' => 'nullable|string|max:32',
             'coins' => 'nullable|integer|min:0|max:1000000',
+            'duel_earned_coins' => 'nullable|integer|min:0|max:1000000',
         ], [
             'email.unique' => 'Bu e-posta adresi başka bir kullanıcıda kayıtlı.',
             'email.email' => 'Geçerli bir e-posta adresi girin.',
@@ -309,9 +342,14 @@ class DuelBotController extends Controller
         if (array_key_exists('coins', $validated) && $validated['coins'] !== null) {
             $bot->coins = (int) $validated['coins'];
         }
+        if (array_key_exists('duel_earned_coins', $validated) && $validated['duel_earned_coins'] !== null) {
+            $bot->duel_earned_coins = (int) $validated['duel_earned_coins'];
+        }
         $bot->save();
 
-        DuelBotSettings::log("Profil güncellendi: #{$bot->id} {$bot->name} · coins={$bot->coins}");
+        DuelBotSettings::log(
+            "Profil güncellendi: #{$bot->id} {$bot->name} · coins={$bot->coins} · duel_earned={$bot->duel_earned_coins}"
+        );
 
         return redirect()
             ->to(route('admin.duel-bot.index', ['bot' => $bot->id]) . '#duelBotWorkspace')

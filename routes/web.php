@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\LandingV2Controller;
 use App\Http\Controllers\Admin\SmsVitriniTestController;
 use App\Http\Controllers\Admin\DuelBotController;
 use App\Http\Controllers\Admin\QuestionQualityReviewController;
+use App\Http\Controllers\Admin\SupportMessageController;
 
 // Welcome page
 Route::get('/', function () {
@@ -114,6 +115,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('duel-bot', [DuelBotController::class, 'store'])->name('duel-bot.store');
     Route::post('duel-bot/logs/clear', [DuelBotController::class, 'clearLogs'])->name('duel-bot.logs.clear');
     Route::post('duel-bot/active', [DuelBotController::class, 'updateActive'])->name('duel-bot.active');
+    Route::post('duel-bot/bulk-active', [DuelBotController::class, 'bulkActive'])->name('duel-bot.bulk-active');
     Route::post('duel-bot/behavior', [DuelBotController::class, 'updateBehavior'])->name('duel-bot.behavior');
     Route::post('duel-bot/matchmaking', [DuelBotController::class, 'updateMatchmaking'])->name('duel-bot.matchmaking');
     Route::put('duel-bot/profile', [DuelBotController::class, 'updateProfile'])->name('duel-bot.profile');
@@ -128,6 +130,13 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('question-quality-reviews/{id}/deactivate', [QuestionQualityReviewController::class, 'deactivateQuestion'])->name('question-quality-reviews.deactivate')->whereNumber('id');
     Route::post('question-quality-reviews/{id}/activate', [QuestionQualityReviewController::class, 'activateQuestion'])->name('question-quality-reviews.activate')->whereNumber('id');
     Route::post('question-quality-reviews/{id}/apply-revision', [QuestionQualityReviewController::class, 'applyRevision'])->name('question-quality-reviews.apply-revision')->whereNumber('id');
+
+    // Destek kutusu (şimdilik sadece user #15 — muhammet kayacan)
+    Route::get('support', [SupportMessageController::class, 'index'])->name('support.index');
+    Route::get('support/unread-count', [SupportMessageController::class, 'unreadCount'])->name('support.unread-count');
+    Route::get('support/{id}', [SupportMessageController::class, 'show'])->name('support.show')->whereNumber('id');
+    Route::post('support/{id}/status', [SupportMessageController::class, 'updateStatus'])->name('support.status')->whereNumber('id');
+    Route::delete('support/{id}', [SupportMessageController::class, 'destroy'])->name('support.destroy')->whereNumber('id');
 
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');

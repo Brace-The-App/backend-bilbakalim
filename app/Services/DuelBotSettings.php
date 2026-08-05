@@ -889,11 +889,18 @@ class DuelBotSettings
         }
 
         $tips = [];
+        $tierLabels = [
+            'easy' => 'Kolay',
+            'medium' => 'Orta',
+            'hard' => 'Zor',
+            'professor' => 'Terminatör',
+        ];
         foreach ($byTier as $row) {
+            $tierName = $tierLabels[$row['tier']] ?? strtoupper((string) $row['tier']);
             if ($row['active'] === 1) {
-                $tips[] = strtoupper($row['tier']) . ' tier’da tek aktif bot — pasiften 2. bot aç (yedek)';
+                $tips[] = $tierName . ' seviyesinde tek aktif bot — pasiften 2. bot aç (yedek)';
             } elseif ($row['active'] === 0 && $row['total'] > 0) {
-                $tips[] = strtoupper($row['tier']) . ' tier’da aktif bot yok';
+                $tips[] = $tierName . ' seviyesinde aktif bot yok';
             }
         }
 
@@ -1581,6 +1588,51 @@ class DuelBotSettings
         }
 
         self::persistBots($bots);
+    }
+
+    /**
+     * Belirli zorluktaki tüm botları toplu aktif/pasif yap.
+     *
+     * @return array{updated:int,difficulty:string,is_active:bool}
+     */
+    public static function bulkSetActiveByDifficulty(string $difficulty, bool $isActive): array
+    {
+        $difficulty = BotAnswerEngine::normalizeTier($difficulty);
+        $bots = self::bots();
+        $updated = 0;
+
+        foreach ($bots as &$bot) {
+            if (BotAnswerEngine::normalizeTier((string) ($bot['difficulty'] ?? 'medium')) !== $difficulty) {
+                continue;
+            }
+            if ((bool) ($bot['is_active'] ?? false) === $isActive) {
+                continue;
+            }
+            $bot['is_active'] = $isActive;
+            $updated++;
+        }
+        unset($bot);
+
+        if ($updated > 0) {
+            self::persistBots($bots);
+            $label = match ($difficulty) {
+                'easy' => 'Kolay',
+                'medium' => 'Orta',
+                'hard' => 'Zor',
+                'professor' => 'Terminatör',
+                default => $difficulty,
+            };
+            self::log(
+                ($isActive ? 'TOPLU AÇ' : 'TOPLU KAPAT')
+                . " · {$label} · {$updated} bot"
+            );
+        }
+
+        return [
+            'updated' => $updated,
+            'difficulty' => $difficulty,
+            'is_active' => $isActive,
+        ];
     }
 
     public static function logPath(): string

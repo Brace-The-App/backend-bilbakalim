@@ -22,25 +22,25 @@ class BotAnswerEngine
      */
     public const TIERS = [
         self::TIER_EASY => [
-            'label' => 'Easy',
+            'label' => 'Kolay',
             'target' => 0.22,
             'min' => 0.20,
             'max' => 0.25,
         ],
         self::TIER_MEDIUM => [
-            'label' => 'Medium',
+            'label' => 'Orta',
             'target' => 0.50,
             'min' => 0.40,
             'max' => 0.60,
         ],
         self::TIER_HARD => [
-            'label' => 'Hard',
+            'label' => 'Zor',
             'target' => 0.775,
             'min' => 0.75,
             'max' => 0.80,
         ],
         self::TIER_PROFESSOR => [
-            'label' => 'Profesör',
+            'label' => 'Terminatör',
             'target' => 0.925,
             'min' => 0.90,
             'max' => 0.95,

@@ -375,6 +375,12 @@ function direct_textarea(string $name, string $label, ?string $value, bool $wide
 
                 <section class="panel-card" id="iletisim">
                     <h2>İletişim</h2>
+                    <p style="margin:0 0 14px;color:var(--text-muted);font-size:.92rem;line-height:1.45">
+                        Aşağıdakiler sadece metin etiketleri. Canlı sitedeki form
+                        <strong>mailto açmaz</strong>; mesajlar API ile
+                        <strong>Destek</strong> paneline düşer
+                        (<code>/api/landing/support</code>).
+                    </p>
                     <div class="panel-grid">
                         <?php input_field('contact.title', 'Başlık', $content['contact']['title']); ?>
                         <?php input_field('contact.email', 'E-posta', $content['contact']['email'], 'email'); ?>

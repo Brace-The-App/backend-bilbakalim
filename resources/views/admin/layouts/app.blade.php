@@ -83,20 +83,6 @@
         <div class="page-body ">
             <!-- Container-fluid starts-->
             <div class="container-fluid">
-                @if(session('success'))
-                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                        {{ session('success') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                @endif
-
-                @if(session('error'))
-                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        {{ session('error') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                @endif
-
                 @yield('content')
             </div>
             <!-- Container-fluid Ends-->
@@ -203,6 +189,30 @@
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         }
     });
+
+    // Flash mesajları: tek kanal (toastr) — sayfa içinde tekrar alert basma
+    (function () {
+        if (typeof toastr === 'undefined') return;
+        toastr.options = {
+            closeButton: true,
+            progressBar: true,
+            positionClass: 'toast-top-right',
+            timeOut: 3500,
+            extendedTimeOut: 1500,
+        };
+        @if(session('success'))
+            toastr.success(@json(session('success')));
+        @endif
+        @if(session('error'))
+            toastr.error(@json(session('error')));
+        @endif
+        @if(session('warning'))
+            toastr.warning(@json(session('warning')));
+        @endif
+        @if(session('info'))
+            toastr.info(@json(session('info')));
+        @endif
+    })();
 
     // Sol menü yüksekliğini ekran boyutuna göre ayarla (tema CSS'ine dokunmadan)
     (function () {

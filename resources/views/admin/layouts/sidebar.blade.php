@@ -30,7 +30,7 @@
     <a class="sidebar-link sidebar-title  {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"
        href="{{ route('admin.dashboard') }}">
         <i data-feather="home"></i>
-        <span class="lan-3">Dashboards</span>
+        <span class="lan-3">Panel</span>
     </a>
 </li>
 
@@ -84,6 +84,7 @@
                         @endif
                     @endcan
 
+                    {{-- Turnuvalar menüsü şimdilik gizli
                     @can('view tournaments')
                     @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('personel'))
                     <li class="sidebar-list">
@@ -96,6 +97,7 @@
                     </li>
                     @endif
                     @endcan
+                    --}}
 
 
 
@@ -180,7 +182,7 @@
                     @if(auth()->user()->hasRole('admin'))
                     <li class="sidebar-main-title">
                         <div>
-                            <h6>Landing</h6>
+                            <h6>Açılış sayfası</h6>
                         </div>
                     </li>
                     <li class="sidebar-list">
@@ -188,7 +190,7 @@
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.landing.v2.*') ? 'active' : '' }}"
                            href="{{ route('admin.landing.v2.index') }}">
                             <i data-feather="layout"></i>
-                            <span>Landing</span>
+                            <span>Açılış sayfası</span>
                         </a>
                     </li>
                     {{-- Landing-eski (eski CRUD menüsü — gerekirse geri aç)
@@ -236,6 +238,25 @@
                     </li>
                     @endif
                     @endcan
+
+                    @if(\App\Models\SupportMessage::canAccess(auth()->user()))
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.support.*') ? 'active' : '' }}"
+                           href="{{ route('admin.support.index') }}">
+                            <i data-feather="life-buoy"></i>
+                            <span>Destek</span>
+                            @php $supNew = \App\Models\SupportMessage::query()->where('status', 'new')->count(); @endphp
+                            @if($supNew > 0)
+                                <span class="badge" id="supSidebarBadge"
+                                      style="background:#dc2626;color:#fff;margin-left:.35rem;border-radius:999px;min-width:1.4rem;display:inline-block;text-align:center">{{ $supNew }}</span>
+                            @else
+                                <span class="badge d-none" id="supSidebarBadge"
+                                      style="background:#dc2626;color:#fff;margin-left:.35rem;border-radius:999px;min-width:1.4rem;display:inline-block;text-align:center">0</span>
+                            @endif
+                        </a>
+                    </li>
+                    @endif
 
                     {{-- Alt menü öğelerinin kaydırma alanında görünmesi için boşluk --}}
                     <li class="sidebar-list sidebar-bottom-spacer" aria-hidden="true" style="height:96px;pointer-events:none;visibility:hidden;"></li>

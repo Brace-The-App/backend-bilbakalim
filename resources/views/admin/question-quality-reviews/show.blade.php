@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', 'AI Review #' . $review->id)
+@section('title', 'AI İnceleme #' . $review->id)
 
 @push('css')
 <style>
@@ -62,10 +62,6 @@
 .aqr-diff-col p { font-size:1.05rem; line-height:1.5; }
 .aqr-diff-col ol { padding-left:1.2rem; margin-bottom:.5rem; font-size:1.02rem; }
 .aqr-diff-col li { margin-bottom: .35rem; }
-.aqr-raw {
-    max-height: 520px; overflow:auto; background:#0b1220; color:#e2e8f0;
-    border-radius:12px; padding:1.15rem 1.25rem; font-size:.9rem; white-space:pre-wrap; line-height:1.45;
-}
 .aqr-d .fw-semibold { font-size: 1.08rem; }
 .aqr-modal .modal-title,
 .aqr-modal .modal-body,
@@ -103,7 +99,7 @@
             @php
                 $h3Attempt = (int) ($review->attempt ?? 1);
             @endphp
-                <h3>Review #{{ $review->id }} · Soru #{{ $review->question_id }}
+                <h3>İnceleme #{{ $review->id }} · Soru #{{ $review->question_id }}
                     @if ($h3Attempt > 1)
                         · Deneme {{ $h3Attempt }}
                     @endif
@@ -112,7 +108,7 @@
                     Kayıt model: <strong>{{ $review->model ?: '—' }}</strong>
                     · paket {{ $review->package ?: '—' }}
                     · API şu an: <strong>{{ $configuredModel }}</strong>
-                    · {{ optional($review->reviewed_at)->format('d.m.Y H:i') ?: 'henüz tamamlanmadı' }}
+                    · {{ $review->reviewed_at ? tr_time($review->reviewed_at) : 'henüz tamamlanmadı' }}
                     @if ($review->previous_review_id)
                         · önceki: <a class="link-light" href="{{ route('admin.question-quality-reviews.show', $review->previous_review_id) }}">#{{ $review->previous_review_id }}</a>
                     @endif
@@ -144,22 +140,33 @@
             @endif
 
             @if ($question)
-                <a href="{{ route('admin.questions.edit', $question->id) }}" class="btn btn-outline-light btn-sm" target="_blank">Soru edit sayfası</a>
+                <a href="{{ route('admin.questions.edit', $question->id) }}" class="btn btn-outline-light btn-sm" target="_blank">Soru düzenleme sayfası</a>
             @endif
         </div>
     </div>
 
-    @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-    @endif
-    @if(session('error'))
-        <div class="alert alert-danger">{{ session('error') }}</div>
-    @endif
-
     @if ($review->status === 'failed')
+        @php
+            $failMsg = $editReason ?: (data_get($raw, 'fail_reason') ?: data_get($raw, 'error') ?: 'Sebep kaydı yok.');
+            $failExcerpt = (string) (data_get($raw, 'raw_text_excerpt') ?: '');
+            $failSample = '';
+            if ($failExcerpt !== '' && preg_match('/[^\n]{0,80}"[^"\n]{0,60}"[A-Za-zÀ-ÿ][^\n]{0,80}/u', $failExcerpt, $fm)) {
+                $failSample = trim($fm[0]);
+            } elseif ($failExcerpt !== '') {
+                $failSample = mb_substr(preg_replace('/\s+/', ' ', $failExcerpt) ?? '', 0, 180);
+            }
+        @endphp
         <div class="alert alert-danger">
-            <div class="fw-semibold mb-1">Failed · inceleme başarısız</div>
-            <div>{{ $editReason ?: (data_get($raw, 'fail_reason') ?: data_get($raw, 'error') ?: 'Sebep kaydı yok.') }}</div>
+            <div class="fw-semibold mb-1">İnceleme başarısız</div>
+            <div class="mb-2">{{ $failMsg }}</div>
+            @if ($failSample !== '')
+                <div class="small text-muted mb-1">Örnek sorunlu parça (kısaltılmış):</div>
+                <code class="d-block small" style="white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.06);padding:.5rem .65rem;border-radius:8px;">{{ $failSample }}</code>
+            @endif
+            <div class="small text-muted mt-2 mb-0">
+                Not: Ham model çıktısının tamamı saklanır; panelde yalnızca teşhis özeti gösterilir.
+                Sistem otomatik yeniden dener (max deneme).
+            </div>
         </div>
     @endif
 
@@ -301,13 +308,6 @@
         </div>
     </div>
     @endif
-
-    <div class="card aqr-panel">
-        <div class="card-header">Ham JSON (tüm dönen veri)</div>
-        <div class="card-body">
-            <pre class="aqr-raw mb-0">{{ json_encode($raw ?: ['info' => 'raw_response boş'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
-        </div>
-    </div>
 </div>
 
 {{-- Pasife al: evet / hayır --}}

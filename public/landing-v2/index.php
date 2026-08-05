@@ -237,22 +237,37 @@ function icon(string $name, string $class = ''): string
                         </span>
                     </div>
                 </div>
-                <form class="contact-card" action="mailto:<?= e($content['contact']['email']) ?>" method="post" enctype="text/plain">
+                <form class="contact-card" id="landingSupportForm" novalidate>
+                    <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
+                           style="position:absolute;left:-9999px;opacity:0;height:0;width:0" aria-hidden="true">
                     <div class="form-grid">
                         <div class="field">
                             <label><?= e($content['contact']['form_name_label']) ?></label>
-                            <input type="text" name="name" placeholder="<?= e($content['contact']['form_name_label']) ?>">
+                            <input type="text" name="name" maxlength="120" placeholder="<?= e($content['contact']['form_name_label']) ?>" required>
                         </div>
                         <div class="field">
                             <label><?= e($content['contact']['form_email_label']) ?></label>
-                            <input type="email" name="email" placeholder="ornek@mail.com">
+                            <input type="email" name="email" maxlength="190" placeholder="ornek@mail.com" required>
                         </div>
                     </div>
                     <div class="field" style="margin-top:16px">
-                        <label><?= e($content['contact']['form_message_label']) ?></label>
-                        <textarea name="message" placeholder="Size nasıl yardımcı olabiliriz?"></textarea>
+                        <label>Konu</label>
+                        <select name="type">
+                            <option value="contact">İletişim</option>
+                            <option value="suggestion">Öneri</option>
+                            <option value="job">İş / işbirliği</option>
+                            <option value="complaint">Şikayet</option>
+                            <option value="other">Diğer</option>
+                        </select>
                     </div>
-                    <button class="pill pill-primary" style="width:100%;margin-top:18px" type="submit"><?= e($content['contact']['form_button']) ?></button>
+                    <div class="field" style="margin-top:16px">
+                        <label><?= e($content['contact']['form_message_label']) ?></label>
+                        <textarea name="message" maxlength="4000" placeholder="Size nasıl yardımcı olabiliriz?" required></textarea>
+                    </div>
+                    <p id="landingSupportMsg" class="small" style="margin:12px 0 0;display:none"></p>
+                    <button class="pill pill-primary" style="width:100%;margin-top:18px" type="submit" id="landingSupportBtn">
+                        <?= e($content['contact']['form_button']) ?>
+                    </button>
                 </form>
             </div>
         </section>
@@ -453,6 +468,69 @@ function icon(string $name, string $class = ''): string
             }, { passive: true });
             window.requestAnimationFrame(setInitialCarouselPosition);
             startAuto();
+        }
+
+        const supportForm = document.getElementById('landingSupportForm');
+        if (supportForm) {
+            const supportBtn = document.getElementById('landingSupportBtn');
+            const supportMsg = document.getElementById('landingSupportMsg');
+            supportForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const data = new FormData(supportForm);
+                const payload = {
+                    source: 'landing',
+                    type: String(data.get('type') || 'contact'),
+                    name: String(data.get('name') || '').trim(),
+                    email: String(data.get('email') || '').trim(),
+                    message: String(data.get('message') || '').trim(),
+                    website: String(data.get('website') || ''),
+                    platform: 'web',
+                };
+                if (supportMsg) {
+                    supportMsg.style.display = 'none';
+                }
+                if (supportBtn) {
+                    supportBtn.disabled = true;
+                }
+                try {
+                    const res = await fetch('/api/landing/support', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (supportMsg) {
+                        supportMsg.style.display = 'block';
+                        supportMsg.style.color = res.ok ? '#bbf7d0' : '#fecaca';
+                        let text = json.message || (res.ok ? 'Mesajınız alındı.' : 'Gönderilemedi.');
+                        if (!res.ok && json.errors && typeof json.errors === 'object') {
+                            const first = Object.values(json.errors).flat().find(Boolean);
+                            if (first) text = String(first);
+                        }
+                        // Ham validation anahtarlarını gösterme
+                        if (/^validation\./i.test(text)) {
+                            text = 'Lütfen formu kontrol edin.';
+                        }
+                        supportMsg.textContent = text;
+                    }
+                    if (res.ok) {
+                        supportForm.reset();
+                    }
+                } catch (err) {
+                    if (supportMsg) {
+                        supportMsg.style.display = 'block';
+                        supportMsg.style.color = '#fecaca';
+                        supportMsg.textContent = 'Bağlantı hatası. Lütfen tekrar deneyin.';
+                    }
+                } finally {
+                    if (supportBtn) {
+                        supportBtn.disabled = false;
+                    }
+                }
+            });
         }
     </script>
 </body>

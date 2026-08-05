@@ -114,6 +114,64 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
     display: block;
 }
 .duel-bot-avatar-option input { position: absolute; opacity: 0; pointer-events: none; }
+.duel-bot-bulk {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    background: #f8f9fa;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+.duel-bot-bulk__title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin: 0 0 8px;
+}
+.duel-bot-bulk__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    margin: 0 0 6px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    border-left: 3px solid #adb5bd;
+}
+.duel-bot-bulk__row:last-child { margin-bottom: 0; }
+.duel-bot-bulk__row[data-tier="easy"] { border-left-color: #198754; }
+.duel-bot-bulk__row[data-tier="medium"] { border-left-color: #0d6efd; }
+.duel-bot-bulk__row[data-tier="hard"] { border-left-color: #fd7e14; }
+.duel-bot-bulk__row[data-tier="professor"] { border-left-color: #6f42c1; }
+.duel-bot-bulk__meta { min-width: 0; flex: 1; }
+.duel-bot-bulk__name {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #212529;
+}
+.duel-bot-bulk__count {
+    display: block;
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-top: 1px;
+}
+.duel-bot-bulk__actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.duel-bot-bulk__actions .btn {
+    min-width: 52px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.duel-bot-bulk__row.is-busy { opacity: .65; pointer-events: none; }
 .duel-bot-modal-pager {
     display: flex;
     flex-wrap: wrap;
@@ -208,16 +266,20 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             <span class="badge bg-secondary" id="duelBotMixPct">
                 bot oranı {{ isset($mix['bot_pct']) ? ('%'.$mix['bot_pct']) : '—' }}
             </span>
-            <span class="badge bg-danger" id="duelBotOpsAfk" title="timeout+disconnect+afk_streak">
-                AFK/timeout {{ (int)(($fr['answer_timeout'] ?? 0) + ($fr['disconnect'] ?? 0) + ($fr['afk_streak'] ?? 0)) }}
+            <span class="badge bg-danger" id="duelBotOpsAfk" title="zaman aşımı + bağlantı kopması + AFK">
+                AFK/zaman aşımı {{ (int)(($fr['answer_timeout'] ?? 0) + ($fr['disconnect'] ?? 0) + ($fr['afk_streak'] ?? 0)) }}
             </span>
-            <span class="badge bg-info text-dark" id="duelBotOpsLeave">leave {{ (int)($fr['leave'] ?? 0) }}</span>
-            <span class="badge bg-secondary" id="duelBotOpsRestart">worker restart {{ (int)($ops['worker_restarts'] ?? 0) }}</span>
+            <span class="badge bg-info text-dark" id="duelBotOpsLeave">ayrılma {{ (int)($fr['leave'] ?? 0) }}</span>
+            <span class="badge bg-secondary" id="duelBotOpsRestart">worker yeniden başlatma {{ (int)($ops['worker_restarts'] ?? 0) }}</span>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2 px-1" id="duelBotTierBar">
             @foreach(($tierCov['tiers'] ?? []) as $tc)
+                @php
+                    $tierTrMap = ['easy' => 'Kolay', 'medium' => 'Orta', 'hard' => 'Zor', 'professor' => 'Terminatör'];
+                    $tierTr = $tierTrMap[$tc['tier'] ?? ''] ?? strtoupper((string) ($tc['tier'] ?? ''));
+                @endphp
                 <span class="badge badge-tier-{{ $tc['tier'] }}" data-tier="{{ $tc['tier'] }}">
-                    {{ strtoupper($tc['tier']) }} {{ (int)$tc['idle'] }}/{{ (int)$tc['active'] }} boşta
+                    {{ $tierTr }} {{ (int)$tc['idle'] }}/{{ (int)$tc['active'] }} boşta
                 </span>
             @endforeach
         </div>
@@ -246,7 +308,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             </table>
         </div>
         <div class="border-top pt-2 px-1">
-            <div class="small text-muted mb-1">Neden bu bot? · son pick’ler</div>
+            <div class="small text-muted mb-1">Neden bu bot? · son seçimler</div>
             <div class="small font-monospace" id="duelBotPickLines" style="max-height:140px;overflow:auto;line-height:1.45">
                 @php $picks = ($dash['recent_picks'] ?? null) ?: \App\Services\DuelBotSettings::recentPickInsights(8); @endphp
                 @forelse($picks as $p)
@@ -254,7 +316,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                         {{ $p['at'] ?? '' }} · {{ $p['line'] ?? json_encode($p) }}
                     </div>
                 @empty
-                    <div class="text-muted">Henüz pick yok</div>
+                    <div class="text-muted">Henüz seçim yok</div>
                 @endforelse
             </div>
         </div>
@@ -263,7 +325,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
 
 @php
     $mm = $matchmaking ?? \App\Services\DuelBotSettings::matchmakingSettings();
-    $tierKeys = ['easy' => 'Easy', 'medium' => 'Medium', 'hard' => 'Hard', 'professor' => 'Profesör'];
+    $tierKeys = ['easy' => 'Kolay', 'medium' => 'Orta', 'hard' => 'Zor', 'professor' => 'Terminatör'];
 @endphp
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -286,7 +348,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 <label class="form-label" for="mm_new_player">Yeni oyuncu eşiği</label>
                 <input type="number" class="form-control" id="mm_new_player" min="0" max="50"
                        value="{{ (int) $mm['new_player_max_duels'] }}">
-                <div class="form-text">Bitmiş düellosu bu sayıdan azsa hep orta bot (medium).</div>
+                <div class="form-text">Bitmiş düellosu bu sayıdan azsa hep orta bot.</div>
             </div>
             <div class="col-md-4">
                 <label class="form-label" for="mm_sample">İsabet hesabı (son kaç cevap)</label>
@@ -294,7 +356,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                        value="{{ (int) $mm['skill_sample_answers'] }}">
                 <div class="form-text">
                     Oyuncunun “ne kadar iyi” olduğunu ölçmek için son kaç düello cevabına bakılır.
-                    Örn. 25 → son 25 cevaptan % doğru; buna göre easy/medium/hard bot seçilir.
+                    Örn. 25 → son 25 cevaptan % doğru; buna göre kolay/orta/zor bot seçilir.
                 </div>
             </div>
         </div>
@@ -336,7 +398,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 </tbody>
             </table>
         </div>
-        <div class="form-text mt-2">Örnek: ≤40 → easy+medium; boşta yoksa komşu banda düşülür.</div>
+        <div class="form-text mt-2">Örnek: ≤40 → kolay+orta; boşta yoksa komşu banda düşülür.</div>
     </div>
 </div>
 
@@ -357,6 +419,47 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 <div class="mb-2">
                     <input type="search" class="form-control form-control-sm" id="duelBotSearch"
                            placeholder="Bot adına göre ara..." autocomplete="off">
+                </div>
+                @php
+                    $bulkTiers = ['easy' => 'Kolay', 'medium' => 'Orta', 'hard' => 'Zor', 'professor' => 'Terminatör'];
+                    $bulkStats = [];
+                    foreach ($bulkTiers as $tKey => $tLabel) {
+                        $tierBots = collect($bots)->where('is_dummy', false)->where('difficulty', $tKey);
+                        $bulkStats[$tKey] = [
+                            'label' => $tLabel,
+                            'total' => $tierBots->count(),
+                            'active' => $tierBots->where('is_active', true)->count(),
+                        ];
+                    }
+                @endphp
+                <div class="duel-bot-bulk" id="duelBotBulkActions">
+                    <p class="duel-bot-bulk__title">Toplu aç / kapat</p>
+                    @foreach($bulkTiers as $bulkTier => $bulkLabel)
+                        @php $st = $bulkStats[$bulkTier]; @endphp
+                        <div class="duel-bot-bulk__row" data-tier="{{ $bulkTier }}">
+                            <div class="duel-bot-bulk__meta">
+                                <span class="duel-bot-bulk__name">{{ $bulkLabel }}</span>
+                                <span class="duel-bot-bulk__count js-bulk-tier-count"
+                                      data-difficulty="{{ $bulkTier }}">
+                                    {{ $st['active'] }}/{{ $st['total'] }} aktif
+                                </span>
+                            </div>
+                            <div class="duel-bot-bulk__actions">
+                                <button type="button"
+                                        class="btn btn-success js-bulk-tier-active"
+                                        data-difficulty="{{ $bulkTier }}"
+                                        data-active="1"
+                                        {{ $st['total'] === 0 ? 'disabled' : '' }}
+                                        title="Tüm {{ $bulkLabel }} botları aç">Aç</button>
+                                <button type="button"
+                                        class="btn btn-outline-secondary js-bulk-tier-active"
+                                        data-difficulty="{{ $bulkTier }}"
+                                        data-active="0"
+                                        {{ $st['total'] === 0 ? 'disabled' : '' }}
+                                        title="Tüm {{ $bulkLabel }} botları kapat">Kapat</button>
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
                 <div class="duel-bot-list" id="duelBotList">
                     @foreach($bots as $item)
@@ -385,14 +488,14 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                                 <p class="duel-bot-card__sub">{{ $item['subtitle'] }}</p>
                                 <div class="duel-bot-card__badges">
                                     @if(!empty($item['is_dummy']))
-                                        <span class="badge bg-secondary">Dummy</span>
+                                        <span class="badge bg-secondary">Yer tutucu</span>
                                     @else
                                         <span class="badge bg-dark">BOT</span>
                                         <span class="badge js-bot-card-status {{ !empty($item['is_active']) ? 'bg-success' : 'bg-secondary' }}">
                                             {{ !empty($item['is_active']) ? 'Aktif' : 'Pasif' }}
                                         </span>
                                         @if(!empty($item['difficulty']))
-                                            <span class="badge badge-tier-{{ $item['difficulty'] }}">{{ strtoupper($item['difficulty']) }}</span>
+                                            <span class="badge badge-tier-{{ $item['difficulty'] }}">{{ $tierKeys[$item['difficulty']] ?? $item['difficulty'] }}</span>
                                         @endif
                                         @if(!empty($item['busy']))
                                             <span class="badge bg-warning text-dark">Maçta</span>
@@ -446,7 +549,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                                     ? ('%' . (int) round($tierMeta['min'] * 100) . '–' . (int) round($tierMeta['max'] * 100))
                                     : null;
                             @endphp
-                            <span id="duelBotDifficultyBadge" class="badge badge-tier-{{ $settings['difficulty'] }}">{{ strtoupper($settings['difficulty']) }}</span>
+                            <span id="duelBotDifficultyBadge" class="badge badge-tier-{{ $settings['difficulty'] }}">{{ $tierKeys[$settings['difficulty']] ?? $settings['difficulty'] }}</span>
                             @php
                                 $ex8 = \App\Services\BotAnswerEngine::discreteExamples($settings['difficulty'], 8)[0] ?? null;
                             @endphp
@@ -460,7 +563,8 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                             @if(!empty($selected['busy']))
                                 <span class="badge bg-warning text-dark">Şu an maçta</span>
                             @endif
-                            <span class="badge bg-light text-dark">Jeton: <span id="duelBotCoinsLabel">{{ number_format((int) $bot->coins) }}</span></span>
+                            <span class="badge bg-light text-dark">Normal: <span id="duelBotCoinsLabel">{{ number_format((int) $bot->coins) }}</span></span>
+                            <span class="badge bg-light text-dark">Düello: <span id="duelBotDuelCoinsLabel">{{ number_format((int) ($bot->duel_earned_coins ?? 0)) }}</span></span>
                         </div>
                     </div>
                 </div>
@@ -538,8 +642,15 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                             <input type="text" class="form-control" id="name" name="name" value="{{ old('name', $bot->name) }}" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="coins">Jeton</label>
+                            <label class="form-label" for="coins">Normal jeton</label>
                             <input type="number" class="form-control" id="coins" name="coins" min="0" value="{{ old('coins', $bot->coins) }}">
+                            <div class="form-text">Oyun / cüzdan jetonu</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="duel_earned_coins">Düello jetonu</label>
+                            <input type="number" class="form-control" id="duel_earned_coins" name="duel_earned_coins" min="0"
+                                   value="{{ old('duel_earned_coins', $bot->duel_earned_coins ?? 0) }}">
+                            <div class="form-text">Hediye talebi bakiyesi</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="email">E-posta</label>
@@ -593,7 +704,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                                         data-bot="{{ $item['user_id'] }}"
                                         title="{{ $item['name'] }}">
                                     #{{ $item['user_id'] }}
-                                    <span class="opacity-75">{{ strtoupper($item['difficulty'] ?? '') }}</span>
+                                    <span class="opacity-75">{{ $tierKeys[$item['difficulty'] ?? ''] ?? ($item['difficulty'] ?? '') }}</span>
                                 </button>
                             @endif
                         @endforeach
@@ -852,10 +963,75 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
               }
               var finalOn = !!(res.data.is_active != null ? res.data.is_active : on);
               syncCardActiveUi(botId, finalOn);
+              refreshBulkTierCounts();
               toastCard(res.data.message || (finalOn ? 'Aktif' : 'Pasif'), true);
           }).catch(function () {
               sw.disabled = false;
               sw.checked = !on;
+              toastCard('Bağlantı hatası', false);
+          });
+    });
+
+    var bulkActiveUrl = @json(route('admin.duel-bot.bulk-active'));
+
+    function refreshBulkTierCounts() {
+        document.querySelectorAll('.duel-bot-bulk__row[data-tier]').forEach(function (row) {
+            var tier = row.getAttribute('data-tier');
+            var cards = document.querySelectorAll('.duel-bot-card[data-tier="' + tier + '"]:not(.is-dummy)');
+            var total = 0;
+            var active = 0;
+            cards.forEach(function (card) {
+                total++;
+                var sw = card.querySelector('.js-bot-card-active');
+                if (sw && sw.checked) active++;
+            });
+            var countEl = row.querySelector('.js-bulk-tier-count');
+            if (countEl) countEl.textContent = active + '/' + total + ' aktif';
+            row.querySelectorAll('.js-bulk-tier-active').forEach(function (b) {
+                b.disabled = total === 0;
+            });
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.js-bulk-tier-active');
+        if (!btn) return;
+        e.preventDefault();
+        var difficulty = btn.getAttribute('data-difficulty') || '';
+        var on = btn.getAttribute('data-active') === '1';
+        if (!difficulty) return;
+        var row = btn.closest('.duel-bot-bulk__row');
+        var buttons = row ? row.querySelectorAll('.js-bulk-tier-active') : [btn];
+        if (row) row.classList.add('is-busy');
+        buttons.forEach(function (b) { b.disabled = true; });
+        fetch(bulkActiveUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfCard,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ difficulty: difficulty, is_active: on })
+        }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+          .then(function (res) {
+              if (row) row.classList.remove('is-busy');
+              if (!res.ok || !res.data.success) {
+                  buttons.forEach(function (b) { b.disabled = false; });
+                  refreshBulkTierCounts();
+                  toastCard((res.data && res.data.message) || 'Toplu işlem başarısız', false);
+                  return;
+              }
+              document.querySelectorAll('.duel-bot-card[data-tier="' + difficulty + '"]').forEach(function (card) {
+                  var id = parseInt(card.getAttribute('data-bot-id') || '0', 10);
+                  if (id) syncCardActiveUi(id, on);
+              });
+              refreshBulkTierCounts();
+              toastCard(res.data.message || 'Güncellendi', true);
+          }).catch(function () {
+              if (row) row.classList.remove('is-busy');
+              buttons.forEach(function (b) { b.disabled = false; });
+              refreshBulkTierCounts();
               toastCard('Bağlantı hatası', false);
           });
     });
@@ -1054,7 +1230,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 return;
             }
             if (diffBadge) {
-                diffBadge.textContent = String(payload.difficulty).toUpperCase();
+                diffBadge.textContent = tierTr(payload.difficulty);
                 diffBadge.className = 'badge badge-tier-' + String(payload.difficulty || 'medium');
             }
             if (waitBadge) waitBadge.textContent = 'Bekleme ' + payload.match_wait_seconds + ' sn';
@@ -1204,16 +1380,16 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         var leave = document.getElementById('duelBotOpsLeave');
         var restart = document.getElementById('duelBotOpsRestart');
         var afkN = (fr.answer_timeout || 0) + (fr.disconnect || 0) + (fr.afk_streak || 0);
-        if (afk) afk.textContent = 'AFK/timeout ' + afkN;
-        if (leave) leave.textContent = 'leave ' + (fr.leave || 0);
-        if (restart) restart.textContent = 'worker restart ' + (ops.worker_restarts || 0);
+        if (afk) afk.textContent = 'AFK/zaman aşımı ' + afkN;
+        if (leave) leave.textContent = 'ayrılma ' + (fr.leave || 0);
+        if (restart) restart.textContent = 'worker yeniden başlatma ' + (ops.worker_restarts || 0);
 
         var cov = mm.tier_coverage || {};
         var tierBar = document.getElementById('duelBotTierBar');
         if (tierBar && Array.isArray(cov.tiers)) {
             tierBar.innerHTML = cov.tiers.map(function (tc) {
                 return '<span class="' + tierBadgeClass(tc.tier) + '" data-tier="' + esc(tc.tier) + '">'
-                    + String(tc.tier || '').toUpperCase() + ' '
+                    + tierTr(tc.tier) + ' '
                     + (tc.idle || 0) + '/' + (tc.active || 0) + ' boşta</span>';
             }).join(' ');
         }
@@ -1233,13 +1409,19 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         if (!box) return;
         var picks = mm.recent_picks || [];
         if (!picks.length) {
-            box.innerHTML = '<div class="text-muted">Henüz pick yok</div>';
+            box.innerHTML = '<div class="text-muted">Henüz seçim yok</div>';
             return;
         }
         box.innerHTML = picks.map(function (row) {
             var cls = row.status === 'ok' ? 'text-success' : (row.status === 'cooldown' ? 'text-warning' : 'text-muted');
             return '<div class="' + cls + '">' + esc(String(row.at || '')) + ' · ' + esc(String(row.line || '')) + '</div>';
         }).join('');
+    }
+
+    function tierTr(tier) {
+        var map = { easy: 'Kolay', medium: 'Orta', hard: 'Zor', professor: 'Terminatör' };
+        var t = String(tier || '').toLowerCase();
+        return map[t] || String(tier || '');
     }
 
     function tierBadgeClass(tier) {
@@ -1266,7 +1448,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             var bet = s.pending_bet || '—';
             return '<tr data-bot-id="' + s.user_id + '">'
                 + '<td><strong>' + esc(s.name) + '</strong> '
-                + '<span class="' + tierBadgeClass(s.difficulty) + '">' + String(s.difficulty || '').toUpperCase() + '</span></td>'
+                + '<span class="' + tierBadgeClass(s.difficulty) + '">' + tierTr(s.difficulty) + '</span></td>'
                 + '<td>' + status + '</td>'
                 + '<td>' + esc(opp) + '</td>'
                 + '<td>' + q + '</td>'
@@ -1309,9 +1491,9 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         if (r === 'galibiyet_afk') return '<span class="badge bg-success">Galibiyet · AFK</span>';
         if (r === 'maglubiyet_afk') return '<span class="badge bg-danger">Mağlubiyet · AFK</span>';
         if (r === 'afk') return '<span class="badge bg-secondary">AFK</span>';
-        if (r === 'timeout') return '<span class="badge bg-secondary">Timeout</span>';
-        if (r === 'disconnect') return '<span class="badge bg-secondary">Disconnect</span>';
-        if (r === 'leave') return '<span class="badge bg-secondary">Leave</span>';
+        if (r === 'timeout') return '<span class="badge bg-secondary">Zaman aşımı</span>';
+        if (r === 'disconnect') return '<span class="badge bg-secondary">Bağlantı koptu</span>';
+        if (r === 'leave') return '<span class="badge bg-secondary">Ayrılma</span>';
         if (r === 'iptal') return '<span class="badge bg-secondary">İptal</span>';
         if (r === 'berabere') return '<span class="badge bg-secondary">İptal</span>';
         return '<span class="badge bg-warning text-dark">Devam</span>';
@@ -1423,7 +1605,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 var pag = data.pagination || {};
                 historyState.lastPage = Number(pag.last_page || 1);
                 if (meta) {
-                    meta.textContent = (data.bot && data.bot.difficulty ? String(data.bot.difficulty).toUpperCase() + ' · ' : '')
+                    meta.textContent = (data.bot && data.bot.difficulty ? tierTr(data.bot.difficulty) + ' · ' : '')
                         + (pag.total != null ? (pag.total + ' maç') : ((data.duels || []).length + ' maç'))
                         + ' · jeton '
                         + Number((data.bot && data.bot.coins) || 0).toLocaleString('tr-TR')
@@ -1523,7 +1705,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (hs.correct != null ? hs.correct : 0) + '</span>'
             + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (hs.wrong != null ? hs.wrong : 0) + '</span>'
             + ' · Cevap: ' + (hs.answered != null ? hs.answered : 0) + '</div>'
-            + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (hs.coins_gained != null ? hs.coins_gained : 0) + '</span>'
+            + '<div style="color:#212529">Jeton: <span style="color:#198754">+' + (hs.coins_gained != null ? hs.coins_gained : 0) + '</span>'
             + ' / <span style="color:#dc3545">−' + (hs.coins_lost != null ? hs.coins_lost : 0) + '</span>'
             + ' · Net: <span style="color:' + (netHuman > 0 ? '#198754' : (netHuman < 0 ? '#dc3545' : '#212529')) + '">'
             + (netHuman > 0 ? '+' : '') + netHuman + '</span></div>'
@@ -1536,7 +1718,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             + '<div style="color:#212529">Doğru: <span class="fw-semibold" style="color:#198754">' + (bs.correct != null ? bs.correct : 0) + '</span>'
             + ' · Yanlış: <span class="fw-semibold" style="color:#dc3545">' + (bs.wrong != null ? bs.wrong : 0) + '</span>'
             + ' · Cevap: ' + (bs.answered != null ? bs.answered : 0) + '</div>'
-            + '<div style="color:#212529">Coin: <span style="color:#198754">+' + (bs.coins_gained != null ? bs.coins_gained : 0) + '</span>'
+            + '<div style="color:#212529">Jeton: <span style="color:#198754">+' + (bs.coins_gained != null ? bs.coins_gained : 0) + '</span>'
             + ' / <span style="color:#dc3545">−' + (bs.coins_lost != null ? bs.coins_lost : 0) + '</span>'
             + ' · Net: <span style="color:' + (netBot > 0 ? '#198754' : (netBot < 0 ? '#dc3545' : '#212529')) + '">'
             + (netBot > 0 ? '+' : '') + netBot + '</span></div>'

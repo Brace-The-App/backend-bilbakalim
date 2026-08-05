@@ -664,6 +664,7 @@ class DuelController extends Controller
         DB::beginTransaction();
         try {
             // Eski açık düellolar: yeni maça geçen taraf forfeit (kazananlı kapanış)
+            $closedOldDuels = [];
             $oldDuels = Duel::whereIn('status', ['waiting', 'active'])
                 ->where(function ($q) use ($challenger, $opponent) {
                     $q->where('challenger_id', $challenger->id)
@@ -684,6 +685,7 @@ class DuelController extends Controller
                         'winner_id' => null,
                         'settings' => $settings,
                     ]);
+                    $closedOldDuels[] = $old->id;
                     continue;
                 }
                 $loserId = null;
@@ -709,6 +711,7 @@ class DuelController extends Controller
                         'challenger_coins_after' => (int) (User::query()->find($old->challenger_id)?->coins ?? 0),
                         'opponent_coins_after' => (int) (User::query()->find($old->opponent_id)?->coins ?? 0),
                     ]);
+                    $closedOldDuels[] = $old->id;
                 }
             }
 
@@ -740,6 +743,13 @@ class DuelController extends Controller
             $duel->load(['challenger', 'opponent', 'currentQuestion']);
 
             DB::commit();
+
+            foreach ($closedOldDuels as $closedId) {
+                $closed = Duel::query()->with(['challenger', 'opponent', 'answers'])->find($closedId);
+                if ($closed) {
+                    $this->sendDuelFinishedWebhook($closed);
+                }
+            }
 
             if (!empty($challenger->is_bot) || !empty($opponent->is_bot)) {
                 $bot = !empty($opponent->is_bot) ? $opponent : $challenger;
@@ -1271,10 +1281,10 @@ class DuelController extends Controller
             // Soru değeri (multiplier ile çarpılmış)
             $questionValue = $duel->question_value; // 1 * multiplier
 
-            // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır (tam tutar; %10 maç sonunda)
+            // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır (tam tutar; komisyon maç sonunda)
             $opponentLoss = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
 
-            // Düello bitir - challenger kazandı (+ maç sonu %10)
+            // Düello bitir - challenger kazandı (+ maç sonu dilim komisyonu)
             $endCommission = $this->finishDuel($duel, $duel->challenger_id);
 
             // Socket bildirimi gönder
@@ -1455,6 +1465,48 @@ class DuelController extends Controller
     }
 
     /**
+     * Socket: düello durumu (bitmişse result). Token bitince / event kaçınca UI kurtarma.
+     */
+    public function socketDuelSnapshot(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (!hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $duelId = (int) ($request->query('duel_id') ?: $request->input('duel_id'));
+        $userId = (int) ($request->query('user_id') ?: $request->input('user_id'));
+        if ($duelId <= 0) {
+            return response()->json(['success' => false, 'message' => 'duel_id gerekli'], 422);
+        }
+
+        $duel = Duel::query()->with(['challenger', 'opponent', 'winner', 'answers'])->find($duelId);
+        if (!$duel) {
+            return response()->json(['success' => false, 'message' => 'Düello bulunamadı.'], 404);
+        }
+
+        if ($userId > 0
+            && (int) $duel->challenger_id !== $userId
+            && (int) ($duel->opponent_id ?? 0) !== $userId
+        ) {
+            return response()->json(['success' => false, 'message' => 'Bu düelloya erişim yok.'], 403);
+        }
+
+        $payload = [
+            'success' => true,
+            'duel_id' => (int) $duel->id,
+            'status' => (string) $duel->status,
+            'finished' => $duel->status === 'finished',
+        ];
+
+        if ($duel->status === 'finished') {
+            $payload['result'] = $this->buildDuelFinishedPayload($duel);
+        }
+
+        return response()->json($payload);
+    }
+
+    /**
      * Çekilme / AFK / cevap timeout — rakip kazanır (leave ile aynı ekonomi).
      *
      * @return array<string, mixed>
@@ -1470,11 +1522,7 @@ class DuelController extends Controller
         }
 
         if (!in_array($duel->status, ['waiting', 'active'], true)) {
-            return [
-                'success' => false,
-                'http_status' => 400,
-                'message' => 'Bu düello zaten bitmiş.',
-            ];
+            return $this->alreadyFinishedRecovery($duel);
         }
 
         DB::beginTransaction();
@@ -1484,11 +1532,7 @@ class DuelController extends Controller
             if (!in_array($duel->status, ['waiting', 'active'], true)) {
                 DB::rollBack();
 
-                return [
-                    'success' => false,
-                    'http_status' => 400,
-                    'message' => 'Bu düello zaten bitmiş.',
-                ];
+                return $this->alreadyFinishedRecovery($duel);
             }
 
             $winnerId = (int) $duel->challenger_id === (int) $user->id
@@ -1764,6 +1808,21 @@ class DuelController extends Controller
                 ], $this->correctAnswerRevealForQuestion($question, $isCorrect), $this->buildDuelFinishedPayload($duel)));
             }
 
+            $duel->refresh();
+            if ($duel->status === 'finished') {
+                $duel->load(['challenger', 'opponent', 'winner', 'answers']);
+                $this->sendDuelFinishedWebhook($duel);
+
+                return response()->json(array_merge([
+                    'success' => true,
+                    'is_correct' => $isCorrect,
+                    'both_answered' => true,
+                    'waiting_for_opponent' => false,
+                    'duel_finished' => true,
+                    'message' => 'Düello sona erdi.',
+                ], $this->correctAnswerRevealForQuestion($question, $isCorrect), $this->buildDuelFinishedPayload($duel)));
+            }
+
             // Socket bildirimi gönder
             $this->sendDuelAnswerWebhook($duel, $user, $isCorrect, $bothAnswered);
 
@@ -1800,17 +1859,24 @@ class DuelController extends Controller
         $challengerCorrect = $challengerAnswer->is_correct;
         $opponentCorrect = $opponentAnswer->is_correct;
 
-        // Senaryo 1: Her ikisi de doğru → ikisi de o anki soru değeri (x) kadar kazanır
+        // Senaryo 1: Her ikisi de doğru (berabere)
+        // x1 → soru değeri aynı (tam); x2+ → değer / 2 (x2→1, x4→2, x6→3, x8→4 …)
         if ($challengerCorrect && $opponentCorrect) {
-            $this->addCoins($challenger, $questionValue, $duel, 'Düello: iki taraf da doğru');
-            $this->addCoins($opponent, $questionValue, $duel, 'Düello: iki taraf da doğru');
+            $settings = is_array($duel->settings) ? $duel->settings : [];
+            $currentMultiplier = max(1, (int) ($settings['current_question_multiplier'] ?? 1));
+            $tieAward = $currentMultiplier <= 1
+                ? $questionValue
+                : max(1, intdiv($questionValue, 2));
+
+            $this->addCoins($challenger, $tieAward, $duel, 'Düello: berabere (iki taraf da doğru)');
+            $this->addCoins($opponent, $tieAward, $duel, 'Düello: berabere (iki taraf da doğru)');
 
             $challengerAnswer->update([
-                'coins_change' => $questionValue,
+                'coins_change' => $tieAward,
                 'coins_after' => (int) $challenger->coins,
             ]);
             $opponentAnswer->update([
-                'coins_change' => $questionValue,
+                'coins_change' => $tieAward,
                 'coins_after' => (int) $opponent->coins,
             ]);
 
@@ -1979,7 +2045,8 @@ class DuelController extends Controller
     /**
      * Düello bitir.
      * Kazanan yoksa (açık düello iptal) sadece kapatılır.
-     * Kazanan varsa: maç boyunca net coin kazancının %10'u kesilir → duels.app_commission.
+     * Kazanan varsa: net coin kazancına göre dilim komisyonu → duels.app_commission.
+     * Dilim: 1–9 → 0; 10 → 1; 11–20 → 2; 21–30 → 3; … (net < 10 ? 0 : ceil(net/10)).
      *
      * @return int Kesilen komisyon tutarı
      */
@@ -1999,10 +2066,11 @@ class DuelController extends Controller
             if ($winner) {
                 $coinsNow = (int) $winner->fresh()->coins;
                 $netGain = max(0, $coinsNow - $coinsBefore);
-                $commission = (int) floor($netGain * 0.1);
+                // 1–9: kesme; 10+: her 10'luk dilimde +1 (10→1, 11–20→2, 21–30→3, …)
+                $commission = $netGain < 10 ? 0 : (int) ceil($netGain / 10);
 
                 if ($commission > 0) {
-                    $this->subtractCoins($winner, $commission, $duel, 'Düello: maç sonu %10 komisyon');
+                    $this->subtractCoins($winner, $commission, $duel, 'Düello: maç sonu komisyon');
                     $duel->increment('app_commission', $commission);
                 }
             }
@@ -2230,6 +2298,27 @@ class DuelController extends Controller
     }
 
     /**
+     * Düello zaten bitmişken leave/AFK: sonucu geri ver + socket'e tekrar yayınla (UI kilitlenmesin).
+     *
+     * @return array<string, mixed>
+     */
+    private function alreadyFinishedRecovery(Duel $duel): array
+    {
+        $duel->refresh()->load(['challenger', 'opponent', 'winner', 'answers']);
+        $this->sendDuelFinishedWebhook($duel);
+        $result = $this->buildDuelFinishedPayload($duel);
+
+        return array_merge([
+            'success' => true,
+            'already_finished' => true,
+            'duel_finished' => true,
+            'http_status' => 200,
+            'message' => 'Bu düello zaten bitmiş.',
+            'result' => $result,
+        ], $result);
+    }
+
+    /**
      * Düello bitiş popup'ı için özet istatistikler (duel_answers + duels).
      */
     private function buildDuelFinishedPayload(Duel $duel): array
@@ -2390,7 +2479,7 @@ class DuelController extends Controller
 
     /**
      * Kaybedenden kazanana coin aktar (maç içi tam tutar).
-     * %10 uygulama komisyonu maç sonunda finishDuel içinde kesilir.
+     * Maç sonu dilim komisyonu finishDuel içinde kesilir.
      *
      * @return array{taken:int, received:int, commission:int}
      */

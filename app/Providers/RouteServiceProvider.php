@@ -50,6 +50,10 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute((int) env('AI_QUESTION_REVIEW_MAX_PER_MINUTE', 60))->by($key);
         });
 
+        RateLimiter::for('support', function (Request $request) {
+            return Limit::perMinute(5)->by('support:' . ($request->user()?->id ?: $request->ip()));
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')

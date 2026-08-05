@@ -29,9 +29,38 @@
 a.aqr-stat-link { text-decoration: none; color: inherit; display: block; height: 100%; }
 a.aqr-stat-link:hover .aqr-stat { box-shadow: 0 10px 24px rgba(15,23,42,.12); transform: translateY(-1px); }
 a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
-.aqr-stat .card-body { padding: 1.15rem 1.25rem; }
-.aqr-stat .label { font-size: .85rem; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
-.aqr-stat .value { font-size: 1.85rem; font-weight: 700; color: #0f172a; margin-top: .15rem; }
+.aqr-stat .card-body {
+    padding: 1rem 1.1rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    min-height: 6.25rem;
+}
+.aqr-stat .label {
+    font-size: .78rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    line-height: 1.3;
+    flex: 1 1 auto;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.6em;
+}
+.aqr-stat .value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    margin-top: auto;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    letter-spacing: -0.02em;
+}
 .aqr-fail-reason {
     max-width: 280px; font-size: .82rem; color: #b91c1c; line-height: 1.35;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
@@ -84,63 +113,83 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         <h3>AI Soru Kalite Kontrolleri</h3>
         <p>Claude inceleme sonuçları. Sadece bu hesap görür.</p>
         <p class="mt-2 mb-0" style="font-size:1.15rem;font-weight:650;color:#fff">
-            Toplam <span style="color:#4ade80">{{ number_format($stats['questions_reviewed']) }}</span> soru kontrol edilmiş
-            <span style="opacity:.75;font-weight:500;font-size:.95rem">
-                ({{ number_format($stats['reviewed']) }} tamamlanan inceleme)
+            Toplam <span style="color:#4ade80">{{ number_format($stats['total']) }}</span> inceleme
+            <span style="opacity:.85;font-weight:500;font-size:.95rem">
+                · <span style="color:#4ade80">{{ number_format($stats['reviewed']) }}</span> başarılı
+                · <span style="color:#fca5a5">{{ number_format($stats['failed']) }}</span> başarısız
+                @if(($stats['pending'] ?? 0) > 0)
+                    · <span style="color:#fde047">{{ number_format($stats['pending']) }}</span> beklemede
+                @endif
+                @if(($stats['expired'] ?? 0) > 0)
+                    · {{ number_format($stats['expired']) }} süresi dolmuş
+                @endif
             </span>
+        </p>
+        <p class="mt-1 mb-0" style="font-size:.95rem;font-weight:500;color:rgba(255,255,255,.8)">
+            {{ number_format($stats['questions_reviewed']) }} farklı soru kontrol edilmiş
+            <span style="opacity:.75">(aynı soruya birden fazla deneme olabilir)</span>
         </p>
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <div class="aqr-model">Aktif model (API): {{ $configuredModel }}</div>
             <div class="aqr-model" id="aqrLiveBadge"
                  style="{{ $stats['pending'] > 0 ? '' : 'display:none;' }}background:rgba(234,179,8,.25);border-color:rgba(250,204,21,.45)">
-                <span class="aqr-live-dot"></span> Canlı · pending bitince yenilenir
+                <span class="aqr-live-dot"></span> Canlı inceleme · seçim yokken 30 sn’de yenilenir
             </div>
         </div>
     </div>
 
-    @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-    @endif
-    @if(session('error'))
-        <div class="alert alert-danger">{{ session('error') }}</div>
-    @endif
+    <div id="aqrRefreshBanner" class="alert alert-info d-none d-flex flex-wrap align-items-center justify-content-between gap-2" style="border-radius:12px">
+        <span class="mb-0">Yeni inceleme sonucu var. Çoklu seçimin bozulmasın diye otomatik yenilemedik.</span>
+        <button type="button" class="btn btn-sm btn-primary" id="aqrRefreshBtn">Listeyi yenile (seçimler korunur)</button>
+    </div>
 
     @php
-        // Kartlar birbirini değiştirir: status / max_score taşınmaz
+        // Kartlar birbirini değiştirir: status / max_score / admin_accepted taşınmaz
         $filterKeep = array_filter([
             'q' => $q !== '' ? $q : null,
             'band' => $band !== '' ? $band : null,
             'per_page' => $perPage !== 50 ? $perPage : null,
         ], fn ($v) => $v !== null);
-        $cardAll = $status === '' && $maxScore === null;
-        $cardReviewed = $status === 'reviewed' && $maxScore === null;
-        $cardLow = $maxScore !== null && (int) $maxScore === 60;
-        $cardPending = $status === 'pending' && $maxScore === null;
-        $cardFailed = $status === 'failed' && $maxScore === null;
+        $adminAccepted = $adminAccepted ?? false;
+        $cardAll = $status === '' && $maxScore === null && !$adminAccepted;
+        $cardReviewed = $status === 'reviewed' && $maxScore === null && !$adminAccepted;
+        $cardLow = $maxScore !== null && (int) $maxScore === 60 && !$adminAccepted;
+        $cardPending = $status === 'pending' && $maxScore === null && !$adminAccepted;
+        $cardFailed = $status === 'failed' && $maxScore === null && !$adminAccepted;
+        $cardAdminAccepted = $adminAccepted;
     @endphp
-    <div class="row g-2 mb-3">
+    <div class="row g-2 mb-3 aqr-stat-row align-items-stretch">
         <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', $filterKeep) }}"
                class="aqr-stat-link {{ $cardAll ? 'is-active' : '' }}">
-                <div class="card aqr-stat"><div class="card-body py-3">
+                <div class="card aqr-stat"><div class="card-body">
                     <div class="label">Kontrol edilen soru</div>
                     <div class="value" style="color:#166534">{{ number_format($stats['questions_reviewed']) }}</div>
                 </div></div>
             </a>
         </div>
         <div class="col-6 col-md">
+            <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['admin_accepted' => 1])) }}"
+               class="aqr-stat-link {{ $cardAdminAccepted ? 'is-active' : '' }}">
+                <div class="card aqr-stat"><div class="card-body">
+                    <div class="label">Admin onaylı</div>
+                    <div class="value" style="color:#1d4ed8">{{ number_format($stats['admin_accepted'] ?? 0) }}</div>
+                </div></div>
+            </a>
+        </div>
+        <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['status' => 'reviewed'])) }}"
                class="aqr-stat-link {{ $cardReviewed ? 'is-active' : '' }}">
-                <div class="card aqr-stat"><div class="card-body py-3">
-                    <div class="label">Tamamlanan</div>
-                    <div class="value">{{ number_format($stats['reviewed']) }}</div>
+                <div class="card aqr-stat"><div class="card-body">
+                    <div class="label">Kontrol tamamlanan · onay bekleyen</div>
+                    <div class="value">{{ number_format($stats['reviewed_open'] ?? $stats['reviewed']) }}</div>
                 </div></div>
             </a>
         </div>
         <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['max_score' => 60, 'status' => 'reviewed'])) }}"
                class="aqr-stat-link {{ $cardLow ? 'is-active' : '' }}">
-                <div class="card aqr-stat"><div class="card-body py-3">
+                <div class="card aqr-stat"><div class="card-body">
                     <div class="label">Skor ≤ 60</div>
                     <div class="value" style="color:#c2410c">{{ number_format($stats['low_score'] ?? 0) }}</div>
                 </div></div>
@@ -149,8 +198,8 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['status' => 'pending'])) }}"
                class="aqr-stat-link {{ $cardPending ? 'is-active' : '' }}">
-                <div class="card aqr-stat"><div class="card-body py-3">
-                    <div class="label">Pending</div>
+                <div class="card aqr-stat"><div class="card-body">
+                    <div class="label">Beklemede</div>
                     <div class="value" style="color:#ca8a04">{{ number_format($stats['pending']) }}</div>
                 </div></div>
             </a>
@@ -158,30 +207,32 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['status' => 'failed'])) }}"
                class="aqr-stat-link {{ $cardFailed ? 'is-active' : '' }}">
-                <div class="card aqr-stat"><div class="card-body py-3">
-                    <div class="label">Failed · sebepleri gör</div>
+                <div class="card aqr-stat"><div class="card-body">
+                    <div class="label">Başarısız · sebepleri gör</div>
                     <div class="value" style="color:#b91c1c">{{ number_format($stats['failed']) }}</div>
                 </div></div>
             </a>
         </div>
         <div class="col-6 col-md">
-            <div class="card aqr-stat"><div class="card-body py-3">
+            <div class="card aqr-stat"><div class="card-body">
                 <div class="label">Ort. skor</div>
                 <div class="value">{{ $stats['avg_score'] ? number_format($stats['avg_score'], 1) : '—' }}</div>
             </div></div>
         </div>
     </div>
 
+    @if($adminAccepted)
+        <div class="alert alert-primary py-2" style="border-radius:12px">
+            Admin’in AI düzeltmesini uyguladığı sorular (metin/şık değişmiş olabilir). Ana listeden düşürüldüler.
+        </div>
+    @endif
+
     <div class="aqr-bulk" id="aqrBulkBar">
         <span class="aqr-bulk-count"><span id="aqrSelCount">0</span> seçili</span>
-        <select id="aqrBulkMode" class="form-select form-select-sm" style="max-width:220px">
-            <option value="dry_run">Önizleme (yazma)</option>
-            <option value="inactive_only">Sadece pasif sorulara uygula</option>
-            <option value="live">Canlı sorulara uygula</option>
-        </select>
-        <button type="button" class="btn btn-sm btn-dark" id="aqrBulkRun">AI düzeltmesini çalıştır</button>
+        <input type="hidden" id="aqrBulkMode" value="live">
+        <button type="button" class="btn btn-sm btn-primary" id="aqrBulkRun">AI düzeltmesini uygula</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="aqrBulkClear">Seçimi temizle</button>
-        <div class="small text-muted w-100 mb-0">Kategori değişmez. Varsayılan önizlemedir — canlıya yazmaz.</div>
+        <div class="small text-muted w-100 mb-0">Seçilen sorulara AI düzeltmesi yazılır (aktif/pasif fark etmez). Kategori değişmez.</div>
         <div class="w-100 d-none" id="aqrBulkResultWrap">
             <pre class="aqr-preview mb-0" id="aqrBulkResult"></pre>
         </div>
@@ -190,26 +241,34 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
     <div class="card border-0 shadow-sm" style="border-radius:12px">
         <div class="card-body border-bottom">
             <form method="get" class="row g-2 align-items-end">
+                @if($adminAccepted)
+                    <input type="hidden" name="admin_accepted" value="1">
+                @endif
                 <div class="col-md-2">
                     <label class="form-label small mb-1">Ara</label>
-                    <input type="text" name="q" value="{{ $q }}" class="form-control form-control-sm" placeholder="review / question id">
+                    <input type="text" name="q" value="{{ $q }}" class="form-control form-control-sm" placeholder="inceleme / soru id">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small mb-1">Status</label>
+                    <label class="form-label small mb-1">Durum</label>
                     <select name="status" class="form-select form-select-sm">
                         <option value="">Hepsi</option>
-                        @foreach (['reviewed','pending','failed','expired'] as $st)
-                            <option value="{{ $st }}" @selected($status === $st)>{{ $st }}</option>
+                        @foreach ([
+                            'reviewed' => 'İncelendi',
+                            'pending' => 'Beklemede',
+                            'failed' => 'Başarısız',
+                            'expired' => 'Süresi doldu',
+                        ] as $st => $stLabel)
+                            <option value="{{ $st }}" @selected($status === $st)>{{ $stLabel }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small mb-1">Max skor</label>
+                    <label class="form-label small mb-1">En yüksek skor</label>
                     <input type="number" name="max_score" value="{{ $maxScore }}" min="0" max="100" class="form-control form-control-sm" placeholder="örn. 60">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small mb-1">Band</label>
-                    <input type="text" name="band" value="{{ $band }}" class="form-control form-control-sm" placeholder="high / Yüksek">
+                    <label class="form-label small mb-1">Bant</label>
+                    <input type="text" name="band" value="{{ $band }}" class="form-control form-control-sm" placeholder="yüksek">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small mb-1">Sayfa</label>
@@ -232,7 +291,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                         <th style="width:2.5rem">
                             <input type="checkbox" class="form-check-input" id="aqrCheckAll" title="Sayfadakileri seç">
                         </th>
-                        <th>Review</th>
+                        <th>İnceleme</th>
                         <th>Soru</th>
                         <th>Skor</th>
                         <th>Öneri / Sebep</th>
@@ -263,19 +322,32 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                                 'failed' => 'danger',
                                 default => 'secondary',
                             };
+                            $statusLabel = match ($review->status) {
+                                'reviewed' => 'İncelendi',
+                                'pending' => 'Beklemede',
+                                'failed' => 'Başarısız',
+                                'expired' => 'Süresi doldu',
+                                default => $review->status,
+                            };
                             $failReason = $review->status === 'failed'
                                 ? (string) ($review->edit_reason
                                     ?: data_get($review->raw_response, 'fail_reason')
                                     ?: data_get($review->raw_response, 'error')
                                     ?: '')
                                 : '';
+                            // Liste: uzun teknik mesajı 2 satırda okunabilir tut
+                            $failReasonShort = $failReason !== ''
+                                ? \Illuminate\Support\Str::limit($failReason, 160)
+                                : '';
                             $hasRevision = is_array($review->revised_content) && $review->revised_content !== [];
                             $isActiveQ = (bool) ($review->question?->is_active);
                             $laterSuccess = ($laterSuccessByQuestion[(int) $review->id] ?? null);
+                            $alreadyApplied = (bool) ($review->question?->ai_accepted
+                                && (int) $review->question?->ai_quality_review_id === (int) $review->id);
                         @endphp
                         <tr>
                             <td>
-                                @if ($review->status === 'reviewed' && $hasRevision)
+                                @if ($review->status === 'reviewed' && $hasRevision && !$alreadyApplied && !$adminAccepted)
                                     <input type="checkbox" class="form-check-input aqr-row-check"
                                            value="{{ $review->id }}"
                                            data-score="{{ $score }}"
@@ -284,7 +356,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                             </td>
                             <td>
                                 <div class="fw-semibold">#{{ $review->id }}</div>
-                                <div class="small text-muted">{{ optional($review->reviewed_at ?? $review->assigned_at)->format('d.m H:i') ?: '—' }}</div>
+                                <div class="small text-muted">{{ tr_time($review->reviewed_at ?? $review->assigned_at, 'd.m H:i') }}</div>
                                 @php $attemptNo = (int) ($review->attempt ?? 1); @endphp
                                 @if ($attemptNo > 1 || $review->previous_review_id)
                                     <div class="small mt-1">
@@ -320,12 +392,15 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                             </td>
                             <td>
                                 @if ($failReason !== '')
-                                    <div class="aqr-fail-reason" title="{{ $failReason }}">{{ $failReason }}</div>
+                                    <div class="aqr-fail-reason" title="{{ $failReason }}">{{ $failReasonShort }}</div>
                                 @else
                                     <div class="small fw-semibold">{{ $review->recommended_action ?: '—' }}</div>
                                     <div class="small text-muted text-truncate" style="max-width:140px" title="{{ $review->quality_band }}">{{ $review->quality_band ?: '' }}</div>
                                     @if($hasRevision)
                                         <div class="small text-success">AI düzeltme hazır</div>
+                                    @endif
+                                    @if($adminAccepted || $alreadyApplied)
+                                        <div class="small mt-1"><span class="badge bg-primary">Admin uyguladı</span></div>
                                     @endif
                                 @endif
                             </td>
@@ -334,7 +409,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                                 <div class="small text-muted">{{ $review->provider }}@if($review->package) · p{{ $review->package }}@endif</div>
                             </td>
                             <td>
-                                <span class="badge bg-{{ $badge }}">{{ $review->status }}</span>
+                                <span class="badge bg-{{ $badge }}">{{ $statusLabel }}</span>
                                 @php $attemptNo = (int) ($review->attempt ?? 1); @endphp
                                 @if ($review->status === 'reviewed' && $attemptNo > 1)
                                     <div class="small text-success mt-1">{{ $attemptNo }}. deneme · başarılı</div>
@@ -343,7 +418,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                                         @if($laterSuccess->quality_score !== null) (skor {{ $laterSuccess->quality_score }}) @endif
                                     </div>
                                 @elseif ($review->status === 'failed')
-                                    <div class="small text-danger mt-1">{{ $attemptNo }}. deneme · fail · tekrar denenecek</div>
+                                    <div class="small text-danger mt-1">{{ $attemptNo }}. deneme · başarısız · tekrar denenecek</div>
                                 @elseif ($attemptNo > 1)
                                     <div class="small text-muted mt-1">{{ $attemptNo }}. deneme</div>
                                 @endif
@@ -356,7 +431,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                         <tr>
                             <td colspan="8" class="text-center text-muted py-5">
                                 @if($status === 'failed')
-                                    Failed kayıt yok.
+                                    Başarısız kayıt yok.
                                 @else
                                     Henüz kayıt yok.
                                 @endif
@@ -396,12 +471,53 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         latest_updated: 0
     };
     var timer = null;
-    var intervalMs = snapshot.pending > 0 ? 4000 : 12000;
+    // Pending varken 30 sn; seçim varken otomatik reload YOK
+    var intervalMs = 30000;
+    var storageKey = 'aqr_selected_ids';
 
     function selectedIds() {
         return Array.prototype.map.call(document.querySelectorAll('.aqr-row-check:checked'), function (el) {
             return parseInt(el.value, 10);
         }).filter(Boolean);
+    }
+
+    function saveSelection() {
+        try {
+            var ids = selectedIds();
+            if (ids.length) {
+                sessionStorage.setItem(storageKey, JSON.stringify(ids));
+            } else {
+                sessionStorage.removeItem(storageKey);
+            }
+        } catch (e) {}
+    }
+
+    function restoreSelection() {
+        try {
+            var raw = sessionStorage.getItem(storageKey);
+            if (!raw) return;
+            var ids = JSON.parse(raw);
+            if (!Array.isArray(ids) || !ids.length) return;
+            var set = {};
+            ids.forEach(function (id) { set[String(id)] = true; });
+            document.querySelectorAll('.aqr-row-check').forEach(function (el) {
+                if (set[String(el.value)]) el.checked = true;
+            });
+            syncBulkBar();
+        } catch (e) {}
+    }
+
+    function showRefreshBanner() {
+        var banner = document.getElementById('aqrRefreshBanner');
+        if (banner) banner.classList.remove('d-none');
+    }
+
+    var refreshBtn = document.getElementById('aqrRefreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            saveSelection();
+            window.location.reload();
+        });
     }
 
     function syncBulkBar() {
@@ -410,6 +526,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         var count = document.getElementById('aqrSelCount');
         if (count) count.textContent = String(ids.length);
         if (bar) bar.classList.toggle('is-on', ids.length > 0);
+        saveSelection();
     }
 
     var checkAll = document.getElementById('aqrCheckAll');
@@ -439,14 +556,12 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             var ids = selectedIds();
             if (!ids.length) return;
             var modeEl = document.getElementById('aqrBulkMode');
-            var mode = modeEl ? modeEl.value : 'dry_run';
-            if (mode === 'live') {
-                if (!window.confirm('CANLI soruların metni/şıkları değişecek. Emin misin? (Kategori değişmez)')) {
-                    return;
-                }
+            var mode = modeEl ? modeEl.value : 'live';
+            if (!window.confirm('Seçili soruların metni/şıkları AI düzeltmesiyle değişecek. Emin misin? (Kategori değişmez)')) {
+                return;
             }
             runBtn.disabled = true;
-            runBtn.textContent = 'Çalışıyor…';
+            runBtn.textContent = 'Uygulanıyor…';
             fetch(bulkUrl, {
                 method: 'POST',
                 headers: {
@@ -459,7 +574,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                 body: JSON.stringify({
                     ids: ids,
                     mode: mode,
-                    confirm_live: mode === 'live' ? 1 : 0
+                    confirm_live: 1
                 })
             })
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
@@ -488,16 +603,22 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                         });
                         pre.textContent = lines.join('\n');
                     }
+                    // Uygulama sonrası seçimi temizle
+                    try { sessionStorage.removeItem(storageKey); } catch (e) {}
                 })
                 .catch(function () { alert('İstek başarısız'); })
                 .finally(function () {
                     runBtn.disabled = false;
-                    runBtn.textContent = 'AI düzeltmesini çalıştır';
+                    runBtn.textContent = 'AI düzeltmesini uygula';
                 });
         });
     }
 
     function schedule() {
+        if (snapshot.pending <= 0) {
+            timer = null;
+            return;
+        }
         timer = setTimeout(tick, intervalMs);
     }
 
@@ -508,43 +629,36 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         })
             .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
             .then(function (d) {
-                var changed = d.pending !== snapshot.pending
-                    || d.reviewed !== snapshot.reviewed
-                    || d.failed !== snapshot.failed
-                    || d.total !== snapshot.total
-                    || d.latest_id !== snapshot.latest_id
-                    || (d.latest_updated && d.latest_updated !== snapshot.latest_updated);
-
-                if (changed && (
-                    d.reviewed > snapshot.reviewed
-                    || d.pending < snapshot.pending
-                    || d.total > snapshot.total
-                    || d.latest_id > snapshot.latest_id
-                    || (d.latest_status === 'reviewed' && d.latest_id === snapshot.latest_id && d.latest_updated > snapshot.latest_updated)
-                )) {
-                    window.location.reload();
-                    return;
-                }
-
-                snapshot = {
-                    pending: d.pending,
-                    reviewed: d.reviewed,
-                    failed: d.failed,
-                    total: d.total,
-                    latest_id: d.latest_id,
-                    latest_updated: d.latest_updated || 0
-                };
-                intervalMs = d.pending > 0 ? 4000 : 12000;
                 var badge = document.getElementById('aqrLiveBadge');
                 if (badge) {
                     badge.style.display = d.pending > 0 ? '' : 'none';
                 }
-                schedule();
+
+                var hadSelection = selectedIds().length > 0;
+                snapshot.pending = d.pending;
+
+                // Çoklu seçim varken asla otomatik reload — band göster
+                if (hadSelection) {
+                    showRefreshBanner();
+                    schedule();
+                    return;
+                }
+
+                if (d.pending <= 0) {
+                    window.location.reload();
+                    return;
+                }
+                // Seçim yok + pending devam → 30 sn yenile
+                window.location.reload();
             })
             .catch(function () { schedule(); });
     }
 
-    schedule();
+    restoreSelection();
+
+    if (snapshot.pending > 0) {
+        schedule();
+    }
 })();
 </script>
 @endpush

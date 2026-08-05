@@ -25,6 +25,7 @@ use App\Http\Controllers\API\LeaderboardController;
 use App\Http\Controllers\API\RewardController;
 use App\Http\Controllers\API\AiQuestionController;
 use App\Http\Controllers\API\AiQuestionReviewController;
+use App\Http\Controllers\API\SupportController;
 
 // Auth routes (no middleware)
 Route::prefix('auth')->group(function () {
@@ -39,6 +40,7 @@ Route::get('duel/bot-matchmaking-config', [DuelController::class, 'botMatchmakin
 Route::post('duel/bot-matchmaking-pick', [DuelController::class, 'botMatchmakingPick']);
 Route::get('duel/socket-active-map', [DuelController::class, 'socketActiveMap']);
 Route::get('duel/socket-user-active', [DuelController::class, 'socketUserActive']);
+Route::get('duel/socket-duel-snapshot', [DuelController::class, 'socketDuelSnapshot']);
 Route::post('users/socket-presence', [AuthController::class, 'socketPresence']);
 
 // TODO: AI dışarıdan soru girişini geçici olarak kapattık.
@@ -248,6 +250,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
+// Destek / iletişim / şikayet / öneri (landing public; app token ile)
+Route::post('support', [SupportController::class, 'store'])->middleware('throttle:support');
+
 // Landing Page API routes (no auth required)
 Route::prefix('landing')->group(function () {
     Route::get('about', [LandingController::class, 'about']);
@@ -257,4 +262,5 @@ Route::prefix('landing')->group(function () {
     Route::get('benefits', [LandingController::class, 'benefits']);
     Route::get('faqs', [LandingController::class, 'faqs']);
     Route::get('all', [LandingController::class, 'all']);
+    Route::post('support', [SupportController::class, 'store'])->middleware('throttle:support');
 });
