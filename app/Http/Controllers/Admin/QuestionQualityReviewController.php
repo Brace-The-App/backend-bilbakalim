@@ -31,22 +31,84 @@ class QuestionQualityReviewController extends Controller
         $q = trim((string) $request->query('q', ''));
         $maxScore = $request->query('max_score');
         $maxScore = ($maxScore !== null && $maxScore !== '') ? (int) $maxScore : null;
+        $adminAccepted = in_array((string) $request->query('admin_accepted', ''), ['1', 'true'], true);
+        $scope = trim((string) $request->query('scope', ''));
         $perPage = (int) $request->query('per_page', 50);
         if (!in_array($perPage, [25, 50, 100], true)) {
             $perPage = 50;
         }
 
+        $acceptedReviewIdsQuery = function ($sub) {
+            $sub->select('ai_quality_review_id')
+                ->from('questions')
+                ->where('ai_accepted', 1)
+                ->whereNotNull('ai_quality_review_id');
+        };
+
         $query = QuestionQualityReview::query()
             ->with([
                 'question' => function ($rel) {
-                    $rel->select('id', 'question', 'category_id', 'correct_answer', 'question_level', 'is_active', 'admin_status');
+                    $rel->select(
+                        'id',
+                        'question',
+                        'category_id',
+                        'correct_answer',
+                        'question_level',
+                        'is_active',
+                        'admin_status',
+                        'ai_accepted',
+                        'ai_quality_review_id',
+                        'check'
+                    );
                 },
                 'previousReview:id,status,attempt,edit_reason,reviewed_at',
             ])
+            // Her zaman en yeni kontrolden en eskiye
+            ->orderByRaw('COALESCE(reviewed_at, assigned_at, created_at) DESC')
             ->orderByDesc('id');
 
-        if ($status !== '') {
+        if ($adminAccepted) {
+            $query->whereIn('id', $acceptedReviewIdsQuery);
+        } elseif ($scope === 'all_success') {
+            // Başarılı kontrol kartı: tüm reviewed (uygulananlar dahil), fail yok
+            $query->where('status', QuestionQualityReview::STATUS_REVIEWED);
+        } else {
+            // Ana iş listelerinden admin'in kabul ettiklerini düş
+            if ($status === '' || $status === 'reviewed' || $maxScore !== null) {
+                $query->whereNotIn('id', $acceptedReviewIdsQuery);
+            }
+        }
+
+        // Sonraki denemesi başarılı olan fail'leri gizle (sadece gerçekten açık fail kalsın)
+        $openFailConstraint = function ($q) {
+            $q->whereNotExists(function ($e) {
+                $e->selectRaw('1')
+                    ->from('question_quality_reviews as later_ok')
+                    ->whereColumn('later_ok.question_id', 'question_quality_reviews.question_id')
+                    ->where('later_ok.status', QuestionQualityReview::STATUS_REVIEWED)
+                    ->whereColumn('later_ok.id', '>', 'question_quality_reviews.id');
+            });
+        };
+
+        if ($status !== '' && $scope !== 'all_success') {
             $query->where('status', $status);
+            // "Uygulama bekliyor" listesi: düzeltmesi olan başarılılar
+            if ($status === 'reviewed' && !$adminAccepted) {
+                $query->whereNotNull('revised_content')
+                    ->whereRaw("revised_content NOT IN ('[]','{}','null')");
+            }
+            if ($status === 'failed') {
+                $openFailConstraint($query);
+            }
+        } elseif ($scope !== 'all_success' && !$adminAccepted && $status === '') {
+            // Genel listede çözülmüş fail'leri gösterme — başarı varsa fail satırı yok
+            $query->where(function ($w) use ($openFailConstraint) {
+                $w->where('status', '!=', QuestionQualityReview::STATUS_FAILED)
+                    ->orWhere(function ($f) use ($openFailConstraint) {
+                        $f->where('status', QuestionQualityReview::STATUS_FAILED);
+                        $openFailConstraint($f);
+                    });
+            });
         }
         if ($band !== '') {
             $query->where('quality_band', 'like', '%' . $band . '%');
@@ -90,16 +152,44 @@ class QuestionQualityReviewController extends Controller
             }
         }
 
+        $openFailedQuery = QuestionQualityReview::query()
+            ->where('status', 'failed')
+            ->whereNotExists(function ($e) {
+                $e->selectRaw('1')
+                    ->from('question_quality_reviews as later_ok')
+                    ->whereColumn('later_ok.question_id', 'question_quality_reviews.question_id')
+                    ->where('later_ok.status', QuestionQualityReview::STATUS_REVIEWED)
+                    ->whereColumn('later_ok.id', '>', 'question_quality_reviews.id');
+            });
+
         $stats = [
             'total' => QuestionQualityReview::query()->count(),
             'reviewed' => QuestionQualityReview::query()->where('status', 'reviewed')->count(),
             'pending' => QuestionQualityReview::query()->where('status', 'pending')->count(),
-            'failed' => QuestionQualityReview::query()->where('status', 'failed')->count(),
+            // Sadece sonraki denemesi başarılı olmayan açık fail'ler
+            'failed' => (clone $openFailedQuery)->count(),
             'expired' => QuestionQualityReview::query()->where('status', 'expired')->count(),
+            // Sadece başarılı (reviewed) incelemeye sahip farklı sorular — fail sayılmaz
             'questions_reviewed' => (int) QuestionQualityReview::query()
                 ->where('status', 'reviewed')
                 ->selectRaw('COUNT(DISTINCT question_id) as aggregate')
                 ->value('aggregate'),
+            // Hâlâ açık fail'i olan farklı sorular (sonraki başarı varsa sayılmaz)
+            'questions_failed' => (int) (clone $openFailedQuery)
+                ->selectRaw('COUNT(DISTINCT question_id) as aggregate')
+                ->value('aggregate'),
+            'admin_accepted' => (int) \App\Models\Question::query()
+                ->where('ai_accepted', true)
+                ->whereNotNull('ai_quality_review_id')
+                ->count(),
+            // Uygulanabilir: başarılı + AI düzeltme var + bu review henüz uygulanmamış
+            // Fail / pending burada yok; checkbox ve toplu uygula da aynı kural
+            'reviewed_open' => QuestionQualityReview::query()
+                ->where('status', 'reviewed')
+                ->whereNotNull('revised_content')
+                ->whereRaw("revised_content NOT IN ('[]','{}','null')")
+                ->whereNotIn('id', $acceptedReviewIdsQuery)
+                ->count(),
             'avg_score' => (float) (QuestionQualityReview::query()
                 ->where('status', 'reviewed')
                 ->whereNotNull('quality_score')
@@ -108,8 +198,24 @@ class QuestionQualityReviewController extends Controller
                 ->where('status', 'reviewed')
                 ->whereNotNull('quality_score')
                 ->where('quality_score', '<=', 60)
+                ->whereNotNull('revised_content')
+                ->whereRaw("revised_content NOT IN ('[]','{}','null')")
+                ->whereNotIn('id', $acceptedReviewIdsQuery)
                 ->count(),
         ];
+
+        // Listedeki soruların toplam deneme sayısı (bilgi)
+        $attemptCountByQuestion = [];
+        $pageQids = $reviews->getCollection()->pluck('question_id')->unique()->filter()->values()->all();
+        if ($pageQids !== []) {
+            $attemptCountByQuestion = QuestionQualityReview::query()
+                ->whereIn('question_id', $pageQids)
+                ->selectRaw('question_id, COUNT(*) as cnt')
+                ->groupBy('question_id')
+                ->pluck('cnt', 'question_id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+        }
 
         $configuredModel = (string) config('services.anthropic.model_label', 'claude-opus-5');
 
@@ -122,7 +228,10 @@ class QuestionQualityReviewController extends Controller
             'maxScore',
             'perPage',
             'configuredModel',
-            'laterSuccessByQuestion'
+            'laterSuccessByQuestion',
+            'adminAccepted',
+            'attemptCountByQuestion',
+            'scope'
         ));
     }
 
@@ -329,9 +438,27 @@ class QuestionQualityReviewController extends Controller
      */
     private function applyRevisionToQuestion(QuestionQualityReview $review, string $mode): array
     {
+        // Fail / düzeltmesiz satırlar toplu uygulamaya hiç girmez
+        if ($review->status !== QuestionQualityReview::STATUS_REVIEWED) {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'message' => 'Sadece başarılı incelemeler uygulanır.',
+            ];
+        }
+
         $question = $review->question;
         if (!$question) {
             return ['ok' => false, 'message' => 'İlişkili soru yok.'];
+        }
+
+        // Bu review zaten uygulanmışsa tekrar yazma
+        if ($question->ai_accepted && (int) $question->ai_quality_review_id === (int) $review->id) {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'message' => 'Bu inceleme zaten uygulanmış.',
+            ];
         }
 
         $revised = $this->resolveRevisedContent($review);
@@ -391,7 +518,7 @@ class QuestionQualityReviewController extends Controller
             ];
         }
 
-        DB::transaction(function () use ($question, $en, $trOpts, $enOpts, $correctAnswer, $oldTr, $newTr) {
+        DB::transaction(function () use ($question, $en, $trOpts, $enOpts, $correctAnswer, $oldTr, $newTr, $review) {
             $oldCorrect = (string) $question->correct_answer;
 
             $question->setTranslation('question', 'tr', $newTr);
@@ -405,6 +532,9 @@ class QuestionQualityReviewController extends Controller
 
             $question->correct_answer = $correctAnswer;
             $question->check = true;
+            $question->ai_quality_review_id = (int) $review->id;
+            // Uygulanan AI düzeltmesi = panelde kabul izi (işlem id bağlı)
+            $question->ai_accepted = true;
             $question->save();
 
             QuestionAdminLog::create([
@@ -415,7 +545,8 @@ class QuestionQualityReviewController extends Controller
                 'old_value' => mb_substr($oldTr, 0, 500),
                 'new_value' => mb_substr($newTr, 0, 500)
                     . ' | correct=' . $correctAnswer
-                    . ($oldCorrect !== $correctAnswer ? " (eski correct={$oldCorrect})" : ''),
+                    . ($oldCorrect !== $correctAnswer ? " (eski correct={$oldCorrect})" : '')
+                    . ' | review_id=' . $review->id,
             ]);
         });
 

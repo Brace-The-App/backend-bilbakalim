@@ -77,6 +77,10 @@ class RewardController extends Controller
                 'games_played' => $claimGate['games_played'],
                 'gift_claim_min_coins' => $claimGate['min_coins'],
                 'gift_claim_min_games' => $claimGate['min_games'],
+                'gift_claim_daily_limit' => $claimGate['daily_limit'] ?? 1,
+                'claims_today' => $claimGate['claims_today'] ?? 0,
+                'can_claim_today' => (bool) ($claimGate['can_claim_today'] ?? false),
+                'error_code' => $claimGate['error_code'] ?? null,
                 'message' => $claimGate['message'],
             ]);
         }
@@ -341,6 +345,9 @@ class RewardController extends Controller
             'games_played' => $claimGate['games_played'],
             'gift_claim_min_coins' => $claimGate['min_coins'],
             'gift_claim_min_games' => $claimGate['min_games'],
+            'gift_claim_daily_limit' => $claimGate['daily_limit'] ?? 1,
+            'claims_today' => $claimGate['claims_today'] ?? 0,
+            'can_claim_today' => (bool) ($claimGate['can_claim_today'] ?? false),
             'message' => $message
         ];
 
@@ -356,7 +363,7 @@ class RewardController extends Controller
      * @OA\Post(
      *     path="/api/reward/claim",
      *     summary="Ödül talep et",
-     *     description="Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 100) + min oyun. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
+     *     description="Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 250) + min oyun + günde en fazla 1 talep. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
      *     tags={"Reward"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -428,15 +435,19 @@ class RewardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => $claimGate['message'],
+                'error_code' => $claimGate['error_code'] ?? 'gift_claim_not_eligible',
                 'current_coins' => $claimGate['current_coins'],
                 'duel_earned_coins' => $claimGate['duel_earned_coins'] ?? 0,
                 'games_played' => $claimGate['games_played'],
                 'gift_claim_min_coins' => $claimGate['min_coins'],
                 'gift_claim_min_games' => $claimGate['min_games'],
+                'gift_claim_daily_limit' => $claimGate['daily_limit'] ?? 1,
+                'claims_today' => $claimGate['claims_today'] ?? 0,
+                'can_claim_today' => false,
             ], 400);
         }
 
-        $claimAmount = (int) config('app.gift_claim_min_coins', 100);
+        $claimAmount = \App\Services\FinanceService::giftClaimMinCoins();
         $rewardDate = Carbon::today()->format('Y-m-d');
         $baseMetadata = [
             'gift_card_store_id' => (int) $store->id,
@@ -465,7 +476,13 @@ class RewardController extends Controller
                 /** @var User $lockedUser */
                 $lockedUser = User::query()->where('id', $user->id)->lockForUpdate()->firstOrFail();
 
-                // Günlük / haftalık / turnuva: aynı gün tek talep
+                $dailyLimit = max(1, (int) config('app.gift_claim_daily_limit', 1));
+                $claimsToday = $this->countClaimsToday((int) $lockedUser->id);
+                if ($claimsToday >= $dailyLimit) {
+                    throw new \RuntimeException('DAILY_CLAIM_LIMIT');
+                }
+
+                // Günlük / haftalık / turnuva: aynı gün tek talep (eski davranış)
                 if ($type !== 'duel') {
                     $existing = RewardRequest::query()
                         ->where('user_id', $lockedUser->id)
@@ -476,7 +493,7 @@ class RewardController extends Controller
                         ->first();
 
                     if ($existing) {
-                        return $existing;
+                        throw new \RuntimeException('DAILY_CLAIM_LIMIT');
                     }
 
                     return RewardRequest::create([
@@ -493,8 +510,8 @@ class RewardController extends Controller
                 }
 
                 // Meydan okuma hediyesi:
-                // - Eşik kadar (100) duel_earned düşülür, talep panele düşer
-                // - Kalan durur; ≥100 ise aynı gün arka arkaya tekrar talep edilebilir
+                // - Eşik kadar duel_earned düşülür, talep panele düşer
+                // - Günde en fazla 1 talep
                 // - Onayda ekstra sıfırlama yok; redde iade
                 $duelBefore = max(0, (int) ($lockedUser->duel_earned_coins ?? 0));
                 if ($duelBefore < $claimAmount) {
@@ -522,46 +539,45 @@ class RewardController extends Controller
                 ]);
             });
         } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'DAILY_CLAIM_LIMIT') {
+                $dailyLimit = max(1, (int) config('app.gift_claim_daily_limit', 1));
+                $claimsToday = $this->countClaimsToday((int) $user->id);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bugün ödül talebinde bulundunuz. Günde en fazla 1 kez talep edebilirsiniz. Yarın tekrar deneyin.',
+                    'error_code' => 'gift_claim_daily_limit',
+                    'gift_claim_daily_limit' => $dailyLimit,
+                    'claims_today' => $claimsToday,
+                    'can_claim_today' => false,
+                    'gift_claim_min_coins' => $claimAmount,
+                    'duel_earned_coins' => (int) ($user->fresh()->duel_earned_coins ?? 0),
+                ], 400);
+            }
+
             if ($e->getMessage() === 'INSUFFICIENT_DUEL_EARNED') {
                 return response()->json([
                     'success' => false,
                     'message' => "Hediye talep etmek için meydan okumadan net en az {$claimAmount} jeton kazanmış olmalısınız.",
+                    'error_code' => 'gift_claim_insufficient_coins',
                     'duel_earned_coins' => (int) ($user->fresh()->duel_earned_coins ?? 0),
                     'gift_claim_min_coins' => $claimAmount,
+                    'gift_claim_daily_limit' => (int) config('app.gift_claim_daily_limit', 1),
+                    'can_claim_today' => true,
                 ], 400);
             }
 
             return response()->json([
                 'success' => false,
                 'message' => 'Ödül talebi oluşturulamadı. Lütfen tekrar deneyin.',
+                'error_code' => 'gift_claim_failed',
             ], 500);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Ödül talebi oluşturulamadı. Lütfen tekrar deneyin.',
+                'error_code' => 'gift_claim_failed',
             ], 500);
-        }
-
-        $isReplay = !$rewardRequest->wasRecentlyCreated;
-
-        if ($isReplay) {
-            return response()->json([
-                'success' => true,
-                'message' => $rewardRequest->status === 'approved'
-                    ? 'Bu ödül talebi zaten onaylanmış.'
-                    : 'Bekleyen ödül talebiniz zaten var.',
-                'already_exists' => true,
-                'data' => [
-                    'id' => $rewardRequest->id,
-                    'status' => $rewardRequest->status,
-                    'gift_card_store_id' => (int) (($rewardRequest->metadata['gift_card_store_id'] ?? $store->id)),
-                    'gift_card_store' => [
-                        'id' => (int) $store->id,
-                        'type' => $store->type,
-                        'image_url' => $store->image_url,
-                    ],
-                ],
-            ]);
         }
 
         $user->refresh();
@@ -574,6 +590,9 @@ class RewardController extends Controller
                 'claimed_amount' => (int) ($rewardRequest->coins_earned ?? $claimAmount),
                 'duel_earned_coins' => (int) ($user->duel_earned_coins ?? 0),
                 'gift_claim_min_coins' => $claimAmount,
+                'gift_claim_daily_limit' => (int) config('app.gift_claim_daily_limit', 1),
+                'claims_today' => $this->countClaimsToday((int) $user->id),
+                'can_claim_today' => false,
                 'gift_card_store_id' => (int) $store->id,
                 'gift_card_store' => [
                     'id' => (int) $store->id,
@@ -586,50 +605,68 @@ class RewardController extends Controller
 
     /**
      * Hediye / ödül talep şartları:
-     * - Meydan okumadan net en az 100 jeton (duel_earned_coins = kazanılan − kaybedilen, min 0)
-     * - En az 3 tamamlanmış oyun
+     * - Meydan okumadan net en az N jeton (duel_earned_coins)
+     * - En az M tamamlanmış oyun
+     * - Günde en fazla 1 talep
      */
     private function validateGiftClaimRequirements(User $user): array
     {
-        $minCoins = (int) config('app.gift_claim_min_coins', 100);
+        $minCoins = \App\Services\FinanceService::giftClaimMinCoins();
         $minGames = (int) config('app.gift_claim_min_games', 3);
+        $dailyLimit = max(1, (int) config('app.gift_claim_daily_limit', 1));
         $duelEarnedCoins = (int) ($user->duel_earned_coins ?? 0);
         $currentCoins = (int) $user->coins;
         $gamesPlayed = $this->countCompletedGames($user->id);
+        $claimsToday = $this->countClaimsToday((int) $user->id);
 
-        if ($duelEarnedCoins < $minCoins) {
-            return [
-                'eligible' => false,
-                'message' => "Hediye talep etmek için meydan okumadan net en az {$minCoins} jeton kazanmış olmalısınız. Net düello kazancınız: {$duelEarnedCoins}.",
-                'current_coins' => $currentCoins,
-                'duel_earned_coins' => $duelEarnedCoins,
-                'games_played' => $gamesPlayed,
-                'min_coins' => $minCoins,
-                'min_games' => $minGames,
-            ];
-        }
-
-        if ($gamesPlayed < $minGames) {
-            return [
-                'eligible' => false,
-                'message' => "Hediye talep etmek için en az {$minGames} oyun oynamış olmanız gerekir. Oynanan oyun: {$gamesPlayed}.",
-                'current_coins' => $currentCoins,
-                'duel_earned_coins' => $duelEarnedCoins,
-                'games_played' => $gamesPlayed,
-                'min_coins' => $minCoins,
-                'min_games' => $minGames,
-            ];
-        }
-
-        return [
-            'eligible' => true,
-            'message' => 'Hediye talep şartları karşılanıyor.',
+        $base = [
             'current_coins' => $currentCoins,
             'duel_earned_coins' => $duelEarnedCoins,
             'games_played' => $gamesPlayed,
             'min_coins' => $minCoins,
             'min_games' => $minGames,
+            'daily_limit' => $dailyLimit,
+            'claims_today' => $claimsToday,
+            'can_claim_today' => $claimsToday < $dailyLimit,
         ];
+
+        if ($claimsToday >= $dailyLimit) {
+            return array_merge($base, [
+                'eligible' => false,
+                'error_code' => 'gift_claim_daily_limit',
+                'message' => 'Bugün ödül talebinde bulundunuz. Günde en fazla 1 kez talep edebilirsiniz. Yarın tekrar deneyin.',
+            ]);
+        }
+
+        if ($duelEarnedCoins < $minCoins) {
+            return array_merge($base, [
+                'eligible' => false,
+                'error_code' => 'gift_claim_insufficient_coins',
+                'message' => "Hediye talep etmek için meydan okumadan net en az {$minCoins} jeton kazanmış olmalısınız. Net düello kazancınız: {$duelEarnedCoins}.",
+            ]);
+        }
+
+        if ($gamesPlayed < $minGames) {
+            return array_merge($base, [
+                'eligible' => false,
+                'error_code' => 'gift_claim_insufficient_games',
+                'message' => "Hediye talep etmek için en az {$minGames} oyun oynamış olmanız gerekir. Oynanan oyun: {$gamesPlayed}.",
+            ]);
+        }
+
+        return array_merge($base, [
+            'eligible' => true,
+            'error_code' => null,
+            'message' => 'Hediye talep şartları karşılanıyor.',
+        ]);
+    }
+
+    private function countClaimsToday(int $userId): int
+    {
+        return (int) RewardRequest::query()
+            ->where('user_id', $userId)
+            ->whereDate('requested_at', Carbon::today())
+            ->count();
     }
 
     private function countCompletedGames(int $userId): int

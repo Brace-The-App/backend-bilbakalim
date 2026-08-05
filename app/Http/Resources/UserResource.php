@@ -34,14 +34,16 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'coins' => $this->coins,
             'duel_earned_coins' => (int) ($this->duel_earned_coins ?? 0),
-            'gift_claim_min_coins' => (int) config('app.gift_claim_min_coins', 100),
+            'gift_claim_min_coins' => \App\Services\FinanceService::giftClaimMinCoins(),
             'gift_claim_min_games' => (int) config('app.gift_claim_min_games', 3),
+            'gift_claim_daily_limit' => (int) config('app.gift_claim_daily_limit', 1),
             'diamonds' => $diamondBalance,
             'role_id' => $this->role_id,
             'phone' => $this->phone,
             'email' => $this->email,
             'is_premium' => $this->is_premium,
             'account_status' => $this->account_status,
+            'platform' => $this->platform,
             'created_at' => $this->created_at,
             'profile_image' => $this->profile_image
                 ? \App\Models\User::toStorageUrl((string) $this->profile_image)

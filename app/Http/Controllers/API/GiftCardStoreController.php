@@ -29,8 +29,9 @@ class GiftCardStoreController extends Controller
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="duel_earned_coins", type="integer", example=120, description="Meydan okumadan net jeton (kazanç − kayıp)"),
-     *             @OA\Property(property="gift_claim_min_coins", type="integer", example=100, description="Hediye çeki talep eşiği (düello jetonu). Config: GIFT_CLAIM_MIN_COINS"),
+     *             @OA\Property(property="gift_claim_min_coins", type="integer", example=250, description="Hediye çeki talep eşiği (düello jetonu). Finans oran dönemindeki Ödül ₺ alanından gelir."),
      *             @OA\Property(property="gift_claim_min_games", type="integer", example=3, description="Hediye talep için min tamamlanmış oyun. Config: GIFT_CLAIM_MIN_GAMES"),
+     *             @OA\Property(property="gift_claim_daily_limit", type="integer", example=1, description="Günde en fazla kaç talep. Config: GIFT_CLAIM_DAILY_LIMIT"),
      *             @OA\Property(
      *                 property="data",
      *                 type="array",
@@ -70,8 +71,9 @@ class GiftCardStoreController extends Controller
         return response()->json([
             'success' => true,
             'duel_earned_coins' => (int) ($user?->duel_earned_coins ?? 0),
-            'gift_claim_min_coins' => (int) config('app.gift_claim_min_coins', 100),
+            'gift_claim_min_coins' => \App\Services\FinanceService::giftClaimMinCoins(),
             'gift_claim_min_games' => (int) config('app.gift_claim_min_games', 3),
+            'gift_claim_daily_limit' => (int) config('app.gift_claim_daily_limit', 1),
             'data' => $stores,
         ]);
     }

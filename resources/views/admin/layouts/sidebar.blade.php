@@ -258,6 +258,17 @@
                     </li>
                     @endif
 
+                    @if(\App\Services\FinanceService::canAccess(auth()->user()))
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.finance.*') ? 'active' : '' }}"
+                           href="{{ route('admin.finance.index') }}">
+                            <i data-feather="dollar-sign"></i>
+                            <span>Finans</span>
+                        </a>
+                    </li>
+                    @endif
+
                     {{-- Alt menü öğelerinin kaydırma alanında görünmesi için boşluk --}}
                     <li class="sidebar-list sidebar-bottom-spacer" aria-hidden="true" style="height:96px;pointer-events:none;visibility:hidden;"></li>
                 </ul>

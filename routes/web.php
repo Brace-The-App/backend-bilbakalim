@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\SmsVitriniTestController;
 use App\Http\Controllers\Admin\DuelBotController;
 use App\Http\Controllers\Admin\QuestionQualityReviewController;
 use App\Http\Controllers\Admin\SupportMessageController;
+use App\Http\Controllers\Admin\FinanceController;
 
 // Welcome page
 Route::get('/', function () {
@@ -137,6 +138,15 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::get('support/{id}', [SupportMessageController::class, 'show'])->name('support.show')->whereNumber('id');
     Route::post('support/{id}/status', [SupportMessageController::class, 'updateStatus'])->name('support.status')->whereNumber('id');
     Route::delete('support/{id}', [SupportMessageController::class, 'destroy'])->name('support.destroy')->whereNumber('id');
+
+    // Finans (şimdilik sadece user #15)
+    Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
+    Route::get('finance/settings', [FinanceController::class, 'settings'])->name('finance.settings');
+    Route::post('finance/periods', [FinanceController::class, 'storePeriod'])->name('finance.periods.store');
+    Route::post('finance/start-from-today', [FinanceController::class, 'startFromToday'])->name('finance.start-from-today');
+    Route::post('finance/categories', [FinanceController::class, 'storeCategory'])->name('finance.categories.store');
+    Route::post('finance/entries', [FinanceController::class, 'storeEntry'])->name('finance.entries.store');
+    Route::delete('finance/entries/{id}', [FinanceController::class, 'destroyEntry'])->name('finance.entries.destroy')->whereNumber('id');
 
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');

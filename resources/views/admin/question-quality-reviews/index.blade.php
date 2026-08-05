@@ -115,8 +115,8 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         <p class="mt-2 mb-0" style="font-size:1.15rem;font-weight:650;color:#fff">
             Toplam <span style="color:#4ade80">{{ number_format($stats['total']) }}</span> inceleme
             <span style="opacity:.85;font-weight:500;font-size:.95rem">
-                · <span style="color:#4ade80">{{ number_format($stats['reviewed']) }}</span> başarılı
-                · <span style="color:#fca5a5">{{ number_format($stats['failed']) }}</span> başarısız
+                · <span style="color:#4ade80">{{ number_format($stats['reviewed']) }}</span> başarılı deneme
+                · <span style="color:#fca5a5">{{ number_format($stats['failed']) }}</span> başarısız deneme
                 @if(($stats['pending'] ?? 0) > 0)
                     · <span style="color:#fde047">{{ number_format($stats['pending']) }}</span> beklemede
                 @endif
@@ -126,8 +126,15 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             </span>
         </p>
         <p class="mt-1 mb-0" style="font-size:.95rem;font-weight:500;color:rgba(255,255,255,.8)">
-            {{ number_format($stats['questions_reviewed']) }} farklı soru kontrol edilmiş
-            <span style="opacity:.75">(aynı soruya birden fazla deneme olabilir)</span>
+            {{ number_format($stats['questions_reviewed']) }} soru başarıyla kontrol edildi
+            <span style="opacity:.75">({{ number_format($stats['reviewed']) }} başarılı deneme)</span>
+            · {{ number_format($stats['admin_accepted'] ?? 0) }} uygulandı
+            · {{ number_format($stats['reviewed_open'] ?? 0) }} uygulama bekliyor
+        </p>
+        <p class="mt-1 mb-0" style="font-size:.95rem;font-weight:500;color:rgba(255,255,255,.8)">
+            {{ number_format($stats['questions_failed'] ?? 0) }} başarısız soru
+            <span style="opacity:.75">({{ number_format($stats['failed']) }} deneme)</span>
+            <span style="opacity:.65"> · fail’ler onay / toplu uygulamaya girmez</span>
         </p>
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <div class="aqr-model">Aktif model (API): {{ $configuredModel }}</div>
@@ -151,8 +158,10 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             'per_page' => $perPage !== 50 ? $perPage : null,
         ], fn ($v) => $v !== null);
         $adminAccepted = $adminAccepted ?? false;
-        $cardAll = $status === '' && $maxScore === null && !$adminAccepted;
-        $cardReviewed = $status === 'reviewed' && $maxScore === null && !$adminAccepted;
+        $scope = $scope ?? '';
+        $cardAll = $status === '' && $maxScore === null && !$adminAccepted && $scope === '';
+        $cardSuccess = $scope === 'all_success';
+        $cardReviewed = $status === 'reviewed' && $maxScore === null && !$adminAccepted && $scope === '';
         $cardLow = $maxScore !== null && (int) $maxScore === 60 && !$adminAccepted;
         $cardPending = $status === 'pending' && $maxScore === null && !$adminAccepted;
         $cardFailed = $status === 'failed' && $maxScore === null && !$adminAccepted;
@@ -160,11 +169,14 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
     @endphp
     <div class="row g-2 mb-3 aqr-stat-row align-items-stretch">
         <div class="col-6 col-md">
-            <a href="{{ route('admin.question-quality-reviews.index', $filterKeep) }}"
-               class="aqr-stat-link {{ $cardAll ? 'is-active' : '' }}">
+            <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['scope' => 'all_success'])) }}"
+               class="aqr-stat-link {{ $cardSuccess ? 'is-active' : '' }}">
                 <div class="card aqr-stat"><div class="card-body">
-                    <div class="label">Kontrol edilen soru</div>
+                    <div class="label">Başarılı kontrol</div>
                     <div class="value" style="color:#166534">{{ number_format($stats['questions_reviewed']) }}</div>
+                    <div class="small text-muted mt-1" style="font-size:.72rem;text-transform:none;letter-spacing:0">
+                        ({{ number_format($stats['reviewed']) }} deneme)
+                    </div>
                 </div></div>
             </a>
         </div>
@@ -172,7 +184,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['admin_accepted' => 1])) }}"
                class="aqr-stat-link {{ $cardAdminAccepted ? 'is-active' : '' }}">
                 <div class="card aqr-stat"><div class="card-body">
-                    <div class="label">Admin onaylı</div>
+                    <div class="label">Uygulandı</div>
                     <div class="value" style="color:#1d4ed8">{{ number_format($stats['admin_accepted'] ?? 0) }}</div>
                 </div></div>
             </a>
@@ -181,7 +193,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['status' => 'reviewed'])) }}"
                class="aqr-stat-link {{ $cardReviewed ? 'is-active' : '' }}">
                 <div class="card aqr-stat"><div class="card-body">
-                    <div class="label">Kontrol tamamlanan · onay bekleyen</div>
+                    <div class="label">Uygulama bekliyor</div>
                     <div class="value">{{ number_format($stats['reviewed_open'] ?? $stats['reviewed']) }}</div>
                 </div></div>
             </a>
@@ -208,8 +220,11 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['status' => 'failed'])) }}"
                class="aqr-stat-link {{ $cardFailed ? 'is-active' : '' }}">
                 <div class="card aqr-stat"><div class="card-body">
-                    <div class="label">Başarısız · sebepleri gör</div>
-                    <div class="value" style="color:#b91c1c">{{ number_format($stats['failed']) }}</div>
+                    <div class="label">Başarısız soru</div>
+                    <div class="value" style="color:#b91c1c">{{ number_format($stats['questions_failed'] ?? 0) }}</div>
+                    <div class="small text-muted mt-1" style="font-size:.72rem;text-transform:none;letter-spacing:0">
+                        ({{ number_format($stats['failed']) }} deneme)
+                    </div>
                 </div></div>
             </a>
         </div>
@@ -344,6 +359,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                             $laterSuccess = ($laterSuccessByQuestion[(int) $review->id] ?? null);
                             $alreadyApplied = (bool) ($review->question?->ai_accepted
                                 && (int) $review->question?->ai_quality_review_id === (int) $review->id);
+                            $attemptCountByQuestion = $attemptCountByQuestion ?? [];
                         @endphp
                         <tr>
                             <td>
@@ -379,6 +395,8 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                                         @if($review->question)
                                             · {{ $isActiveQ ? 'canlı' : 'pasif' }}
                                         @endif
+                                        @php $qAttempts = (int) ($attemptCountByQuestion[$review->question_id] ?? $attemptNo); @endphp
+                                        · {{ $qAttempts }} deneme
                                     </div>
                                     <div class="txt" title="{{ $qTr }}">{{ \Illuminate\Support\Str::limit($qTr ?: '—', 140) }}</div>
                                 </div>

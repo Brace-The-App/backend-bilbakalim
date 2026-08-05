@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\RewardRequest;
 use App\Models\User;
+use App\Services\FinanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -36,9 +37,16 @@ class RewardRequestController extends Controller
             ], 400);
         }
 
+        $validated = $request->validate([
+            'payout_method' => 'required|in:multinet,papara,havale,parsela,other',
+            'payout_amount' => 'nullable|numeric|min:0|max:999999',
+        ], [
+            'payout_method.required' => 'Ödeme yöntemi seçin.',
+        ]);
+
         $remainingDuelCoins = 0;
 
-        DB::transaction(function () use ($rewardRequest, &$remainingDuelCoins) {
+        DB::transaction(function () use ($rewardRequest, &$remainingDuelCoins, $validated) {
             $rewardRequest->refresh();
             if ($rewardRequest->status !== 'pending') {
                 return;
@@ -51,7 +59,7 @@ class RewardRequestController extends Controller
                 ->first();
 
             $meta = is_array($rewardRequest->metadata) ? $rewardRequest->metadata : [];
-            $claimAmount = (int) config('app.gift_claim_min_coins', 100);
+            $claimAmount = FinanceService::giftClaimMinCoins();
 
             // Eski talepler: claim anında düşüm yoktu — onayda bir kez eşik kadar düş
             if (
@@ -78,6 +86,7 @@ class RewardRequestController extends Controller
             $meta['duel_earned_coins_at_approve'] = $remainingDuelCoins;
             $meta['wallet_coins_at_approve'] = (int) ($user?->coins ?? 0);
             $meta['approved_note'] = 'gift_delivered_without_duel_reset';
+            $meta['payout_method'] = $validated['payout_method'];
 
             $rewardRequest->update([
                 'status' => 'approved',
@@ -86,6 +95,21 @@ class RewardRequestController extends Controller
                 'coins_earned' => $rewardRequest->coins_earned,
                 'metadata' => $meta,
             ]);
+
+            $amountOverride = isset($validated['payout_amount'])
+                ? (float) $validated['payout_amount']
+                : null;
+
+            $ledger = FinanceService::recordGiftPayout(
+                $rewardRequest->fresh(),
+                $validated['payout_method'],
+                $amountOverride,
+                Auth::id()
+            );
+
+            $meta['finance_ledger_id'] = $ledger->id;
+            $meta['finance_payout_try'] = (float) $ledger->amount_try;
+            $rewardRequest->update(['metadata' => $meta]);
         });
 
         return response()->json([
@@ -121,7 +145,7 @@ class RewardRequestController extends Controller
                     && $rewardRequest->user_id
                     && (isset($meta['claimed_amount']) || isset($meta['duel_earned_at_claim_after']))
                 ) {
-                    $refund = (int) ($meta['claimed_amount'] ?? config('app.gift_claim_min_coins', 100));
+                    $refund = (int) ($meta['claimed_amount'] ?? FinanceService::giftClaimMinCoins());
                     if ($refund > 0) {
                         /** @var User|null $user */
                         $user = User::query()
