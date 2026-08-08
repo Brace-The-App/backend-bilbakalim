@@ -7,9 +7,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SupportMessage extends Model
 {
-    /** Şimdilik sadece bu panel kullanıcısı Destek menüsünü görür. */
-    public const ALLOWED_VIEWER_USER_ID = 15;
-
     public const SOURCES = ['landing', 'app', 'web_player'];
 
     public const TYPES = [
@@ -42,16 +39,37 @@ class SupportMessage extends Model
         'ip_address',
         'admin_note',
         'read_at',
+        'email_replied_at',
+        'last_email_reply',
+        'last_email_from',
     ];
 
     protected $casts = [
         'user_id' => 'integer',
         'read_at' => 'datetime',
+        'email_replied_at' => 'datetime',
     ];
 
+    /** Talebin veya bağlı hesabın e-posta adresi */
+    public function recipientEmail(): ?string
+    {
+        $ticketEmail = trim((string) ($this->email ?? ''));
+        if ($ticketEmail !== '' && filter_var($ticketEmail, FILTER_VALIDATE_EMAIL)) {
+            return $ticketEmail;
+        }
+
+        $userEmail = trim((string) ($this->user?->email ?? ''));
+        if ($userEmail !== '' && filter_var($userEmail, FILTER_VALIDATE_EMAIL)) {
+            return $userEmail;
+        }
+
+        return null;
+    }
+
+    /** `view support` izni olan panel kullanıcıları. */
     public static function canAccess(?User $user): bool
     {
-        return $user !== null && (int) $user->id === self::ALLOWED_VIEWER_USER_ID;
+        return $user !== null && $user->can('view support');
     }
 
     public function user(): BelongsTo

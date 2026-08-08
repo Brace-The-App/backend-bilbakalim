@@ -23,39 +23,51 @@ class PermissionController extends Controller
     {
         $roles = Role::with('permissions')->whereNotIn('id', [3])->get();
         $permissions = Permission::orderBy('name')->get();
-        
+
         // Permission'ları kategorilere ayır
         $permissionCategories = [
-            'users' => $permissions->filter(function($permission) {
+            'users' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'user');
             }),
-            'categories' => $permissions->filter(function($permission) {
+            'categories' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'categor');
             }),
-            'questions' => $permissions->filter(function($permission) {
-                return str_contains($permission->name, 'question');
+            'questions' => $permissions->filter(function ($permission) {
+                return str_contains($permission->name, 'question')
+                    && ! str_contains($permission->name, 'question quality');
             }),
-            'tournaments' => $permissions->filter(function($permission) {
+            'question_quality' => $permissions->filter(function ($permission) {
+                return str_contains($permission->name, 'question quality');
+            }),
+            'duel_bot' => $permissions->filter(function ($permission) {
+                return str_contains($permission->name, 'duel bot');
+            }),
+            'support' => $permissions->filter(function ($permission) {
+                return str_contains($permission->name, 'support');
+            }),
+            'tournaments' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'tournament');
             }),
-            'general_settings' => $permissions->filter(function($permission) {
+            'general_settings' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'general setting');
             }),
-            'permissions' => $permissions->filter(function($permission) {
+            'permissions' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'permission');
             }),
-            'notifications' => $permissions->filter(function($permission) {
+            'notifications' => $permissions->filter(function ($permission) {
                 return str_contains($permission->name, 'notification');
             }),
-            'other' => $permissions->filter(function($permission) {
-                return !str_contains($permission->name, 'user') && 
-                       !str_contains($permission->name, 'categor') && 
-                       !str_contains($permission->name, 'question') && 
-                       !str_contains($permission->name, 'tournament') && 
-                       !str_contains($permission->name, 'general setting') && 
-                       !str_contains($permission->name, 'permission') && 
-                       !str_contains($permission->name, 'notification');
-            })
+            'other' => $permissions->filter(function ($permission) {
+                return ! str_contains($permission->name, 'user')
+                    && ! str_contains($permission->name, 'categor')
+                    && ! str_contains($permission->name, 'question')
+                    && ! str_contains($permission->name, 'duel bot')
+                    && ! str_contains($permission->name, 'support')
+                    && ! str_contains($permission->name, 'tournament')
+                    && ! str_contains($permission->name, 'general setting')
+                    && ! str_contains($permission->name, 'permission')
+                    && ! str_contains($permission->name, 'notification');
+            }),
         ];
 
         return view('admin.permissions.index', compact('roles', 'permissionCategories'));
@@ -80,9 +92,9 @@ class PermissionController extends Controller
             // Permission ID'lerini al
             $permissionIds = $validated['permissions'] ?? [];
             $permissions = Permission::whereIn('id', $permissionIds)->get();
-            
+
             Log::info('Found permissions', ['permissions' => $permissions->pluck('name')->toArray()]);
-            
+
             $role->syncPermissions($permissions);
 
             Log::info('Permissions synced successfully', [

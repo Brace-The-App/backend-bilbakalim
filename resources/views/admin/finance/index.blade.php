@@ -106,44 +106,83 @@
 }
 .fin-pager span.is-on { background:#0f172a; color:#fff; border-color:#0f172a; }
 .fin-pager span.is-disabled { opacity:.4; }
+.fin-track { display:grid; grid-template-columns: 1fr 1fr; gap:.75rem; margin-bottom:1rem; }
+@media (max-width: 768px) { .fin-track { grid-template-columns: 1fr; } }
+.fin-track .box {
+    background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:1rem 1.1rem;
+}
+.fin-track .box h5 { font-size:.9rem; font-weight:650; margin:0 0 .15rem; }
+.fin-track .tag {
+    display:inline-block; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+    padding:.15rem .45rem; border-radius:999px; margin-bottom:.55rem;
+}
+.fin-track .tag-auto { background:#ecfdf5; color:#047857; }
+.fin-track .tag-man { background:#eff6ff; color:#1d4ed8; }
+.fin-rates {
+    display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;
+}
+.fin-rates .chip {
+    background:#fff; border:1px solid #e2e8f0; border-radius:999px; padding:.35rem .75rem;
+    font-size:.78rem; color:#334155; font-weight:600;
+}
+.fin-rates .chip strong { color:#0f172a; }
 </style>
 @endpush
 
 @section('content')
+@if(session('success'))
+    <div class="alert alert-success py-2">{{ session('success') }}</div>
+@endif
+@if(session('error'))
+    <div class="alert alert-danger py-2">{{ session('error') }}</div>
+@endif
 @php
     $s = $summary;
     $fmt = fn ($n) => number_format((float) $n, 2, ',', '.') . ' ₺';
     $range = $range ?? 'all';
-    $storePct = (float) ($s['active_rate']->store_fee_pct ?? 40);
+    $storePct = (float) ($s['rates']['store_fee_pct'] ?? $s['active_rate']->store_fee_pct ?? 40);
     $taxPct = (float) ($s['income_tax_pct'] ?? 25);
+    $kdvPct = (float) ($s['rates']['kdv_pct'] ?? 0);
+    $tracks = $s['tracks'] ?? [];
     $agreedFrom = $agreedFrom ?? $from;
     $typeLabels = ['coin' => 'Jeton', 'premium' => 'Premium', 'joker' => 'Joker', 'diamond' => 'Elmas', 'other' => 'Diğer'];
 @endphp
 <div class="fin-wrap">
     <div class="fin-hero d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
-            <h3>Finans</h3>
-            <p>Nakit bazlı gelir / gider · {{ tr_time($from, 'd.m.Y') }} – {{ tr_time($to, 'd.m.Y') }}
-                · {{ (int) ($s['iap']['count'] ?? 0) }} paket satışı</p>
+            <h3>Finans · TL (nakit)</h3>
+            <p>Gelir / gider takibi · {{ tr_time($from, 'd.m.Y') }} – {{ tr_time($to, 'd.m.Y') }}
+                · {{ (int) ($s['iap']['count'] ?? 0) }} paket satışı
+                · sistematik + manuel</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <form method="post" action="{{ route('admin.finance.start-from-today') }}"
-                  onsubmit="return confirm('Finans özeti bugün 00:00\'dan itibaren mi başlasın? Oranlar korunur, önceki dönem dün kapanır.');">
-                @csrf
-                <button type="submit" class="fin-link" style="cursor:pointer;background:rgba(255,255,255,.12)">Kararlaştırılan tarihi bugün yap</button>
-            </form>
+            <a href="{{ route('admin.finance.export', ['type' => 'pnl', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">P&L CSV</a>
+            <a href="{{ route('admin.finance.export', ['type' => 'ledger', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">Ledger CSV</a>
+            <a href="{{ route('admin.finance.coin.index') }}" class="fin-link">Coin finans</a>
             <a href="{{ route('admin.finance.settings') }}" class="fin-link">Oranlar &amp; kategoriler</a>
         </div>
     </div>
 
+    <div class="fin-rates">
+        <span class="chip">Store <strong>%{{ number_format($storePct, 0) }}</strong> · her IAP satışında</span>
+        <span class="chip">GV <strong>%{{ number_format($taxPct, 1, ',', '.') }}</strong> · vergi tabanı {{ $fmt($s['tax_base'] ?? 0) }}</span>
+        <span class="chip">KDV dönem <strong>%{{ number_format($kdvPct, 1, ',', '.') }}</strong>
+            · {{ !empty($s['rates']['kdv_to_pl']) ? 'P&L’ye yazılıyor' : 'sadece ref' }}
+            @if($kdvPct > 0)
+                · {{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}
+            @endif
+        </span>
+        <span class="chip">Fatura KDV <strong>{{ $fmt($s['kdv_invoice'] ?? 0) }}</strong> · manuel</span>
+    </div>
     <div class="fin-entry">
         <div class="fin-entry-tabs" id="finTabs">
             <button type="button" class="is-on" data-tab="manual">Gider ekle</button>
+            <button type="button" data-tab="other_income">Gelir ekle</button>
             <button type="button" data-tab="ad_revenue">Reklam geliri</button>
             <button type="button" data-tab="kdv">KDV (fatura)</button>
         </div>
         <p class="fin-entry-hint" id="finEntryHint">
-            Ödül / hediye burada yok — talep onaylanınca otomatik gider yazılır. Buradan reklam bütçesi, sunucu, ofis vb. manuel gider girin.
+            Sistematik: IAP (store düşülür), ödül onayı, GV otomatik. Buradan manuel gider / gelir / reklam / fatura KDV girin.
         </p>
         <form method="post" action="{{ route('admin.finance.entries.store') }}" id="finEntryForm">
             @csrf
@@ -152,7 +191,7 @@
             <input type="hidden" name="range" value="{{ $range }}">
             <input type="hidden" name="source" id="finSource" value="manual">
             <input type="hidden" name="direction" id="finDirection" value="expense">
-            <div class="fin-entry-grid">
+            <div class="fin-entry-grid" id="finEntryGrid">
                 <div id="finCatWrap">
                     <label>Kategori</label>
                     <select name="category_id" class="form-select form-select-sm">
@@ -165,14 +204,43 @@
                     <label>Tarih</label>
                     <input type="date" name="entry_date" class="form-control form-control-sm" value="{{ now()->toDateString() }}" required>
                 </div>
-                <div>
+                <div id="finModeWrap">
+                    <label>Giriş tipi</label>
+                    <select name="amount_mode" id="finAmountMode" class="form-select form-select-sm">
+                        <option value="fixed" selected>Tutar (₺)</option>
+                        <option value="percent">Yüzde (%)</option>
+                    </select>
+                </div>
+                <div id="finFixedWrap">
                     <label>Tutar (₺)</label>
-                    <input type="text" inputmode="decimal" name="amount_try" class="form-control form-control-sm"
-                           data-fin-num="money" data-fin-suffix="₺" required placeholder="0,00">
+                    <input type="text" inputmode="decimal" name="amount_try" id="finAmountTry" class="form-control form-control-sm"
+                           data-fin-num="money" data-fin-suffix="₺" placeholder="0,00">
+                </div>
+                <div id="finBaseWrap" style="display:none">
+                    <label>Matrah / baz (₺)</label>
+                    <input type="text" inputmode="decimal" name="base_amount_try" id="finBaseAmount" class="form-control form-control-sm"
+                           data-fin-num="money" data-fin-suffix="₺" placeholder="0,00">
+                </div>
+                <div id="finPctWrap" style="display:none">
+                    <label>Yüzde (%)</label>
+                    <input type="text" inputmode="decimal" name="percent" id="finPercent" class="form-control form-control-sm"
+                           data-fin-num="pct" data-fin-suffix="%" placeholder="20"
+                           value="{{ ($defaultKdvPct ?? 0) > 0 ? rtrim(rtrim(number_format($defaultKdvPct, 2, ',', ''), '0'), ',') : '' }}">
+                </div>
+                <div id="finPreviewWrap" style="display:none">
+                    <label>Hesaplanan</label>
+                    <div class="form-control form-control-sm bg-light" id="finAmountPreview" style="font-weight:600">0,00 ₺</div>
                 </div>
                 <div class="fin-span2">
                     <label>Açıklama</label>
                     <input type="text" name="label" class="form-control form-control-sm" maxlength="200" placeholder="örn. Meta reklam / Multinet yükleme">
+                </div>
+                <div id="finTaxWrap" style="display:none">
+                    <label id="finTaxLabel">Vergi durumu</label>
+                    <select name="counts_for_tax" id="finTaxMode" class="form-select form-select-sm">
+                        <option value="0" id="finTaxOpt0">Net — GV hesabına katma</option>
+                        <option value="1" id="finTaxOpt1">Brüt — vergi tabanına dahil</option>
+                    </select>
                 </div>
                 <div>
                     <label>&nbsp;</label>
@@ -182,6 +250,9 @@
             <div class="mt-2">
                 <input type="text" name="note" class="form-control form-control-sm" maxlength="2000" placeholder="Not (opsiyonel)">
             </div>
+            <p class="fin-entry-hint mt-2 mb-0" id="finTaxHint" style="display:none">
+                GV satırdan kesilmez; dönem vergi tabanına göre hesaplanır. Net seçerseniz tutar gelire yazar ama GV’ye girmez.
+            </p>
         </form>
     </div>
 
@@ -210,7 +281,7 @@
             <div>
                 <div class="k">Gelir (net)</div>
                 <div class="v fin-pos">{{ $fmt($s['income_total']) }}</div>
-                <div class="s">Uygulama içi satış − mağaza payı + reklam</div>
+                <div class="s">IAP net + reklam + diğer manuel gelir</div>
             </div>
             <div class="hint">Detay için tıkla</div>
         </button>
@@ -218,7 +289,7 @@
             <div>
                 <div class="k">Gider</div>
                 <div class="v fin-neg">{{ $fmt($s['expense_total']) }}</div>
-                <div class="s">Ödül {{ $fmt($s['gift']['total']) }} + manuel {{ $fmt($s['manual_expense']) }}</div>
+                <div class="s">Ödül {{ $fmt($tracks['auto_expense'] ?? $s['gift']['total']) }} + manuel {{ $fmt($tracks['manual_expense'] ?? 0) }} + KDV {{ $fmt($tracks['kdv_expense'] ?? 0) }}</div>
             </div>
             <div class="hint">Detay için tıkla</div>
         </button>
@@ -234,7 +305,7 @@
             <div>
                 <div class="k">Dip kar</div>
                 <div class="v {{ $s['final_profit'] >= 0 ? 'fin-pos' : 'fin-neg' }}">{{ $fmt($s['final_profit']) }}</div>
-                <div class="s">Gelir vergisi %{{ rtrim(rtrim(number_format($taxPct, 2, '.', ''), '0'), '.') }} (−{{ $fmt($s['income_tax']) }})</div>
+                <div class="s">Vergi tabanı {{ $fmt($s['tax_base'] ?? 0) }} · %{{ rtrim(rtrim(number_format($taxPct, 2, '.', ''), '0'), '.') }} (−{{ $fmt($s['income_tax']) }})</div>
             </div>
             <div class="hint">Detay için tıkla</div>
         </button>
@@ -251,13 +322,21 @@
             <span>Uygulama içi satış (net)<span class="fin-sub">Mağaza payı düşülmüş</span></span>
             <span class="amt fin-pos">{{ $fmt($s['iap']['net']) }}</span>
         </div>
+        @if(($s['iap']['refund_count'] ?? 0) > 0 || ($s['iap']['refund_net'] ?? 0) > 0)
+            <div class="fin-row"><span>IAP iade ({{ (int) $s['iap']['refund_count'] }}) brüt</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_gross']) }}</span></div>
+            <div class="fin-row"><span>IAP iade net</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_net']) }}</span></div>
+            <div class="fin-row"><span>IAP net (iade sonrası)</span><span class="amt fin-pos">{{ $fmt($s['iap']['net_after_refunds']) }}</span></div>
+        @else
+            <div class="fin-row"><span class="fin-muted">IAP iade</span><span class="amt fin-muted">0 (refunded_at / status=refunded)</span></div>
+        @endif
         <div class="fin-row"><span>Reklam geliri (manuel)</span><span class="amt fin-pos">{{ $fmt($s['ad_revenue']) }}</span></div>
+        <div class="fin-row"><span>Diğer gelir (manuel)</span><span class="amt fin-pos">{{ $fmt($s['other_income'] ?? 0) }}</span></div>
         <div class="fin-row"><strong>Toplam gelir</strong><strong class="amt fin-pos">{{ $fmt($s['income_total']) }}</strong></div>
-        <div class="formula">Formül: (uygulama içi brüt × (1 − mağaza%/100)) + reklam geliri. Her satış kendi tarihindeki oran dönemiyle hesaplanır.</div>
+        <div class="formula">Formül: IAP net + reklam + diğer manuel gelir. Her IAP satışı kendi tarihindeki store oranıyla netlenir.</div>
     </div>
     <div id="finDetailExpense" class="fin-detail" data-panel="expense">
         <h5>Gider nasıl hesaplanır?</h5>
-        <div class="fin-row"><span>Ödül talepleri ({{ $s['gift']['count'] }}) — otomatik</span><span class="amt fin-neg">−{{ $fmt($s['gift']['total']) }}</span></div>
+        <div class="fin-row"><span>Ödül talepleri ({{ $s['gift']['count'] }}) — sistematik</span><span class="amt fin-neg">−{{ $fmt($s['gift']['total']) }}</span></div>
         @foreach($s['gift']['by_method'] as $method => $amt)
             <div class="fin-row">
                 <span class="fin-muted">· {{ \App\Models\FinanceLedgerEntry::PAYOUT_METHODS[$method] ?? $method }}</span>
@@ -265,13 +344,14 @@
             </div>
         @endforeach
         @foreach($s['manual_by_category'] as $row)
-            <div class="fin-row"><span>{{ $row['category'] }}</span><span class="amt fin-neg">−{{ $fmt($row['total']) }}</span></div>
+            <div class="fin-row"><span>{{ $row['category'] }} — manuel</span><span class="amt fin-neg">−{{ $fmt($row['total']) }}</span></div>
         @endforeach
-        @if(empty($s['manual_by_category']))
-            <div class="fin-row"><span class="fin-muted">Manuel gider</span><span class="amt">{{ $fmt($s['manual_expense']) }}</span></div>
+        <div class="fin-row"><span>Fatura KDV — manuel</span><span class="amt fin-neg">−{{ $fmt($s['kdv_invoice'] ?? 0) }}</span></div>
+        @if(($s['kdv_pl_expense'] ?? 0) > 0)
+            <div class="fin-row"><span>Dönem KDV (P&L)</span><span class="amt fin-neg">−{{ $fmt($s['kdv_pl_expense']) }}</span></div>
         @endif
         <div class="fin-row"><strong>Toplam gider</strong><strong class="amt fin-neg">−{{ $fmt($s['expense_total']) }}</strong></div>
-        <div class="formula">Ödül: talep onayında ledger’a yazılır (buradan tekrar girilmez). Manuel: üst formdan eklenen gider + KDV.</div>
+        <div class="formula">Ödül otomatik. Manuel giderde “vergiye dahil” seçilebilir. Dönem KDV% ayarda P&L’ye yaz seçiliyse giderleşir. İade: payments.status=refunded / refunded_at.</div>
     </div>
     <div id="finDetailPretax" class="fin-detail" data-panel="pretax">
         <h5>Vergi öncesi</h5>
@@ -282,10 +362,39 @@
     </div>
     <div id="finDetailFinal" class="fin-detail" data-panel="final">
         <h5>Dip kar</h5>
-        <div class="fin-row"><span>Vergi öncesi</span><span class="amt">{{ $fmt($s['pre_tax_profit']) }}</span></div>
+        <div class="fin-row"><span>Nakit vergi öncesi (tüm gelir − gider)</span><span class="amt">{{ $fmt($s['pre_tax_profit']) }}</span></div>
+        <div class="fin-row"><span>Vergiye dahil manuel gelir</span><span class="amt">{{ $fmt($s['taxable_manual_income'] ?? 0) }}</span></div>
+        <div class="fin-row"><span>Net / GV dışı manuel gelir</span><span class="amt fin-muted">{{ $fmt($s['nontaxable_manual_income'] ?? 0) }}</span></div>
+        <div class="fin-row"><span>Vergi tabanı</span><span class="amt">{{ $fmt($s['tax_base'] ?? 0) }}</span></div>
         <div class="fin-row"><span>Gelir vergisi (%{{ number_format($taxPct, 1, ',', '.') }})</span><span class="amt fin-neg">−{{ $fmt($s['income_tax']) }}</span></div>
         <div class="fin-row"><strong>Dip kar</strong><strong class="amt {{ $s['final_profit'] >= 0 ? 'fin-pos' : 'fin-neg' }}">{{ $fmt($s['final_profit']) }}</strong></div>
-        <div class="formula">max(0, vergi öncesi) × GV% = vergi. Dip kar = vergi öncesi − vergi. KDV otomatik 0; fatura KDV’si ayrıca gider.</div>
+        <div class="formula">GV satırdan düşülmez. Taban = IAP net + brüt işaretli manuel gelir − giderler. Net işaretli gelir nakit özetine girer, GV’ye girmez.</div>
+    </div>
+
+    <div class="fin-track">
+        <div class="box">
+            <span class="tag tag-auto">Sistematik</span>
+            <h5>Otomatik hesaplanan</h5>
+            <div class="fin-row"><span>IAP net (store %{{ number_format($storePct, 0) }} düşülmüş)</span><span class="amt fin-pos">{{ $fmt($tracks['auto_income'] ?? $s['iap']['net']) }}</span></div>
+            <div class="fin-row"><span>Ödül talepleri ({{ $s['gift']['count'] }})</span><span class="amt fin-neg">−{{ $fmt($tracks['auto_expense'] ?? $s['gift']['total']) }}</span></div>
+            <div class="fin-row"><span>Gelir vergisi (%{{ number_format($taxPct, 1, ',', '.') }} · taban {{ $fmt($s['tax_base'] ?? 0) }})</span><span class="amt fin-neg">−{{ $fmt($s['income_tax']) }}</span></div>
+            <div class="fin-row"><span class="fin-muted">Mağaza kesintisi (bilgi)</span><span class="amt fin-muted">−{{ $fmt($s['iap']['fee']) }}</span></div>
+            @if($kdvPct > 0)
+                <div class="fin-row"><span class="fin-muted">KDV ref. IAP × %{{ number_format($kdvPct, 1, ',', '.') }}</span><span class="amt fin-muted">{{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}</span></div>
+            @endif
+        </div>
+        <div class="box">
+            <span class="tag tag-man">Manuel</span>
+            <h5>Sizin girdiğiniz</h5>
+            <div class="fin-row"><span>Reklam geliri</span><span class="amt fin-pos">{{ $fmt($tracks['ad_revenue'] ?? $s['ad_revenue']) }}</span></div>
+            <div class="fin-row"><span>Diğer gelir</span><span class="amt fin-pos">{{ $fmt($tracks['other_income'] ?? 0) }}</span></div>
+            <div class="fin-row"><span>Giderler (kategori)</span><span class="amt fin-neg">−{{ $fmt($tracks['manual_expense'] ?? 0) }}</span></div>
+            <div class="fin-row"><span>Fatura KDV</span><span class="amt fin-neg">−{{ $fmt($tracks['kdv_expense'] ?? 0) }}</span></div>
+            @forelse(($s['manual_by_category'] ?? []) as $row)
+                <div class="fin-row"><span class="fin-muted">· {{ $row['category'] }}</span><span class="amt">{{ $fmt($row['total']) }}</span></div>
+            @empty
+            @endforelse
+        </div>
     </div>
 
     <div class="fin-pack">
@@ -381,10 +490,12 @@
                     <div class="fin-row"><span>Mağaza kesintisi (%{{ number_format($storePct, 0) }})</span><span class="amt fin-neg">−{{ $fmt($s['iap']['fee']) }}</span></div>
                     <div class="fin-row"><span>Uygulama içi satış (net)</span><span class="amt fin-pos">{{ $fmt($s['iap']['net']) }}</span></div>
                     <div class="fin-row"><span>Reklam geliri</span><span class="amt fin-pos">{{ $fmt($s['ad_revenue']) }}</span></div>
+                    <div class="fin-row"><span>Diğer gelir</span><span class="amt fin-pos">{{ $fmt($s['other_income'] ?? 0) }}</span></div>
                     <div class="fin-row"><strong>Toplam gelir</strong><strong class="amt fin-pos">{{ $fmt($s['income_total']) }}</strong></div>
                     <hr class="my-2">
-                    <div class="fin-row"><span>Ödül ({{ $s['gift']['count'] }})</span><span class="amt fin-neg">−{{ $fmt($s['gift']['total']) }}</span></div>
-                    <div class="fin-row"><span>Manuel gider</span><span class="amt fin-neg">−{{ $fmt($s['manual_expense']) }}</span></div>
+                    <div class="fin-row"><span>Ödül ({{ $s['gift']['count'] }}) — sistematik</span><span class="amt fin-neg">−{{ $fmt($s['gift']['total']) }}</span></div>
+                    <div class="fin-row"><span>Manuel gider</span><span class="amt fin-neg">−{{ $fmt($s['manual_other_expense'] ?? 0) }}</span></div>
+                    <div class="fin-row"><span>Fatura KDV</span><span class="amt fin-neg">−{{ $fmt($s['kdv_invoice'] ?? 0) }}</span></div>
                     <div class="fin-row"><strong>Toplam gider</strong><strong class="amt fin-neg">−{{ $fmt($s['expense_total']) }}</strong></div>
                 </div>
             </div>
@@ -392,8 +503,13 @@
     </div>
 
     <div class="fin-info mb-3">
-        Düello kesinti (bilgi): <strong>{{ number_format($s['duel_commission_info']['coins']) }} coin</strong>
-        ≈ {{ $fmt($s['duel_commission_info']['try_equiv']) }} — nakit P&L dışı.
+        <strong>Store</strong> = mağaza komisyonu (IAP’de otomatik).
+        <strong>GV</strong> = dönem kârı üzerinden otomatik.
+        <strong>Dönem KDV%</strong> = referans (IAP brüt × %{{ number_format($kdvPct, 1, ',', '.') }}
+        @if($kdvPct > 0) → {{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}@endif);
+        P&L’ye yazılmaz.
+        <strong>Fatura KDV</strong> = manuel tek kayıtlı gider.
+        Düello kesinti (bilgi): {{ number_format($s['duel_commission_info']['coins']) }} coin ≈ {{ $fmt($s['duel_commission_info']['try_equiv']) }}.
     </div>
 
     <div class="row g-3">
@@ -464,7 +580,7 @@
         </div>
         <div class="col-xl-4">
             <div class="fin-card">
-                <div class="hd">Manuel hareketler</div>
+                <div class="hd">Manuel hareketler (gider / gelir / reklam / KDV)</div>
                 <div class="bd p-0">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle mb-0">
@@ -479,12 +595,33 @@
                                                 <span class="badge bg-danger">Gider</span>
                                             @endif
                                             {{ $e->label ?: ($e->category?->name ?: $e->source) }}
+                                            @if($e->direction === 'income')
+                                                @php
+                                                    $meta = is_array($e->meta) ? $e->meta : [];
+                                                    $taxOn = array_key_exists('counts_for_tax', $meta) ? (bool) $meta['counts_for_tax'] : true;
+                                                @endphp
+                                                <span class="badge {{ $taxOn ? 'bg-warning text-dark' : 'bg-light text-muted' }}" style="font-size:.65rem">{{ $taxOn ? 'brüt/GV' : 'net' }}</span>
+                                            @endif
                                         </td>
                                         <td class="text-end small text-nowrap {{ $e->direction === 'income' ? 'fin-pos' : 'fin-neg' }}">
                                             {{ $e->direction === 'income' ? '+' : '−' }}{{ $fmt($e->amount_try) }}
                                         </td>
-                                        <td class="text-end">
-                                            <form method="post" action="{{ route('admin.finance.entries.destroy', $e->id) }}" onsubmit="return confirm('Silinsin mi?');">
+                                        <td class="text-end text-nowrap">
+                                            @php
+                                                $em = is_array($e->meta) ? $e->meta : [];
+                                                $eTax = array_key_exists('counts_for_tax', $em) ? (bool) $em['counts_for_tax'] : ($e->direction === 'income' ? false : true);
+                                            @endphp
+                                            <button type="button" class="btn btn-sm btn-link p-0 me-1 btn-edit-entry"
+                                                    data-bs-toggle="modal" data-bs-target="#finEntryEditModal"
+                                                    data-id="{{ $e->id }}"
+                                                    data-date="{{ $e->entry_date?->toDateString() }}"
+                                                    data-amount="{{ number_format((float)$e->amount_try, 2, ',', '.') }}"
+                                                    data-label="{{ $e->label }}"
+                                                    data-note="{{ $e->note }}"
+                                                    data-category="{{ $e->category_id }}"
+                                                    data-source="{{ $e->source }}"
+                                                    data-tax="{{ $eTax ? '1' : '0' }}">Düzenle</button>
+                                            <form method="post" action="{{ route('admin.finance.entries.destroy', $e->id) }}" class="d-inline" onsubmit="return confirm('Silinsin mi?');">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button class="btn btn-sm btn-link text-danger p-0" type="submit">Sil</button>
@@ -502,11 +639,93 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="finEntryEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px">
+            <form method="post" id="finEntryEditForm">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="from" value="{{ $from->toDateString() }}">
+                <input type="hidden" name="to" value="{{ $to->toDateString() }}">
+                <input type="hidden" name="range" value="{{ $range }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Kayıt düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small">Tarih</label>
+                            <input type="date" name="entry_date" id="editEntryDate" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Tutar (₺)</label>
+                            <input type="text" name="amount_try" id="editEntryAmount" class="form-control form-control-sm" data-fin-num="money" data-fin-suffix="₺" required>
+                        </div>
+                        <div class="col-12" id="editEntryCatWrap">
+                            <label class="form-label small">Kategori</label>
+                            <select name="category_id" id="editEntryCat" class="form-select form-select-sm">
+                                @foreach($categories as $c)
+                                    <option value="{{ $c->id }}">{{ $c->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Vergi</label>
+                            <select name="counts_for_tax" id="editEntryTax" class="form-select form-select-sm">
+                                <option value="0">Net / vergi dışı</option>
+                                <option value="1">Brüt / vergiye dahil</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Açıklama</label>
+                            <input type="text" name="label" id="editEntryLabel" class="form-control form-control-sm" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Not</label>
+                            <input type="text" name="note" id="editEntryNote" class="form-control form-control-sm" maxlength="2000">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 @include('admin.finance._number-format')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var editModal = document.getElementById('finEntryEditModal');
+    var editForm = document.getElementById('finEntryEditForm');
+    if (editModal && editForm) {
+        var updateTpl = @json(url('admin/finance/entries/__ID__'));
+        editModal.addEventListener('show.bs.modal', function (ev) {
+            var btn = ev.relatedTarget;
+            if (!btn || !btn.classList.contains('btn-edit-entry')) return;
+            editForm.action = updateTpl.replace('__ID__', btn.getAttribute('data-id'));
+            document.getElementById('editEntryDate').value = btn.getAttribute('data-date') || '';
+            document.getElementById('editEntryAmount').value = btn.getAttribute('data-amount') || '';
+            document.getElementById('editEntryLabel').value = btn.getAttribute('data-label') || '';
+            document.getElementById('editEntryNote').value = btn.getAttribute('data-note') || '';
+            document.getElementById('editEntryTax').value = btn.getAttribute('data-tax') || '0';
+            var src = btn.getAttribute('data-source');
+            var catWrap = document.getElementById('editEntryCatWrap');
+            if (catWrap) catWrap.style.display = src === 'manual' ? '' : 'none';
+            var cat = document.getElementById('editEntryCat');
+            if (cat && btn.getAttribute('data-category')) cat.value = btn.getAttribute('data-category');
+            if (window.FinNumber) window.FinNumber.init(editModal);
+        });
+    }
+})();
+</script>
 <script>
 (function () {
     if (location.hash === '#fin-sales') {
@@ -524,36 +743,139 @@
     var btn = document.getElementById('finSubmitBtn');
     var hint = document.getElementById('finEntryHint');
     var tabs = document.querySelectorAll('#finTabs button');
+    var modeSel = document.getElementById('finAmountMode');
+    var modeWrap = document.getElementById('finModeWrap');
+    var fixedWrap = document.getElementById('finFixedWrap');
+    var baseWrap = document.getElementById('finBaseWrap');
+    var pctWrap = document.getElementById('finPctWrap');
+    var previewWrap = document.getElementById('finPreviewWrap');
+    var amountTry = document.getElementById('finAmountTry');
+    var baseAmount = document.getElementById('finBaseAmount');
+    var percentInp = document.getElementById('finPercent');
+    var previewEl = document.getElementById('finAmountPreview');
+    var defaultKdvPct = {{ json_encode((float) ($defaultKdvPct ?? 0)) }};
+    var taxWrap = document.getElementById('finTaxWrap');
+    var taxHint = document.getElementById('finTaxHint');
+    var taxMode = document.getElementById('finTaxMode');
+    var taxLabel = document.getElementById('finTaxLabel');
+    var taxOpt0 = document.getElementById('finTaxOpt0');
+    var taxOpt1 = document.getElementById('finTaxOpt1');
     var hints = {
-        manual: 'Ödül / hediye burada yok — talep onaylanınca otomatik gider yazılır. Buradan reklam bütçesi, sunucu, ofis vb. manuel gider girin.',
-        ad_revenue: 'Mağaza / reklam ağından gelen nakit geliri elle girin (uygulama içi satışlar otomatik gelir).',
-        kdv: 'Faturadaki KDV tutarını gider olarak kaydedin (otomatik KDV hesaplanmaz).'
+        manual: 'Manuel gider. Varsayılan vergiye dahil (indirilebilir). Kilitli aya yazılamaz.',
+        other_income: 'Manuel gelir. Varsayılan Net = GV’ye katılmaz. Brüt = vergi tabanına dahil.',
+        ad_revenue: 'Reklam geliri. Net/Brüt seçin.',
+        kdv: 'Fatura KDV. Vergiye dahil seçilebilir. Dönem KDV% ayarda ref veya P&L.'
     };
+    function setTaxOptions(kind) {
+        if (!taxOpt0 || !taxOpt1) return;
+        if (kind === 'income') {
+            if (taxLabel) taxLabel.textContent = 'Vergi durumu';
+            taxOpt0.textContent = 'Net — GV hesabına katma';
+            taxOpt1.textContent = 'Brüt — vergi tabanına dahil';
+            if (taxMode) taxMode.value = '0';
+        } else {
+            if (taxLabel) taxLabel.textContent = 'Vergi indirimi';
+            taxOpt0.textContent = 'Vergi dışı (matrahtan düşme)';
+            taxOpt1.textContent = 'Vergiye dahil (indirilebilir)';
+            if (taxMode) taxMode.value = '1';
+        }
+    }
+
+    function parseLocalNum(raw) {
+        if (window.finParseNumber) return window.finParseNumber(raw);
+        var s = String(raw || '').trim().replace(/[\s\u00a0]/g, '').replace(/%/g, '');
+        if (!s) return NaN;
+        if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+        var n = parseFloat(s.replace(/[^0-9.\-]/g, ''));
+        return isFinite(n) ? n : NaN;
+    }
+
+    function fmtMoney(n) {
+        if (!isFinite(n)) return '0,00 ₺';
+        return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+    }
+
+    function syncAmountMode() {
+        var isPct = modeSel && modeSel.value === 'percent';
+        if (fixedWrap) fixedWrap.style.display = isPct ? 'none' : '';
+        if (baseWrap) baseWrap.style.display = isPct ? '' : 'none';
+        if (pctWrap) pctWrap.style.display = isPct ? '' : 'none';
+        if (previewWrap) previewWrap.style.display = isPct ? '' : 'none';
+        if (amountTry) amountTry.required = !isPct;
+        if (baseAmount) baseAmount.required = !!isPct;
+        if (percentInp) percentInp.required = !!isPct;
+        updatePctPreview();
+    }
+
+    function updatePctPreview() {
+        if (!previewEl) return;
+        var base = parseLocalNum(baseAmount && baseAmount.value);
+        var pct = parseLocalNum(percentInp && percentInp.value);
+        var calc = (isFinite(base) && isFinite(pct)) ? (base * pct / 100) : 0;
+        previewEl.textContent = fmtMoney(calc);
+        if (amountTry && modeSel && modeSel.value === 'percent') {
+            amountTry.value = isFinite(calc) ? calc.toFixed(2).replace('.', ',') : '';
+        }
+    }
+
+    if (modeSel) {
+        modeSel.addEventListener('change', syncAmountMode);
+    }
+    [baseAmount, percentInp].forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('input', updatePctPreview);
+        el.addEventListener('blur', updatePctPreview);
+    });
 
     function applyTab(tab) {
         tabs.forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-tab') === tab); });
         if (!src || !dir) return;
         src.value = tab;
         if (hint) hint.textContent = hints[tab] || '';
-        if (tab === 'ad_revenue') {
+        if (tab === 'ad_revenue' || tab === 'other_income') {
             dir.value = 'income';
             if (cat) cat.style.display = 'none';
-            if (btn) btn.textContent = 'Gelir kaydet';
+            if (modeWrap) modeWrap.style.display = tab === 'other_income' ? '' : 'none';
+            if (tab === 'ad_revenue' && modeSel) modeSel.value = 'fixed';
+            if (taxWrap) taxWrap.style.display = '';
+            if (taxHint) taxHint.style.display = '';
+            setTaxOptions('income');
+            if (btn) btn.textContent = tab === 'ad_revenue' ? 'Reklam geliri kaydet' : 'Gelir kaydet';
         } else if (tab === 'kdv') {
             dir.value = 'expense';
             if (cat) cat.style.display = 'none';
+            if (modeWrap) modeWrap.style.display = '';
+            if (taxWrap) taxWrap.style.display = '';
+            if (taxHint) taxHint.style.display = '';
+            setTaxOptions('expense');
+            if (percentInp && defaultKdvPct > 0 && (!percentInp.value || parseLocalNum(percentInp.value) === 0)) {
+                percentInp.value = String(defaultKdvPct).replace('.', ',');
+            }
             if (btn) btn.textContent = 'KDV kaydet';
         } else {
             dir.value = 'expense';
             if (cat) cat.style.display = '';
+            if (modeWrap) modeWrap.style.display = '';
+            if (taxWrap) taxWrap.style.display = '';
+            if (taxHint) taxHint.style.display = '';
+            setTaxOptions('expense');
             if (btn) btn.textContent = 'Gider kaydet';
         }
+        syncAmountMode();
     }
     tabs.forEach(function (b) {
         b.addEventListener('click', function () { applyTab(b.getAttribute('data-tab')); });
     });
     applyTab('manual');
 
+    var form = document.getElementById('finEntryForm');
+    if (form) {
+        form.addEventListener('submit', function () {
+            if (modeSel && modeSel.value === 'percent') {
+                updatePctPreview();
+            }
+        });
+    }
     function closeAllDetails() {
         document.querySelectorAll('.fin-detail').forEach(function (el) { el.classList.remove('is-on'); });
         document.querySelectorAll('.fin-kpi, .fin-pack .item').forEach(function (el) { el.classList.remove('is-open'); });
@@ -670,16 +992,17 @@
         new Chart(barCtx, {
             type: 'bar',
             data: {
-                labels: ['Uyg. içi net', 'Reklam', 'Ödül', 'Manuel'],
+                labels: ['Uyg. içi net', 'Reklam', 'Diğer gelir', 'Ödül', 'Manuel'],
                 datasets: [{
                     label: '₺',
                     data: [
                         {{ (float) ($s['iap']['net'] ?? 0) }},
                         {{ (float) ($s['ad_revenue'] ?? 0) }},
+                        {{ (float) ($s['other_income'] ?? 0) }},
                         {{ (float) ($s['gift']['total'] ?? 0) }},
                         {{ (float) ($s['manual_expense'] ?? 0) }}
                     ],
-                    backgroundColor: ['#15803d', '#0f766e', '#b91c1c', '#ea580c'],
+                    backgroundColor: ['#15803d', '#0f766e', '#0369a1', '#b91c1c', '#ea580c'],
                     borderRadius: 6,
                     maxBarThickness: 42
                 }]

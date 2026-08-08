@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\DuelBotController;
 use App\Http\Controllers\Admin\QuestionQualityReviewController;
 use App\Http\Controllers\Admin\SupportMessageController;
 use App\Http\Controllers\Admin\FinanceController;
+use App\Http\Controllers\Admin\FinanceCoinController;
 
 // Welcome page
 Route::get('/', function () {
@@ -123,7 +124,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::put('duel-bot/avatar', [DuelBotController::class, 'updateAvatar'])->name('duel-bot.avatar');
     Route::put('duel-bot', [DuelBotController::class, 'update'])->name('duel-bot.update');
 
-    // AI soru kalite review (admin rolü — DuelBotSettings::canManage)
+    // AI soru kalite review (permission: view/edit question quality)
     Route::get('question-quality-reviews', [QuestionQualityReviewController::class, 'index'])->name('question-quality-reviews.index');
     Route::get('question-quality-reviews/poll', [QuestionQualityReviewController::class, 'poll'])->name('question-quality-reviews.poll');
     Route::post('question-quality-reviews/bulk-apply-revision', [QuestionQualityReviewController::class, 'bulkApplyRevision'])->name('question-quality-reviews.bulk-apply-revision');
@@ -137,16 +138,24 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::get('support/unread-count', [SupportMessageController::class, 'unreadCount'])->name('support.unread-count');
     Route::get('support/{id}', [SupportMessageController::class, 'show'])->name('support.show')->whereNumber('id');
     Route::post('support/{id}/status', [SupportMessageController::class, 'updateStatus'])->name('support.status')->whereNumber('id');
+    Route::post('support/{id}/reply', [SupportMessageController::class, 'reply'])->name('support.reply')->whereNumber('id');
     Route::delete('support/{id}', [SupportMessageController::class, 'destroy'])->name('support.destroy')->whereNumber('id');
 
     // Finans (şimdilik sadece user #15)
     Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
     Route::get('finance/settings', [FinanceController::class, 'settings'])->name('finance.settings');
     Route::post('finance/periods', [FinanceController::class, 'storePeriod'])->name('finance.periods.store');
+    Route::put('finance/periods/{id}', [FinanceController::class, 'updatePeriod'])->name('finance.periods.update')->whereNumber('id');
+    Route::delete('finance/periods/{id}', [FinanceController::class, 'destroyPeriod'])->name('finance.periods.destroy')->whereNumber('id');
     Route::post('finance/start-from-today', [FinanceController::class, 'startFromToday'])->name('finance.start-from-today');
     Route::post('finance/categories', [FinanceController::class, 'storeCategory'])->name('finance.categories.store');
     Route::post('finance/entries', [FinanceController::class, 'storeEntry'])->name('finance.entries.store');
+    Route::put('finance/entries/{id}', [FinanceController::class, 'updateEntry'])->name('finance.entries.update')->whereNumber('id');
     Route::delete('finance/entries/{id}', [FinanceController::class, 'destroyEntry'])->name('finance.entries.destroy')->whereNumber('id');
+    Route::get('finance/export', [FinanceController::class, 'export'])->name('finance.export');
+    Route::post('finance/locks', [FinanceController::class, 'lockMonth'])->name('finance.locks.store');
+    Route::delete('finance/locks', [FinanceController::class, 'unlockMonth'])->name('finance.locks.destroy');
+    Route::get('finance/coin', [FinanceCoinController::class, 'index'])->name('finance.coin.index');
 
     // Reward Requests management
     Route::get('reward-requests', [\App\Http\Controllers\Admin\RewardRequestController::class, 'index'])->name('reward-requests.index');

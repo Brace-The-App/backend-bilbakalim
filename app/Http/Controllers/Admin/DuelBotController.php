@@ -14,13 +14,20 @@ class DuelBotController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware(function ($request, $next) {
-            if (!DuelBotSettings::canManage($request->user())) {
-                abort(403, 'Bu sayfaya erişim yetkiniz yok.');
-            }
-
-            return $next($request);
-        });
+        $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view duel bot');
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit duel bot')
+            ->only([
+                'store',
+                'clearLogs',
+                'updateActive',
+                'bulkActive',
+                'updateBehavior',
+                'updateMatchmaking',
+                'updateProfile',
+                'updateAvatar',
+                'update',
+            ]);
     }
 
     public function index(Request $request)

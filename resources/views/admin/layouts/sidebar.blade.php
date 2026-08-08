@@ -147,7 +147,7 @@
                     </li>
                     @endif
 
-                    @if(auth()->user()->hasRole('admin') || \App\Services\DuelBotSettings::canManage(auth()->user()))
+                    @can('view duel bot')
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.duel-bot.*') ? 'active' : '' }}"
@@ -156,15 +156,17 @@
                             <span>Düello Bot</span>
                         </a>
                     </li>
+                    @endcan
+                    @can('view question quality')
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.question-quality-reviews.*') ? 'active' : '' }}"
                            href="{{ route('admin.question-quality-reviews.index') }}">
                             <i data-feather="check-square"></i>
-                            <span>AI Soru Kontrol</span>
+                            <span>YZ Soru Kontrol</span>
                         </a>
                     </li>
-                    @endif
+                    @endcan
 
                     @can('view reward requests')
                         <li class="sidebar-list">
@@ -239,13 +241,19 @@
                     @endif
                     @endcan
 
-                    @if(\App\Models\SupportMessage::canAccess(auth()->user()))
+                    {{-- Destek: view support izni --}}
+                    @can('view support')
+                    <li class="sidebar-main-title">
+                        <div>
+                            <h6>Destek</h6>
+                        </div>
+                    </li>
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.support.*') ? 'active' : '' }}"
                            href="{{ route('admin.support.index') }}">
                             <i data-feather="life-buoy"></i>
-                            <span>Destek</span>
+                            <span>Gelen kutusu</span>
                             @php $supNew = \App\Models\SupportMessage::query()->where('status', 'new')->count(); @endphp
                             @if($supNew > 0)
                                 <span class="badge" id="supSidebarBadge"
@@ -256,15 +264,29 @@
                             @endif
                         </a>
                     </li>
-                    @endif
+                    @endcan
 
+                    {{-- Finans: sadece Muhammet Kayacan (user #15) --}}
                     @if(\App\Services\FinanceService::canAccess(auth()->user()))
+                    <li class="sidebar-main-title">
+                        <div>
+                            <h6>Finans</h6>
+                        </div>
+                    </li>
                     <li class="sidebar-list">
                         <i class="fa fa-thumb-tack"></i>
-                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.finance.*') ? 'active' : '' }}"
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.finance.index') || request()->routeIs('admin.finance.settings') || request()->routeIs('admin.finance.periods.*') || request()->routeIs('admin.finance.entries.*') || request()->routeIs('admin.finance.categories.*') || request()->routeIs('admin.finance.start-from-today') ? 'active' : '' }}"
                            href="{{ route('admin.finance.index') }}">
                             <i data-feather="dollar-sign"></i>
-                            <span>Finans</span>
+                            <span>TL · nakit</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-list">
+                        <i class="fa fa-thumb-tack"></i>
+                        <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.finance.coin.*') ? 'active' : '' }}"
+                           href="{{ route('admin.finance.coin.index') }}">
+                            <i data-feather="disc"></i>
+                            <span>Coin · jeton</span>
                         </a>
                     </li>
                     @endif

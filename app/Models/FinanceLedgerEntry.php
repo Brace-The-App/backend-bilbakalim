@@ -12,6 +12,7 @@ class FinanceLedgerEntry extends Model
 
     public const SOURCE_IAP = 'iap_sale'; // nadiren snapshot; genelde payments canlı
     public const SOURCE_AD_REVENUE = 'ad_revenue';
+    public const SOURCE_OTHER_INCOME = 'other_income';
     public const SOURCE_GIFT = 'gift_payout';
     public const SOURCE_MANUAL = 'manual';
     public const SOURCE_KDV = 'kdv';

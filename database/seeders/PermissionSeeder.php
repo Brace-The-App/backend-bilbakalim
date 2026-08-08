@@ -25,13 +25,13 @@ class PermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'create general settings']);
         Permission::firstOrCreate(['name' => 'edit general settings']);
         Permission::firstOrCreate(['name' => 'delete general settings']);
-        
+
         // Permission management permissions
         Permission::firstOrCreate(['name' => 'view permissions']);
         Permission::firstOrCreate(['name' => 'create permissions']);
         Permission::firstOrCreate(['name' => 'edit permissions']);
         Permission::firstOrCreate(['name' => 'delete permissions']);
-        
+
         // Notification management permissions
         Permission::firstOrCreate(['name' => 'view notifications']);
         Permission::firstOrCreate(['name' => 'create notifications']);
@@ -41,6 +41,19 @@ class PermissionSeeder extends Seeder
         // Kullanıcı cevap istatistikleri
         Permission::firstOrCreate(['name' => 'view answer statistics']);
         Permission::firstOrCreate(['name' => 'edit answer statistics']);
+
+        // Destek
+        Permission::firstOrCreate(['name' => 'view support']);
+        Permission::firstOrCreate(['name' => 'edit support']);
+        Permission::firstOrCreate(['name' => 'delete support']);
+
+        // Düello bot
+        Permission::firstOrCreate(['name' => 'view duel bot']);
+        Permission::firstOrCreate(['name' => 'edit duel bot']);
+
+        // YZ soru kalite kontrol
+        Permission::firstOrCreate(['name' => 'view question quality']);
+        Permission::firstOrCreate(['name' => 'edit question quality']);
 
         // Assign permissions to roles
         $adminRole = Role::findByName('admin');
@@ -53,13 +66,17 @@ class PermissionSeeder extends Seeder
             'view permissions', 'create permissions', 'edit permissions', 'delete permissions',
             'view notifications', 'create notifications', 'edit notifications', 'delete notifications',
             'view answer statistics', 'edit answer statistics',
+            'view support', 'edit support', 'delete support',
+            'view duel bot', 'edit duel bot',
+            'view question quality', 'edit question quality',
         ]);
 
-        // Personel gets tournament and notification permissions
+        // Personel: destek + (eski) turnuva/bildirim/istatistik
         $personelRole->givePermissionTo([
             'view tournaments', 'create tournaments', 'edit tournaments', 'delete tournaments',
             'view notifications', 'create notifications', 'edit notifications', 'delete notifications',
             'view answer statistics', 'edit answer statistics',
+            'view support', 'edit support', 'delete support',
         ]);
     }
 }

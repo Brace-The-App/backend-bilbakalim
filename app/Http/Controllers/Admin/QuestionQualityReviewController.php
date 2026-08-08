@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\QuestionAdminLog;
 use App\Models\QuestionQualityReview;
-use App\Services\DuelBotSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,13 +14,15 @@ class QuestionQualityReviewController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware(function ($request, $next) {
-            if (!DuelBotSettings::canManage($request->user())) {
-                abort(403, 'Bu sayfaya erişim yetkiniz yok.');
-            }
-
-            return $next($request);
-        });
+        $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view question quality');
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit question quality')
+            ->only([
+                'bulkApplyRevision',
+                'deactivateQuestion',
+                'activateQuestion',
+                'applyRevision',
+            ]);
     }
 
     public function index(Request $request)
@@ -202,6 +203,17 @@ class QuestionQualityReviewController extends Controller
                 ->whereRaw("revised_content NOT IN ('[]','{}','null')")
                 ->whereNotIn('id', $acceptedReviewIdsQuery)
                 ->count(),
+            // Günlük başarılı kontrol adetleri (TR günü)
+            'reviewed_by_day' => QuestionQualityReview::query()
+                ->where('status', 'reviewed')
+                ->selectRaw("DATE(CONVERT_TZ(COALESCE(reviewed_at, created_at), '+00:00', '+03:00')) as d")
+                ->selectRaw('COUNT(*) as c')
+                ->groupBy('d')
+                ->orderBy('d')
+                ->get()
+                ->mapWithKeys(fn ($r) => [(string) $r->d => (int) $r->c])
+                ->all(),
+            'daily_limit' => max(1, (int) config('ai_question_review.daily_limit', 250)),
         ];
 
         // Listedeki soruların toplam deneme sayısı (bilgi)

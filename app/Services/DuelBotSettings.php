@@ -55,16 +55,7 @@ class DuelBotSettings
 
     public static function canManage(?User $user): bool
     {
-        if (!$user) {
-            return false;
-        }
-
-        // Panel admin rolü (eskiden sadece user #15)
-        if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
-            return true;
-        }
-
-        return in_array((int) $user->id, self::allowedAdminIds(), true);
+        return $user !== null && $user->can('view duel bot');
     }
 
     public static function defaults(): array

@@ -3,21 +3,24 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\SupportReplyMail;
 use App\Models\SupportMessage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class SupportMessageController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware(function ($request, $next) {
-            if (!SupportMessage::canAccess($request->user())) {
-                abort(403, 'Bu sayfaya erişim yetkiniz yok.');
-            }
-
-            return $next($request);
-        });
+        $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view support')
+            ->only(['index', 'unreadCount', 'show']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit support')
+            ->only(['updateStatus', 'reply']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete support')
+            ->only(['destroy']);
     }
 
     public function index(Request $request)
@@ -90,7 +93,82 @@ class SupportMessageController extends Controller
             $message->refresh();
         }
 
-        return view('admin.support.show', compact('message'));
+        $mailAccounts = config('support.mail_accounts', []);
+        $defaultAccount = (string) config('support.default_account', 'destek');
+
+        return view('admin.support.show', compact('message', 'mailAccounts', 'defaultAccount'));
+    }
+
+    public function reply(Request $request, int $id)
+    {
+        $accountIds = collect(config('support.mail_accounts', []))
+            ->pluck('id')
+            ->filter()
+            ->values()
+            ->all();
+
+        $validated = $request->validate([
+            'reply_body' => 'required|string|min:2|max:5000',
+            'mail_account' => 'required|string|in:'.implode(',', $accountIds ?: ['destek']),
+            'mark_read' => 'nullable|boolean',
+        ]);
+
+        $message = SupportMessage::query()
+            ->with(['user:id,name,email'])
+            ->findOrFail($id);
+
+        $to = $message->recipientEmail();
+        if (!$to) {
+            return back()
+                ->withInput()
+                ->with('error', 'Bu talepte geçerli bir e-posta adresi yok.');
+        }
+
+        $account = collect(config('support.mail_accounts', []))
+            ->firstWhere('id', $validated['mail_account']);
+
+        if (!$account || empty($account['from_address'])) {
+            return back()
+                ->withInput()
+                ->with('error', 'Gönderen mail hesabı yapılandırılmamış.');
+        }
+
+        $body = trim(strip_tags($validated['reply_body']));
+        if ($body === '') {
+            return back()
+                ->withInput()
+                ->with('error', 'Mesaj boş olamaz.');
+        }
+
+        try {
+            Mail::to($to)->send(new SupportReplyMail(
+                ticket: $message,
+                replyBody: $body,
+                account: $account,
+                adminName: $request->user()?->name,
+            ));
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Mail gönderilemedi: '.$e->getMessage());
+        }
+
+        $message->email_replied_at = now();
+        $message->last_email_reply = $body;
+        $message->last_email_from = $account['from_address'];
+        if ($request->boolean('mark_read', true)) {
+            $message->status = 'read';
+            if (!$message->read_at) {
+                $message->read_at = now();
+            }
+        }
+        $message->save();
+
+        return redirect()
+            ->route('admin.support.show', $message->id)
+            ->with('success', 'Cevap '.$to.' adresine gönderildi.');
     }
 
     public function updateStatus(Request $request, int $id)

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\FinanceExpenseCategory;
 use App\Models\FinanceLedgerEntry;
+use App\Models\FinanceMonthLock;
 use App\Models\FinanceRatePeriod;
 use App\Models\Payment;
 use App\Models\RewardRequest;
@@ -205,25 +206,83 @@ class FinanceService
         $toDay = $to->copy()->endOfDay();
 
         $iap = self::iapBreakdown($fromDay, $toDay);
-        $adRevenue = (float) FinanceLedgerEntry::query()
+        $manualIncomeRows = FinanceLedgerEntry::query()
             ->where('direction', FinanceLedgerEntry::DIRECTION_INCOME)
-            ->where('source', FinanceLedgerEntry::SOURCE_AD_REVENUE)
+            ->whereIn('source', [
+                FinanceLedgerEntry::SOURCE_AD_REVENUE,
+                FinanceLedgerEntry::SOURCE_OTHER_INCOME,
+            ])
             ->whereBetween('entry_date', [$fromDay->toDateString(), $toDay->toDateString()])
-            ->sum('amount_try');
+            ->get(['amount_try', 'source', 'meta']);
+
+        $adRevenue = 0.0;
+        $otherIncome = 0.0;
+        $taxableManualIncome = 0.0;
+        $nontaxableManualIncome = 0.0;
+        foreach ($manualIncomeRows as $row) {
+            $amt = (float) $row->amount_try;
+            if ($row->source === FinanceLedgerEntry::SOURCE_AD_REVENUE) {
+                $adRevenue += $amt;
+            } else {
+                $otherIncome += $amt;
+            }
+            // meta.counts_for_tax: true dahil, false hariç. Eski kayıtlar (yok) → dahil (eski davranış).
+            $meta = is_array($row->meta) ? $row->meta : [];
+            $counts = array_key_exists('counts_for_tax', $meta)
+                ? (bool) $meta['counts_for_tax']
+                : true;
+            if ($counts) {
+                $taxableManualIncome += $amt;
+            } else {
+                $nontaxableManualIncome += $amt;
+            }
+        }
+        $adRevenue = round($adRevenue, 2);
+        $otherIncome = round($otherIncome, 2);
+        $manualIncome = round($adRevenue + $otherIncome, 2);
+        $taxableManualIncome = round($taxableManualIncome, 2);
+        $nontaxableManualIncome = round($nontaxableManualIncome, 2);
 
         $gift = self::giftBreakdown($fromDay, $toDay);
 
-        $manualExpense = (float) FinanceLedgerEntry::query()
+        $manualExpenseRows = FinanceLedgerEntry::query()
             ->where('direction', FinanceLedgerEntry::DIRECTION_EXPENSE)
             ->whereIn('source', [FinanceLedgerEntry::SOURCE_MANUAL, FinanceLedgerEntry::SOURCE_KDV])
             ->whereBetween('entry_date', [$fromDay->toDateString(), $toDay->toDateString()])
-            ->sum('amount_try');
+            ->get(['amount_try', 'source', 'meta']);
+
+        $manualOtherExpense = 0.0;
+        $kdvInvoiceExpense = 0.0;
+        $taxableManualExpense = 0.0;
+        $nontaxableManualExpense = 0.0;
+        foreach ($manualExpenseRows as $row) {
+            $amt = (float) $row->amount_try;
+            if ($row->source === FinanceLedgerEntry::SOURCE_KDV) {
+                $kdvInvoiceExpense += $amt;
+            } else {
+                $manualOtherExpense += $amt;
+            }
+            $meta = is_array($row->meta) ? $row->meta : [];
+            $counts = array_key_exists('counts_for_tax', $meta)
+                ? (bool) $meta['counts_for_tax']
+                : true;
+            if ($counts) {
+                $taxableManualExpense += $amt;
+            } else {
+                $nontaxableManualExpense += $amt;
+            }
+        }
+        $manualOtherExpense = round($manualOtherExpense, 2);
+        $kdvInvoiceExpense = round($kdvInvoiceExpense, 2);
+        $manualExpense = round($manualOtherExpense + $kdvInvoiceExpense, 2);
+        $taxableManualExpense = round($taxableManualExpense, 2);
+        $nontaxableManualExpense = round($nontaxableManualExpense, 2);
 
         $manualByCategory = FinanceLedgerEntry::query()
             ->select('category_id', DB::raw('SUM(amount_try) as total'))
             ->with('category:id,name,slug')
             ->where('direction', FinanceLedgerEntry::DIRECTION_EXPENSE)
-            ->whereIn('source', [FinanceLedgerEntry::SOURCE_MANUAL, FinanceLedgerEntry::SOURCE_KDV])
+            ->where('source', FinanceLedgerEntry::SOURCE_MANUAL)
             ->whereBetween('entry_date', [$fromDay->toDateString(), $toDay->toDateString()])
             ->groupBy('category_id')
             ->get()
@@ -235,41 +294,86 @@ class FinanceService
             ->values()
             ->all();
 
-        $incomeTotal = round($iap['net'] + $adRevenue, 2);
+        $iapNetForIncome = round((float) ($iap['net'] ?? 0) - (float) ($iap['refund_net'] ?? 0), 2);
+        $incomeTotal = round($iapNetForIncome + $manualIncome, 2);
         $expenseTotal = round($gift['total'] + $manualExpense, 2);
-        $preTax = round($incomeTotal - $expenseTotal, 2);
 
-        // Vergi oranı: dönem ortası tarihe göre (basit / tutarlı)
         $mid = $fromDay->copy()->addDays((int) max(0, $fromDay->diffInDays($toDay) / 2));
-        $taxPct = (float) self::rateFor($mid)->income_tax_pct;
-        $taxBase = max(0, $preTax); // zarar varsa vergi 0
+        $activeMid = self::rateFor($mid);
+        $taxPct = (float) $activeMid->income_tax_pct;
+        $kdvPct = (float) $activeMid->kdv_pct;
+        $kdvToPl = (bool) ($activeMid->kdv_to_pl ?? false);
+        $storePctMid = (float) $activeMid->store_fee_pct;
+
+        $taxableExpenseTotal = round($gift['total'] + $taxableManualExpense, 2);
+        $taxableProfit = round($iapNetForIncome + $taxableManualIncome - $taxableExpenseTotal, 2);
+
+        $kdvRefOnIap = $kdvPct > 0 ? round((float) ($iap['gross'] ?? 0) * ($kdvPct / 100), 2) : 0.0;
+        $kdvPlExpense = ($kdvToPl && $kdvPct > 0) ? $kdvRefOnIap : 0.0;
+
+        $expenseTotalWithKdv = round($expenseTotal + $kdvPlExpense, 2);
+        $preTax = round($incomeTotal - $expenseTotalWithKdv, 2);
+        if ($kdvPlExpense > 0) {
+            $taxableProfit = round($taxableProfit - $kdvPlExpense, 2);
+        }
+        $taxBase = max(0, $taxableProfit);
         $incomeTax = round($taxBase * ($taxPct / 100), 2);
         $finalProfit = round($preTax - $incomeTax, 2);
 
-        // Info: düello komisyon (nakit değil)
         $duelCommissionCoins = (int) DB::table('duels')
             ->where('status', 'finished')
             ->whereNotNull('finished_at')
             ->whereBetween('finished_at', [$fromDay, $toDay])
             ->sum('app_commission');
-        $coinRate = (float) self::rateFor($mid)->coin_to_try;
+        $coinRate = (float) $activeMid->coin_to_try;
 
-        $daily = self::dailySeries($fromDay, $toDay, $iap['by_day'], $gift['by_day'], $adRevenue, $manualExpense);
+        $daily = self::dailySeries($fromDay, $toDay, $iap['by_day'], $gift['by_day'], $manualIncome, $manualExpense);
 
         return [
             'from' => $fromDay->toDateString(),
             'to' => $toDay->toDateString(),
             'iap' => $iap,
             'ad_revenue' => round($adRevenue, 2),
+            'other_income' => round($otherIncome, 2),
+            'manual_income' => $manualIncome,
             'gift' => $gift,
-            'manual_expense' => round($manualExpense, 2),
+            'manual_expense' => $manualExpense,
+            'manual_other_expense' => $manualOtherExpense,
+            'kdv_invoice' => $kdvInvoiceExpense,
+            'kdv_pl_expense' => $kdvPlExpense,
             'manual_by_category' => $manualByCategory,
             'income_total' => $incomeTotal,
-            'expense_total' => $expenseTotal,
+            'expense_total' => $expenseTotalWithKdv,
             'pre_tax_profit' => $preTax,
+            'taxable_profit' => $taxableProfit,
+            'tax_base' => $taxBase,
+            'nontaxable_manual_income' => $nontaxableManualIncome,
+            'taxable_manual_income' => $taxableManualIncome,
+            'nontaxable_manual_expense' => $nontaxableManualExpense,
+            'taxable_manual_expense' => $taxableManualExpense,
             'income_tax_pct' => $taxPct,
             'income_tax' => $incomeTax,
             'final_profit' => $finalProfit,
+            'rates' => [
+                'store_fee_pct' => $storePctMid,
+                'income_tax_pct' => $taxPct,
+                'kdv_pct' => $kdvPct,
+                'kdv_to_pl' => $kdvToPl,
+                'kdv_ref_on_iap_gross' => $kdvRefOnIap,
+                'kdv_note' => $kdvToPl
+                    ? 'Dönem KDV% P&L giderine yazılıyor (IAP brüt × %).'
+                    : 'Dönem KDV% sadece referans; fatura KDV’si manuel. Store ≠ KDV.',
+            ],
+            'tracks' => [
+                'auto_income' => $iapNetForIncome,
+                'manual_income' => $manualIncome,
+                'ad_revenue' => round($adRevenue, 2),
+                'other_income' => round($otherIncome, 2),
+                'auto_expense' => round($gift['total'], 2),
+                'manual_expense' => $manualOtherExpense,
+                'kdv_expense' => $kdvInvoiceExpense,
+                'kdv_pl_expense' => $kdvPlExpense,
+            ],
             'duel_commission_info' => [
                 'coins' => $duelCommissionCoins,
                 'try_equiv' => round($duelCommissionCoins * $coinRate, 2),
@@ -277,23 +381,28 @@ class FinanceService
             ],
             'daily' => $daily,
             'active_rate' => self::rateFor($toDay),
+            'locked_months' => self::lockedMonthsInRange($fromDay, $toDay),
         ];
     }
 
     /**
-     * @return array{gross:float,fee:float,net:float,count:int,by_type:array,by_day:array<string,float>}
+     * IAP satış + iade.
+     * Satış: paid_at dönemde, status completed|refunded (iade edilmiş satış da brütte kalsın).
+     * İade: refunded_at dönemde (status=refunded veya refunded_at dolu).
+     *
+     * @return array<string,mixed>
      */
     public static function iapBreakdown(Carbon $from, Carbon $to): array
     {
-        $payments = Payment::query()
-            ->completed()
+        $sales = Payment::query()
+            ->whereIn('status', ['completed', 'refunded'])
             ->where(function ($q) use ($from, $to) {
                 $q->whereBetween('paid_at', [$from, $to])
                     ->orWhere(function ($q2) use ($from, $to) {
                         $q2->whereNull('paid_at')->whereBetween('created_at', [$from, $to]);
                     });
             })
-            ->get(['id', 'amount', 'paid_at', 'created_at', 'metadata']);
+            ->get(['id', 'amount', 'paid_at', 'created_at', 'metadata', 'status']);
 
         $gross = 0.0;
         $fee = 0.0;
@@ -302,10 +411,10 @@ class FinanceService
         $countByType = ['coin' => 0, 'premium' => 0, 'joker' => 0, 'diamond' => 0, 'other' => 0];
         $byDay = [];
 
-        foreach ($payments as $p) {
+        foreach ($sales as $p) {
             $when = $p->paid_at ?: $p->created_at;
             $rate = self::rateFor($when);
-            $amount = (float) $p->amount;
+            $amount = abs((float) $p->amount);
             $feePct = (float) $rate->store_fee_pct;
             $rowFee = round($amount * ($feePct / 100), 2);
             $rowNet = round($amount - $rowFee, 2);
@@ -325,11 +434,42 @@ class FinanceService
             $byDay[$day] = round(($byDay[$day] ?? 0) + $rowNet, 2);
         }
 
+        $refunds = Payment::query()
+            ->where(function ($q) {
+                $q->where('status', 'refunded')->orWhereNotNull('refunded_at');
+            })
+            ->whereNotNull('refunded_at')
+            ->whereBetween('refunded_at', [$from, $to])
+            ->get(['id', 'amount', 'refunded_at', 'paid_at', 'metadata']);
+
+        $refundGross = 0.0;
+        $refundFee = 0.0;
+        $refundNet = 0.0;
+        foreach ($refunds as $p) {
+            $when = $p->refunded_at ?: $p->paid_at;
+            $rate = self::rateFor($when);
+            $amount = abs((float) $p->amount);
+            $feePct = (float) $rate->store_fee_pct;
+            $rowFee = round($amount * ($feePct / 100), 2);
+            $rowNet = round($amount - $rowFee, 2);
+            $refundGross += $amount;
+            $refundFee += $rowFee;
+            $refundNet += $rowNet;
+
+            $day = Carbon::parse($when)->toDateString();
+            $byDay[$day] = round(($byDay[$day] ?? 0) - $rowNet, 2);
+        }
+
         return [
             'gross' => round($gross, 2),
             'fee' => round($fee, 2),
             'net' => round($net, 2),
-            'count' => $payments->count(),
+            'count' => $sales->count(),
+            'refund_gross' => round($refundGross, 2),
+            'refund_fee' => round($refundFee, 2),
+            'refund_net' => round($refundNet, 2),
+            'refund_count' => $refunds->count(),
+            'net_after_refunds' => round($net - $refundNet, 2),
             'by_type' => $byType,
             'count_by_type' => $countByType,
             'by_day' => $byDay,
@@ -407,20 +547,22 @@ class FinanceService
         Carbon $to,
         array $iapByDay,
         array $giftByDay,
-        float $adRevenueTotal,
+        float $manualIncomeTotal,
         float $manualExpenseTotal
     ): array {
         // Manuel gelir/gider günlük dağılım
         $manualIncomeByDay = FinanceLedgerEntry::query()
             ->where('direction', FinanceLedgerEntry::DIRECTION_INCOME)
-            ->where('source', FinanceLedgerEntry::SOURCE_AD_REVENUE)
+            ->whereIn('source', [
+                FinanceLedgerEntry::SOURCE_AD_REVENUE,
+                FinanceLedgerEntry::SOURCE_OTHER_INCOME,
+            ])
             ->whereBetween('entry_date', [$from->toDateString(), $to->toDateString()])
             ->select('entry_date', DB::raw('SUM(amount_try) as total'))
             ->groupBy('entry_date')
             ->pluck('total', 'entry_date')
             ->map(fn ($v) => (float) $v)
             ->all();
-
         $manualExpByDay = FinanceLedgerEntry::query()
             ->where('direction', FinanceLedgerEntry::DIRECTION_EXPENSE)
             ->whereIn('source', [FinanceLedgerEntry::SOURCE_MANUAL, FinanceLedgerEntry::SOURCE_KDV])
@@ -492,5 +634,69 @@ class FinanceService
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
             ->where('effective_from', '<', $fromDate->toDateString())
             ->update(['effective_to' => $prevDay]);
+    }
+
+    public static function isMonthLocked(Carbon|string $date): bool
+    {
+        $d = Carbon::parse($date);
+
+        return FinanceMonthLock::query()
+            ->where('year', (int) $d->year)
+            ->where('month', (int) $d->month)
+            ->exists();
+    }
+
+    public static function assertDateWritable(Carbon|string $date): void
+    {
+        $err = self::monthLockMessage($date);
+        if ($err) {
+            abort(422, $err);
+        }
+    }
+
+    public static function monthLockMessage(Carbon|string $date): ?string
+    {
+        if (!self::isMonthLocked($date)) {
+            return null;
+        }
+        $d = Carbon::parse($date);
+
+        return sprintf('%02d.%04d dönemi kilitli — kayıt eklenemez/düzenlenemez.', (int) $d->month, (int) $d->year);
+    }
+
+    /**
+     * @return list<string> "YYYY-MM"
+     */
+    public static function lockedMonthsInRange(Carbon $from, Carbon $to): array
+    {
+        $locks = FinanceMonthLock::query()
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('year', [(int) $from->year, (int) $to->year]);
+            })
+            ->get();
+
+        $out = [];
+        foreach ($locks as $lock) {
+            $key = sprintf('%04d-%02d', $lock->year, $lock->month);
+            $start = Carbon::create($lock->year, $lock->month, 1)->startOfMonth();
+            if ($start->betweenIncluded($from->copy()->startOfMonth(), $to->copy()->endOfMonth())) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
+    }
+
+    public static function lockMonth(int $year, int $month, ?int $userId = null, ?string $note = null): FinanceMonthLock
+    {
+        return FinanceMonthLock::query()->updateOrCreate(
+            ['year' => $year, 'month' => $month],
+            ['locked_by' => $userId, 'note' => $note]
+        );
+    }
+
+    public static function unlockMonth(int $year, int $month): void
+    {
+        FinanceMonthLock::query()->where('year', $year)->where('month', $month)->delete();
     }
 }
