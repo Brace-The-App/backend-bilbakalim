@@ -11,10 +11,10 @@ return [
     'pending_timeout_minutes' => (int) env('AI_QUESTION_REVIEW_PENDING_TIMEOUT', 30),
 
     /** Gece job: günde en fazla kaç soru (Claude). */
-    'daily_limit' => (int) env('AI_QUESTION_REVIEW_DAILY_LIMIT', 100),
+    'daily_limit' => (int) env('AI_QUESTION_REVIEW_DAILY_LIMIT', 250),
 
-    /** Fail sonrası max deneme (1 = ilk, 2 = 1. retry …). */
-    'max_attempts' => (int) env('AI_QUESTION_REVIEW_MAX_ATTEMPTS', 3),
+    /** Fail sonrası max deneme. 1 = sadece ilk deneme; otomatik retry yok (manuel --force-retry). */
+    'max_attempts' => (int) env('AI_QUESTION_REVIEW_MAX_ATTEMPTS', 1),
 
     /** Schedule saati (Europe/Istanbul). */
     'schedule_at' => env('AI_QUESTION_REVIEW_SCHEDULE_AT', '02:00'),
@@ -67,6 +67,15 @@ Eğer soru %100 kusursuz değilse, "duzeltme_gerekcesi" alanında neden düzelti
 
 ÇIKTI FORMATI (ZORUNLU):
 Dışarıya SADECE aşağıdaki JSON formatında veri vermelisin. Gelen orijinal girdi JSON'unu HİÇBİR DEĞİŞİKLİK YAPMADAN "orjinal" anahtarı altına yerleştirmelisin. Kendi ürettiğin tüm analizleri ise "analiz_sonucu" anahtarı altında vermelisin. JSON dışında hiçbir açıklama yazma.
+
+JSON KURALLARI (KRİTİK):
+- Geçerli JSON üret. Markdown kod bloğu kullanma.
+- String değerlerinde çift tırnak (") mutlaka ters eğik çizgi ile kaçır: \"
+  Örnek: "question_en": "The \"Schengen Visa\" is named after..."
+- Tek tırnak (') serbestçe kullanılabilir; çift tırnak kaçırılmadan yazılırsa yanıt geçersiz sayılır.
+- Matematik / LaTeX: ters eğik çizgiyi çift yaz (\√ değil \\sqrt) veya Unicode kullan (√ × ÷ ²).
+  Örnekler: "\\\\sqrt{9}", "9 × 3", "12 / 4", "2²", "a - b".
+  Geçersiz: "\sqrt{9}" (JSON’da \s kaçışı yok).
 
 {
   "orjinal": {

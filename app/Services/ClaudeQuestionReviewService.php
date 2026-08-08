@@ -50,15 +50,20 @@ class ClaudeQuestionReviewService
     /**
      * Sıradaki soruyu pending olarak ata.
      * $retryFailed=true → önce fail olup henüz reviewed olmayanları yeniden dener.
+     * $forceRetry=true → max_attempts aşılsa da failed yeniden atanır (manuel).
+     * $retryFailedOnly=true → fail yoksa yeni soruya düşmez.
      */
-    public function assignNext(bool $retryFailed = false): ?QuestionQualityReview
+    public function assignNext(bool $retryFailed = false, bool $forceRetry = false, bool $retryFailedOnly = false): ?QuestionQualityReview
     {
         $this->expireStalePending();
 
         if ($retryFailed) {
-            $retry = $this->assignNextFailedRetry();
+            $retry = $this->assignNextFailedRetry($forceRetry);
             if ($retry) {
                 return $retry;
+            }
+            if ($retryFailedOnly) {
+                return null;
             }
         }
 
@@ -97,17 +102,19 @@ class ClaudeQuestionReviewService
     }
 
     /**
-     * En son kaydı failed olan ve max denemenin altında kalan soruları yeniden ata.
+     * En son kaydı failed olan soruları yeniden ata.
+     * $ignoreMaxAttempts=false → attempt < max_attempts olanlar (otomatik kapalıyken max=1 → hiçbiri).
+     * $ignoreMaxAttempts=true → admin/manuel force retry.
      */
-    public function assignNextFailedRetry(): ?QuestionQualityReview
+    public function assignNextFailedRetry(bool $ignoreMaxAttempts = false): ?QuestionQualityReview
     {
         $this->expireStalePending();
-        $maxAttempts = max(1, (int) config('ai_question_review.max_attempts', 3));
+        $maxAttempts = max(1, (int) config('ai_question_review.max_attempts', 1));
 
-        return DB::transaction(function () use ($maxAttempts) {
+        return DB::transaction(function () use ($maxAttempts, $ignoreMaxAttempts) {
             $failed = QuestionQualityReview::query()
                 ->where('status', QuestionQualityReview::STATUS_FAILED)
-                ->where('attempt', '<', $maxAttempts)
+                ->when(! $ignoreMaxAttempts, fn ($q) => $q->where('attempt', '<', $maxAttempts))
                 ->whereNotExists(function ($q) {
                     $q->select(DB::raw(1))
                         ->from('question_quality_reviews as r2')
@@ -360,7 +367,29 @@ class ClaudeQuestionReviewService
             'reviewed_at' => now(),
         ])->save();
 
+        $this->syncQuestionAiFlags($review->fresh());
+
         return $review->fresh();
+    }
+
+    /**
+     * AI incelemesi tamamlanınca: check=1 + inceleme id.
+     * ai_accepted yalnız admin AI düzeltmesini uygulayınca set edilir.
+     * Admin kabulünde ai_quality_review_id uygulanmış incelemeyi gösterir; yeni
+     * review o pointer'ı ezmez (aksi halde “Admin onaylı” listesi bozulur).
+     */
+    private function syncQuestionAiFlags(QuestionQualityReview $review): void
+    {
+        $question = Question::query()->find($review->question_id);
+        if (!$question) {
+            return;
+        }
+
+        $question->check = true;
+        if (!$question->ai_accepted) {
+            $question->ai_quality_review_id = (int) $review->id;
+        }
+        $question->save();
     }
 
     public function markFailed(QuestionQualityReview $review, string $reason, array $meta = [], ?string $rawText = null): QuestionQualityReview
@@ -432,8 +461,10 @@ class ClaudeQuestionReviewService
             }
             $lastError = json_last_error_msg();
 
-            $repaired = $this->repairJson($candidate);
-            if ($repaired !== $candidate) {
+            foreach ($this->repairedJsonVariants($candidate) as $repaired) {
+                if ($repaired === $candidate) {
+                    continue;
+                }
                 $decoded = json_decode($repaired, true);
                 if (is_array($decoded)) {
                     return $decoded;
@@ -442,7 +473,38 @@ class ClaudeQuestionReviewService
             }
         }
 
-        throw new RuntimeException('Claude yanıtı geçerli JSON değil: ' . $lastError);
+        throw new RuntimeException($this->formatJsonParseFailure($rawText, $lastError));
+    }
+
+    /**
+     * Admin paneli için anlaşılır fail metni (ödeme / kota vb. yok).
+     */
+    private function formatJsonParseFailure(string $rawText, string $jsonError): string
+    {
+        $msg = 'Model çıktısı geçerli JSON olarak okunamadı.';
+
+        // Tipik: ".... the "Schengen Visa" take ..." gibi kaçırılmamış tırnak
+        if (preg_match('/:\s*"[^"\n]*"[A-Za-zÀ-ÿ]/u', $rawText)
+            || preg_match('/"[A-Za-z][^"]{0,40}"[A-Za-z]/u', $rawText)
+        ) {
+            $msg .= ' Muhtemel neden: metin içindeki çift tırnak JSON’da kaçırılmamış (ör. İngilizce cümlede tırnaklı ifade).';
+        } elseif (preg_match('/\\\\(?:sqrt|frac|times|div|cdot|pm|leq|geq|neq|rightarrow)/i', $rawText)
+            || preg_match('/[^\\\\]\\\\[a-zA-Z]/', $rawText)
+            || str_contains($rawText, '\\sqrt')
+            || str_contains($rawText, '\\frac')
+        ) {
+            $msg .= ' Muhtemel neden: matematik/LaTeX ifadesindeki ters eğik çizgi (\\sqrt, \\frac vb.) JSON’da kaçırılmamış.';
+        } elseif (stripos($jsonError, 'syntax') !== false) {
+            $msg .= ' Muhtemel neden: bozuk veya yarım JSON sözdizimi (tırnak, matematik işareti veya kesik yanıt).';
+        } elseif (stripos($jsonError, 'control') !== false) {
+            $msg .= ' Muhtemel neden: metinde kaçırılmamış kontrol karakteri.';
+        } else {
+            $msg .= ' Yanıt şablona uymuyor veya kesilmiş olabilir.';
+        }
+
+        $msg .= ' Teknik: ' . $jsonError . '.';
+
+        return $msg;
     }
 
     /**
@@ -531,7 +593,35 @@ class ClaudeQuestionReviewService
         return null;
     }
 
-    private function repairJson(string $text): string
+    /**
+     * Temel temizlik + tırnak / matematik-\\ onarım varyasyonları.
+     *
+     * @return list<string>
+     */
+    private function repairedJsonVariants(string $text): array
+    {
+        $base = $this->repairJsonBasics($text);
+        $variants = [
+            $base,
+            $this->escapeInnerUnescapedQuotes($base),
+            $this->escapeInvalidJsonBackslashes($base),
+            $this->escapeInvalidJsonBackslashes($this->escapeInnerUnescapedQuotes($base)),
+            $this->escapeInnerUnescapedQuotes($this->escapeInvalidJsonBackslashes($base)),
+        ];
+
+        $uniq = [];
+        foreach ($variants as $v) {
+            $v = trim((string) $v);
+            if ($v === '' || isset($uniq[$v])) {
+                continue;
+            }
+            $uniq[$v] = true;
+        }
+
+        return array_keys($uniq);
+    }
+
+    private function repairJsonBasics(string $text): string
     {
         $text = trim($text);
         // smart quotes
@@ -547,5 +637,129 @@ class ClaudeQuestionReviewService
         $text = preg_replace('~/\*.*?\*/~s', '', $text) ?? $text;
 
         return trim($text);
+    }
+
+    /**
+     * String değeri içindeki gerçek olmayan kapanış tırnaklarını \\" yap.
+     * Kapanış: tırnaktan sonra (boşluk atlanarak) , } ] : veya EOF.
+     */
+    private function escapeInnerUnescapedQuotes(string $json): string
+    {
+        $len = strlen($json);
+        $out = '';
+        $inString = false;
+        $escape = false;
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $json[$i];
+
+            if (!$inString) {
+                $out .= $ch;
+                if ($ch === '"') {
+                    $inString = true;
+                }
+                continue;
+            }
+
+            if ($escape) {
+                $out .= $ch;
+                $escape = false;
+                continue;
+            }
+
+            if ($ch === '\\') {
+                $out .= $ch;
+                $escape = true;
+                continue;
+            }
+
+            if ($ch === '"') {
+                $j = $i + 1;
+                while ($j < $len && ctype_space($json[$j])) {
+                    $j++;
+                }
+                $next = $j < $len ? $json[$j] : '';
+                if ($next === ',' || $next === '}' || $next === ']' || $next === ':' || $next === '') {
+                    $out .= '"';
+                    $inString = false;
+                } else {
+                    $out .= '\\"';
+                }
+                continue;
+            }
+
+            $out .= $ch;
+        }
+
+        return $out;
+    }
+
+    /**
+     * JSON string içinde geçersiz kaçışları düzelt.
+     * \sqrt \frac \times gibi LaTeX/matematik → \\sqrt ...
+     * Geçerli kaçışlar korunur: \" \\ \/ \b \f \n \r \t \uXXXX
+     */
+    private function escapeInvalidJsonBackslashes(string $json): string
+    {
+        $len = strlen($json);
+        $out = '';
+        $inString = false;
+        $i = 0;
+
+        while ($i < $len) {
+            $ch = $json[$i];
+
+            if (!$inString) {
+                $out .= $ch;
+                if ($ch === '"') {
+                    $inString = true;
+                }
+                $i++;
+                continue;
+            }
+
+            if ($ch === '\\') {
+                $next = ($i + 1 < $len) ? $json[$i + 1] : '';
+
+                if ($next === '"' || $next === '\\' || $next === '/'
+                    || $next === 'b' || $next === 'f' || $next === 'n'
+                    || $next === 'r' || $next === 't') {
+                    $out .= '\\' . $next;
+                    $i += 2;
+                    continue;
+                }
+
+                if ($next === 'u' && $i + 5 < $len
+                    && preg_match('/^\\\\u[0-9a-fA-F]{4}/', substr($json, $i, 6))) {
+                    $out .= substr($json, $i, 6);
+                    $i += 6;
+                    continue;
+                }
+
+                // \sqrt, \frac, \*, tek \ vb. → \\
+                $out .= '\\\\';
+                $i++;
+                continue;
+            }
+
+            if ($ch === '"') {
+                $j = $i + 1;
+                while ($j < $len && ctype_space($json[$j])) {
+                    $j++;
+                }
+                $next = $j < $len ? $json[$j] : '';
+                $out .= '"';
+                if ($next === ',' || $next === '}' || $next === ']' || $next === ':' || $next === '') {
+                    $inString = false;
+                }
+                $i++;
+                continue;
+            }
+
+            $out .= $ch;
+            $i++;
+        }
+
+        return $out;
     }
 }

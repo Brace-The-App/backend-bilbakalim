@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', 'AI Soru Kontrol')
+@section('title', 'YZ Soru Kontrol')
 
 @push('css')
 <style>
@@ -110,8 +110,8 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
 @section('content')
 <div class="aqr-wrap">
     <div class="aqr-hero">
-        <h3>AI Soru Kalite Kontrolleri</h3>
-        <p>Claude inceleme sonuçları. Sadece bu hesap görür.</p>
+        <h3>Yapay Zekalı Soru Kontrolü</h3>
+        <p>İnceleme sonuçları. Sadece bu hesap görür. Fail denemeler uygulanmaz; sadece son başarılı sonuç uygulanır.</p>
         <p class="mt-2 mb-0" style="font-size:1.15rem;font-weight:650;color:#fff">
             Toplam <span style="color:#4ade80">{{ number_format($stats['total']) }}</span> inceleme
             <span style="opacity:.85;font-weight:500;font-size:.95rem">
@@ -136,6 +136,18 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
             <span style="opacity:.75">({{ number_format($stats['failed']) }} deneme)</span>
             <span style="opacity:.65"> · fail’ler onay / toplu uygulamaya girmez</span>
         </p>
+        @php $byDay = $stats['reviewed_by_day'] ?? []; @endphp
+        @if($byDay !== [])
+            <p class="mt-2 mb-0" style="font-size:.88rem;font-weight:500;color:rgba(255,255,255,.78);line-height:1.55">
+                Günlük başarılı kontrol
+                <span style="opacity:.7">(cron: günde en fazla {{ (int) ($stats['daily_limit'] ?? 250) }})</span>:
+                <span style="display:inline;color:rgba(255,255,255,.92)">
+                    @foreach($byDay as $day => $cnt)
+                        <span style="white-space:nowrap">{{ \Carbon\Carbon::parse($day)->format('d.m') }}: <strong style="color:#4ade80">{{ number_format($cnt) }}</strong>@if(!$loop->last) · @endif</span>
+                    @endforeach
+                </span>
+            </p>
+        @endif
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <div class="aqr-model">Aktif model (API): {{ $configuredModel }}</div>
             <div class="aqr-model" id="aqrLiveBadge"
@@ -436,7 +448,7 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                                         @if($laterSuccess->quality_score !== null) (skor {{ $laterSuccess->quality_score }}) @endif
                                     </div>
                                 @elseif ($review->status === 'failed')
-                                    <div class="small text-danger mt-1">{{ $attemptNo }}. deneme · başarısız · tekrar denenecek</div>
+                                    <div class="small text-danger mt-1">{{ $attemptNo }}. deneme · başarısız · bekliyor (otomatik tekrar yok)</div>
                                 @elseif ($attemptNo > 1)
                                     <div class="small text-muted mt-1">{{ $attemptNo }}. deneme</div>
                                 @endif

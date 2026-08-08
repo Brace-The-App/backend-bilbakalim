@@ -14,6 +14,7 @@ class QuestionAiReviewCommand extends Command
         {--limit= : Bu çalıştırmada max soru (boşsa daily_limit kalanı)}
         {--question= : Tek soru ID (örn. 28962)}
         {--retry-failed : Sadece failed kayıtları yeniden dene}
+        {--force-retry : max_attempts aşılsa da failed yeniden dene (manuel)}
         {--dry-run : Claude çağırır ama DB\'ye reviewed yazmaz (pending expire edilir)}
         {--package=4 : Teklif paket no (provider meta — Opus=4)}
         {--force : Günlük limiti yok say}';
@@ -33,8 +34,12 @@ class QuestionAiReviewCommand extends Command
             : 0;
 
         $retryFailedOnly = (bool) $this->option('retry-failed');
+        $forceRetry = (bool) $this->option('force-retry');
+        if ($forceRetry) {
+            $retryFailedOnly = true;
+        }
 
-        $dailyLimit = max(1, (int) config('ai_question_review.daily_limit', 100));
+        $dailyLimit = max(1, (int) config('ai_question_review.daily_limit', 250));
         $doneToday = $this->reviewedTodayCount();
         $remainingToday = max(0, $dailyLimit - $doneToday);
 
@@ -58,13 +63,14 @@ class QuestionAiReviewCommand extends Command
         $dryRun = (bool) $this->option('dry-run');
         $package = (string) $this->option('package');
         $model = $claude->modelLabel();
-        $maxAttempts = max(1, (int) config('ai_question_review.max_attempts', 3));
+        $maxAttempts = max(1, (int) config('ai_question_review.max_attempts', 1));
 
         $this->info(
             'Claude review başlıyor · model=' . $model
             . ' (api=' . $claude->model() . ')'
             . ($questionId > 0 ? " · question={$questionId}" : " · limit={$limit}")
             . ($retryFailedOnly ? ' · RETRY-FAILED' : '')
+            . ($forceRetry ? ' · FORCE-RETRY' : '')
             . " · max_attempts={$maxAttempts}"
             . " · bugün={$doneToday}/{$dailyLimit}"
             . ($dryRun ? ' · DRY-RUN' : '')
@@ -86,10 +92,10 @@ class QuestionAiReviewCommand extends Command
                 if ($questionId > 0) {
                     $review = $claude->assignQuestion($questionId);
                 } elseif ($retryFailedOnly) {
-                    $review = $claude->assignNextFailedRetry();
+                    $review = $claude->assignNextFailedRetry($forceRetry);
                 } else {
-                    // Önce fail retry, yoksa yeni soru
-                    $review = $claude->assignNext(true);
+                    // Gece/normal: sadece yeni sorular (otomatik fail retry yok)
+                    $review = $claude->assignNext(false);
                 }
             } catch (Throwable $e) {
                 $this->error($e->getMessage());

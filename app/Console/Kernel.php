@@ -26,14 +26,24 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->runInBackground();
 
-        // Gece Claude soru kalite kontrolü (bootstrap/app.php ile aynı; Laravel 11 schedule oradan da okunur)
+        // Gece Claude soru kalite kontrolü — günde max daily_limit (varsayılan 250)
+        // Fail otomatik yeniden denenmez (max_attempts=1); manuel: question:ai-review --retry-failed --force-retry
         $at = (string) config('ai_question_review.schedule_at', '02:00');
-        $schedule->command('question:ai-review --limit=100')
+        $dailyLimit = max(1, (int) config('ai_question_review.daily_limit', 250));
+        $schedule->command("question:ai-review --limit={$dailyLimit}")
             ->dailyAt($at)
             ->timezone('Europe/Istanbul')
             ->withoutOverlapping(240)
             ->runInBackground()
             ->appendOutputTo(storage_path('logs/question-ai-review.log'));
+
+        // Eski: 14:30 otomatik fail retry — API maliyeti / kod hatası riski için kapalı
+        // $schedule->command('question:ai-review --retry-failed --limit=20')
+        //     ->dailyAt('14:30')
+        //     ->timezone('Europe/Istanbul')
+        //     ->withoutOverlapping(120)
+        //     ->runInBackground()
+        //     ->appendOutputTo(storage_path('logs/question-ai-review.log'));
     }
 
     /**

@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', 'AI İnceleme #' . $review->id)
+@section('title', 'YZ İnceleme #' . $review->id)
 
 @push('css')
 <style>
@@ -165,7 +165,7 @@
             @endif
             <div class="small text-muted mt-2 mb-0">
                 Not: Ham model çıktısının tamamı saklanır; panelde yalnızca teşhis özeti gösterilir.
-                Sistem otomatik yeniden dener (max deneme).
+                Otomatik yeniden deneme kapalı — başarısız kayıt deneme 1’de kalır; yeniden deneme manueldir.
             </div>
         </div>
     @endif
@@ -341,7 +341,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content aqr-modal">
             <div class="modal-header">
-                <h5 class="modal-title" id="aqrApplyRevisionModalLabel">AI düzeltmesini uygula</h5>
+                <h5 class="modal-title" id="aqrApplyRevisionModalLabel">YZ düzeltmesini uygula</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
             </div>
             <div class="modal-body">
