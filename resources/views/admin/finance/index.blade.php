@@ -6,8 +6,10 @@
 <style>
 .fin-wrap { max-width: 1400px; }
 .fin-hero {
-    background: linear-gradient(135deg, #0b1220 0%, #1a2744 55%, #243b5c 100%);
+    background: linear-gradient(135deg, #0c2340 0%, #12405a 45%, #0f5c56 100%);
     border-radius: 14px; color: #fff; padding: 1.35rem 1.5rem; margin-bottom: 1rem;
+    border: 1px solid rgba(153,246,228,.12);
+    box-shadow: 0 10px 28px rgba(12,35,64,.18);
 }
 .fin-hero h3 { color: #fff !important; margin: 0 0 .35rem; font-weight: 650; }
 .fin-hero p { margin: 0; color: rgba(255,255,255,.8); font-size: .95rem; }
@@ -82,8 +84,26 @@
 .fin-pos { color: #15803d; }
 .fin-neg { color: #b91c1c; }
 .fin-muted { color: #64748b; }
-.fin-chart { width: 100%; height: 260px; }
-.fin-chart-sm { width: 100%; height: 220px; }
+.fin-chart { width: 100%; height: 280px; }
+.fin-chart-sm { width: 100%; height: 240px; }
+.fin-charts-row { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.fin-charts-row + .fin-charts-row { margin-top: 0.5rem; }
+.fin-tables-row { margin-bottom: 1.5rem; }
+.fin-chart-shell {
+    background: linear-gradient(165deg, #0f2744 0%, #12324f 48%, #0d3b3a 100%);
+    border-radius: 12px; padding: 1rem .85rem .65rem; min-height: 100%;
+    border: 1px solid rgba(148,163,184,.18);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+.fin-chart-shell canvas { max-width: 100%; }
+.fin-doughnut-wrap { position: relative; height: 240px; }
+.fin-doughnut-center {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none; color: #ecfeff; text-align: center; padding-top: .25rem;
+}
+.fin-doughnut-center .v { font-size: 1.2rem; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.fin-doughnut-center .l { font-size: .68rem; color: #99f6e4; text-transform: uppercase; letter-spacing: .05em; margin-top: .15rem; opacity:.9; }
+.fin-card .hd { border-bottom-color: #eef2ff; }
 .fin-info {
     background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: .75rem 1rem; font-size: .85rem; color: #475569;
 }
@@ -156,8 +176,10 @@
                 · sistematik + manuel</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            {{-- Geçici gizlendi: P&L / Ledger CSV
             <a href="{{ route('admin.finance.export', ['type' => 'pnl', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">P&L CSV</a>
             <a href="{{ route('admin.finance.export', ['type' => 'ledger', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">Ledger CSV</a>
+            --}}
             <a href="{{ route('admin.finance.coin.index') }}" class="fin-link">Coin finans</a>
             <a href="{{ route('admin.finance.settings') }}" class="fin-link">Oranlar &amp; kategoriler</a>
         </div>
@@ -431,7 +453,7 @@
         </div>
     @endforeach
 
-    <div class="row g-3">
+    <div class="row g-3 fin-charts-row">
         <div class="col-lg-8">
             <div class="fin-card">
                 <div class="hd">
@@ -441,7 +463,9 @@
                     </div>
                 </div>
                 <div class="bd">
-                    <canvas id="finChartDaily" class="fin-chart" height="260"></canvas>
+                    <div class="fin-chart-shell">
+                        <canvas id="finChartDaily" class="fin-chart" height="280"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -454,13 +478,19 @@
                     </div>
                 </div>
                 <div class="bd">
-                    <canvas id="finChartMix" class="fin-chart-sm" height="220"></canvas>
+                    <div class="fin-chart-shell fin-doughnut-wrap">
+                        <canvas id="finChartMix" class="fin-chart-sm" height="240"></canvas>
+                        <div class="fin-doughnut-center">
+                            <div class="v" id="finMixCenterVal">—</div>
+                            <div class="l">net toplam</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row g-3">
+    <div class="row g-3 fin-charts-row">
         <div class="col-lg-6">
             <div class="fin-card">
                 <div class="hd">
@@ -470,7 +500,9 @@
                     </div>
                 </div>
                 <div class="bd">
-                    <canvas id="finChartBars" class="fin-chart-sm" height="220"></canvas>
+                    <div class="fin-chart-shell">
+                        <canvas id="finChartBars" class="fin-chart-sm" height="240"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -512,7 +544,7 @@
         Düello kesinti (bilgi): {{ number_format($s['duel_commission_info']['coins']) }} coin ≈ {{ $fmt($s['duel_commission_info']['try_equiv']) }}.
     </div>
 
-    <div class="row g-3">
+    <div class="row g-3 fin-tables-row">
         <div class="col-xl-8">
             <div class="fin-card" id="fin-sales">
                 <div class="hd">
@@ -911,6 +943,31 @@
     var money = function (v) {
         return (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ₺';
     };
+    var moneyShort = function (v) {
+        var n = Number(v) || 0;
+        var abs = Math.abs(n);
+        if (abs >= 1000000) return (n / 1000000).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + 'M ₺';
+        if (abs >= 1000) return (n / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + 'B ₺';
+        return money(n);
+    };
+    var finDefaults = {
+        color: '#94a3b8',
+        borderColor: 'rgba(148,163,184,.25)',
+        font: { family: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif', size: 11 }
+    };
+    Chart.defaults.color = finDefaults.color;
+    Chart.defaults.font.family = finDefaults.font.family;
+    Chart.defaults.font.size = finDefaults.font.size;
+
+    function gradientFill(ctx, colorTop, colorBottom) {
+        var chart = ctx.chart;
+        var area = chart.chartArea;
+        if (!area) return colorTop;
+        var g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+        g.addColorStop(0, colorTop);
+        g.addColorStop(1, colorBottom);
+        return g;
+    }
 
     var daily = @json($s['daily']);
     var dailyCtx = document.getElementById('finChartDaily');
@@ -929,9 +986,43 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Gelir', data: income, borderColor: '#15803d', backgroundColor: 'rgba(21,128,61,.12)', tension: .3, fill: true, pointRadius: labels.length <= 14 ? 3 : 0 },
-                    { label: 'Gider', data: expense, borderColor: '#b91c1c', backgroundColor: 'rgba(185,28,28,.08)', tension: .3, fill: true, pointRadius: labels.length <= 14 ? 3 : 0 },
-                    { label: 'Net', data: net, borderColor: '#1d4ed8', borderWidth: 2, tension: .3, fill: false, pointRadius: labels.length <= 14 ? 3 : 0 }
+                    {
+                        label: 'Gelir',
+                        data: income,
+                        borderColor: '#5eead4',
+                        borderWidth: 1.75,
+                        backgroundColor: function (c) { return gradientFill(c, 'rgba(94,234,212,.32)', 'rgba(94,234,212,0)'); },
+                        tension: .35,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 3,
+                        order: 3
+                    },
+                    {
+                        label: 'Gider',
+                        data: expense,
+                        borderColor: '#fb7185',
+                        borderWidth: 1.75,
+                        backgroundColor: function (c) { return gradientFill(c, 'rgba(251,113,133,.24)', 'rgba(251,113,133,0)'); },
+                        tension: .35,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 3,
+                        order: 2
+                    },
+                    {
+                        label: 'Net',
+                        data: net,
+                        borderColor: '#fde68a',
+                        borderWidth: 2.6,
+                        backgroundColor: 'transparent',
+                        tension: .25,
+                        fill: false,
+                        pointRadius: labels.length <= 16 ? 2.5 : 0,
+                        pointHoverRadius: 4,
+                        pointBackgroundColor: '#fde68a',
+                        order: 1
+                    }
                 ]
             },
             options: {
@@ -939,14 +1030,41 @@
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + money(c.parsed.y); } } }
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            color: '#cbd5e1',
+                            font: { size: 11, weight: '600' },
+                            padding: 16
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,.94)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#e2e8f0',
+                        borderColor: 'rgba(148,163,184,.35)',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: true,
+                        callbacks: { label: function (c) { return ' ' + c.dataset.label + ': ' + money(c.parsed.y); } }
+                    }
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                    x: {
+                        grid: { color: 'rgba(148,163,184,.08)', drawBorder: false },
+                        ticks: { maxTicksLimit: 10, color: '#94a3b8', font: { size: 10 } }
+                    },
                     y: {
-                        ticks: { font: { size: 10 }, callback: function (v) { return money(v); } },
-                        grid: { color: '#f1f5f9' }
+                        grid: { color: 'rgba(148,163,184,.12)', drawBorder: false },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { size: 10, family: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+                            callback: function (v) { return moneyShort(v); }
+                        }
                     }
                 }
             }
@@ -958,30 +1076,62 @@
         var byType = @json($s['iap']['by_type'] ?? []);
         var mixLabels = [];
         var mixData = [];
-        var mixColors = ['#0f766e', '#1d4ed8', '#a16207', '#7c3aed', '#64748b'];
+        var mixColors = ['#5eead4', '#93c5fd', '#fde68a', '#d8b4fe', '#94a3b8'];
         var nameMap = { coin: 'Jeton', premium: 'Premium', joker: 'Joker', diamond: 'Elmas', other: 'Diğer' };
+        var mixTotal = 0;
         Object.keys(byType).forEach(function (k) {
             if ((byType[k] || 0) <= 0) return;
             mixLabels.push(nameMap[k] || k);
             mixData.push(byType[k]);
+            mixTotal += Number(byType[k]) || 0;
         });
         if (mixData.length === 0) {
             mixLabels = ['Veri yok'];
             mixData = [1];
-            mixColors = ['#e2e8f0'];
+            mixColors = ['#334155'];
+            mixTotal = 0;
         }
+        var centerEl = document.getElementById('finMixCenterVal');
+        if (centerEl) centerEl.textContent = moneyShort(mixTotal);
         new Chart(mixCtx, {
             type: 'doughnut',
             data: {
                 labels: mixLabels,
-                datasets: [{ data: mixData, backgroundColor: mixColors, borderWidth: 0 }]
+                datasets: [{
+                    data: mixData,
+                    backgroundColor: mixColors,
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '72%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: function (c) { return c.label + ': ' + money(c.parsed); } } }
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 8,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            color: '#cbd5e1',
+                            font: { size: 10, weight: '600' },
+                            padding: 12
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,.94)',
+                        borderColor: 'rgba(148,163,184,.35)',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function (c) {
+                                var sum = c.dataset.data.reduce(function (a, b) { return a + (Number(b) || 0); }, 0) || 1;
+                                var pct = ((c.parsed / sum) * 100).toFixed(1);
+                                return ' ' + c.label + ': ' + money(c.parsed) + ' (' + pct + '%)';
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -1002,23 +1152,45 @@
                         {{ (float) ($s['gift']['total'] ?? 0) }},
                         {{ (float) ($s['manual_expense'] ?? 0) }}
                     ],
-                    backgroundColor: ['#15803d', '#0f766e', '#0369a1', '#b91c1c', '#ea580c'],
-                    borderRadius: 6,
-                    maxBarThickness: 42
+                    backgroundColor: [
+                        'rgba(94,234,212,.9)',
+                        'rgba(125,211,252,.88)',
+                        'rgba(253,230,138,.88)',
+                        'rgba(251,113,133,.88)',
+                        'rgba(251,146,60,.88)'
+                    ],
+                    borderRadius: 4,
+                    borderSkipped: false,
+                    maxBarThickness: 28,
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.75
                 }]
             },
             options: {
+                indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: function (c) { return money(c.parsed.y); } } }
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,.94)',
+                        borderColor: 'rgba(148,163,184,.35)',
+                        borderWidth: 1,
+                        callbacks: { label: function (c) { return ' ' + money(c.parsed.x); } }
+                    }
                 },
                 scales: {
-                    x: { grid: { display: false } },
+                    x: {
+                        grid: { color: 'rgba(148,163,184,.12)', drawBorder: false },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { size: 10, family: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+                            callback: function (v) { return moneyShort(v); }
+                        }
+                    },
                     y: {
-                        ticks: { font: { size: 10 }, callback: function (v) { return money(v); } },
-                        grid: { color: '#f1f5f9' }
+                        grid: { display: false, drawBorder: false },
+                        ticks: { color: '#cbd5e1', font: { size: 11, weight: '600' } }
                     }
                 }
             }

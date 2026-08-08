@@ -35,6 +35,11 @@ class FinanceCoinService
         $recentMatches = self::recentMatches($fromDay, $toDay, 3, 'humans');
         $botRecentMatches = self::recentMatches($fromDay, $toDay, 3, 'bots');
         $commissionMatches = self::recentCommissionMatches($fromDay, $toDay, 5);
+        $dailyNet = self::dailyNetSeries($fromDay, $toDay);
+        $pendingOpen = self::openPendingGiftClaimCount();
+        $minCoins = FinanceService::giftClaimMinCoins();
+        $heatFrom = $toDay->copy()->subDays(29)->startOfDay();
+        $heatCalendar = self::dailyNetSeries($heatFrom, $toDay);
 
         // Coin gelir: paketlerden verilen jeton + uygulama kesintisi (sisteme giren)
         $incomeIap = (int) $iapCoins['total_coins'];
@@ -47,12 +52,28 @@ class FinanceCoinService
         $net = $incomeTotal - $expenseTotal;
 
         $balanceDenom = max(1, $incomeTotal + $expenseTotal);
+        $humanDuel = (int) ($pools['human_duel'] ?? 0);
+        $giftCapacity = $minCoins > 0 ? intdiv($humanDuel, $minCoins) : 0;
+        $towardNext = $minCoins > 0 ? ($humanDuel % $minCoins) : 0;
 
         return [
             'from' => $fromDay->toDateString(),
             'to' => $toDay->toDateString(),
             'iap' => $iapCoins,
             'gift_claims' => $giftClaims,
+            'gift_alert' => [
+                'pending_count' => $pendingOpen,
+                'min_coins' => $minCoins,
+            ],
+            'gift_pressure' => [
+                'human_duel' => $humanDuel,
+                'min_coins' => $minCoins,
+                'capacity' => $giftCapacity,
+                'toward_next' => $towardNext,
+                'progress_pct' => $minCoins > 0 ? round(100 * $towardNext / $minCoins, 1) : 0,
+            ],
+            'daily_net' => $dailyNet,
+            'heat_calendar' => $heatCalendar,
             'commission' => $commission,
             'commission_matches' => $commissionMatches,
             'bot_period' => $botPeriod,
@@ -76,6 +97,123 @@ class FinanceCoinService
                 'commission_of_income' => $incomeTotal > 0 ? round(100 * $incomeCommission / $incomeTotal, 1) : 0,
             ],
         ];
+    }
+
+    /**
+     * Açık (bekleyen) hediye talebi sayısı — dönem filtresinden bağımsız.
+     */
+    public static function openPendingGiftClaimCount(): int
+    {
+        return (int) RewardRequest::query()
+            ->where('reward_type', 'duel')
+            ->where('status', 'pending')
+            ->count();
+    }
+
+    /**
+     * Günlük net coin serisi (sparkline). Uzun aralıklarda son 45 gün.
+     *
+     * @return list<array{date:string,label:string,income:int,expense:int,net:int}>
+     */
+    public static function dailyNetSeries(Carbon $from, Carbon $to): array
+    {
+        $toDay = $to->copy()->endOfDay();
+        $fromDay = $from->copy()->startOfDay();
+        if ($fromDay->diffInDays($toDay) > 44) {
+            $fromDay = $toDay->copy()->subDays(44)->startOfDay();
+        }
+
+        $days = [];
+        for ($d = $fromDay->copy(); $d->lte($toDay); $d->addDay()) {
+            $key = $d->toDateString();
+            $days[$key] = [
+                'date' => $key,
+                'label' => $d->format('d.m'),
+                'income' => 0,
+                'expense' => 0,
+                'net' => 0,
+            ];
+        }
+        if ($days === []) {
+            return [];
+        }
+
+        $rangeFrom = $fromDay->copy()->startOfDay();
+        $rangeTo = $toDay->copy()->endOfDay();
+
+        $payments = Payment::query()
+            ->completed()
+            ->where(function ($q) use ($rangeFrom, $rangeTo) {
+                $q->whereBetween('paid_at', [$rangeFrom, $rangeTo])
+                    ->orWhere(function ($q2) use ($rangeFrom, $rangeTo) {
+                        $q2->whereNull('paid_at')->whereBetween('created_at', [$rangeFrom, $rangeTo]);
+                    });
+            })
+            ->get(['metadata', 'paid_at', 'created_at']);
+
+        foreach ($payments as $p) {
+            $meta = is_array($p->metadata) ? $p->metadata : [];
+            if (strtolower((string) ($meta['type'] ?? '')) !== 'coin') {
+                continue;
+            }
+            $snap = is_array($meta['package_snapshot'] ?? null) ? $meta['package_snapshot'] : [];
+            $granted = (int) ($snap['coin_amount'] ?? $snap['coins'] ?? 0) + (int) ($snap['bonus_coins'] ?? 0);
+            if ($granted <= 0) {
+                continue;
+            }
+            $when = $p->paid_at ?? $p->created_at;
+            if (!$when) {
+                continue;
+            }
+            $key = Carbon::parse($when)->toDateString();
+            if (!isset($days[$key])) {
+                continue;
+            }
+            $days[$key]['income'] += $granted;
+        }
+
+        $commRows = DB::table('duels')
+            ->where('status', 'finished')
+            ->whereNotNull('finished_at')
+            ->whereBetween('finished_at', [$rangeFrom, $rangeTo])
+            ->selectRaw('DATE(finished_at) as d, SUM(app_commission) as c')
+            ->groupBy('d')
+            ->get();
+
+        foreach ($commRows as $row) {
+            $key = (string) $row->d;
+            if (!isset($days[$key])) {
+                continue;
+            }
+            $days[$key]['income'] += (int) $row->c;
+        }
+
+        $minDefault = FinanceService::giftClaimMinCoins();
+        $giftRows = RewardRequest::query()
+            ->where('reward_type', 'duel')
+            ->where('status', '!=', 'rejected')
+            ->whereBetween('created_at', [$rangeFrom, $rangeTo])
+            ->get(['created_at', 'coins_earned', 'metadata']);
+
+        foreach ($giftRows as $rr) {
+            $meta = is_array($rr->metadata) ? $rr->metadata : [];
+            $amt = (int) ($meta['claimed_amount'] ?? $rr->coins_earned ?? $minDefault);
+            if ($amt <= 0) {
+                $amt = $minDefault;
+            }
+            $key = Carbon::parse($rr->created_at)->toDateString();
+            if (!isset($days[$key])) {
+                continue;
+            }
+            $days[$key]['expense'] += $amt;
+        }
+
+        foreach ($days as &$day) {
+            $day['net'] = (int) $day['income'] - (int) $day['expense'];
+        }
+        unset($day);
+
+        return array_values($days);
     }
 
     /**
@@ -487,6 +625,7 @@ class FinanceCoinService
         return [
             'total_coins' => $total,
             'count' => $rows->where('status', '!=', 'rejected')->count(),
+            'pending_count' => $rows->where('status', 'pending')->count(),
             'pending' => $pending,
             'approved' => $approved,
             'rejected' => $rejected,
