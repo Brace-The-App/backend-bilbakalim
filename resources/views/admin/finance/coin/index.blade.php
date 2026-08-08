@@ -180,7 +180,7 @@
 </svg>
 
 @php
-    $coinImg = asset('assets/images/finance/coin.png');
+    $coinImg = asset('assets/images/finance/coin.png') . '?v=20260808b';
     $s = $summary;
     $p = $s['pools'];
     $alert = $s['gift_alert'] ?? ['pending_count' => 0, 'min_coins' => 250];
