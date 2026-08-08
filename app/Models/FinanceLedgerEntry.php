@@ -21,7 +21,6 @@ class FinanceLedgerEntry extends Model
         'multinet' => 'Multinet',
         'papara' => 'Papara',
         'havale' => 'Havale',
-        'parsela' => 'Parsela',
         'other' => 'Diğer',
     ];
 

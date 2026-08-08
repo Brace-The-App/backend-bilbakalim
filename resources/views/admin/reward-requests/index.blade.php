@@ -3,12 +3,18 @@
 @section('title', 'Ödül Talepleri')
 
 @section('content')
+@php
+    $defaultGiftPayoutTry = round((float) (\App\Services\FinanceService::giftPayoutTry() ?: 250), 2);
+    if ($defaultGiftPayoutTry <= 0) {
+        $defaultGiftPayoutTry = 250;
+    }
+@endphp
 <div class="page-title" style="margin-top: 1rem;">
     <div class="row align-items-center">
         <div class="col-12">
             <h3 class="mb-1">Ödül Talepleri</h3>
             <p class="text-muted mb-0 small">
-                Hediye talepleri yalnızca <strong>düello jetonundan</strong> (duel_earned) düşülür.
+                Hediye talepleri yalnızca <strong>düello jetonundan</strong> düşülür.
             </p>
         </div>
     </div>
@@ -24,6 +30,26 @@
                 </div>
             </div>
             <div class="card-body">
+                <form method="get" class="row g-2 align-items-end mb-3">
+                    <div class="col-auto">
+                        <label class="form-label small mb-1">Durum</label>
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">Tümü ({{ number_format($counts['all'] ?? 0) }})</option>
+                            <option value="pending" @selected(($status ?? '') === 'pending')>Beklemede ({{ number_format($counts['pending'] ?? 0) }})</option>
+                            <option value="approved" @selected(($status ?? '') === 'approved')>Ödül verildi ({{ number_format($counts['approved'] ?? 0) }})</option>
+                            <option value="rejected" @selected(($status ?? '') === 'rejected')>Reddedildi ({{ number_format($counts['rejected'] ?? 0) }})</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Ara</label>
+                        <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control form-control-sm" placeholder="ID, kullanıcı, e-posta, telefon">
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-dark">Filtrele</button>
+                        <a href="{{ route('admin.reward-requests.index') }}" class="btn btn-sm btn-outline-secondary">Temizle</a>
+                    </div>
+                </form>
+
                 <div class="table-responsive">
                     <table class="table table-striped align-middle">
                         <thead>
@@ -35,13 +61,13 @@
                                 <th>Talep</th>
                                 <th>Düello hareketi</th>
                                 <th>Güncel düello</th>
-                                <th>Tarih</th>
+                                <th>Talep tarihi</th>
                                 <th>Durum</th>
                                 <th>İşlemler</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($requests as $request)
+                            @forelse($requests as $request)
                             @php
                                 $minClaim = \App\Services\FinanceService::giftClaimMinCoins();
                                 $meta = is_array($request->metadata) ? $request->metadata : [];
@@ -132,8 +158,10 @@
                                     <br><small class="text-muted">canlı bakiye</small>
                                 </td>
                                 <td class="small">
-                                    <div>{{ $request->reward_date ? \Carbon\Carbon::parse($request->reward_date)->format('d.m.Y') : '-' }}</div>
-                                    <div class="text-muted">{{ $request->requested_at ? $request->requested_at->format('d.m.Y H:i') : '-' }}</div>
+                                    <div>{{ tr_time($request->created_at, 'd.m.Y H:i') }}</div>
+                                    @if($request->requested_at && $request->created_at && !$request->requested_at->eq($request->created_at))
+                                        <div class="text-muted">istenme: {{ tr_time($request->requested_at, 'd.m.Y H:i') }}</div>
+                                    @endif
                                 </td>
                                 <td>
                                     @if($request->status === 'pending')
@@ -158,20 +186,78 @@
                                             <br><small class="text-muted">Onaylayan: {{ $request->approver->name }}</small>
                                         @endif
                                     @endif
-                                    <button type="button" class="btn btn-sm btn-outline-danger mt-1" onclick="deleteRequest({{ $request->id }})" title="Talebi sil">
+                                    <button type="button" class="btn btn-sm btn-outline-danger mt-1"
+                                            onclick="deleteRequest({{ (int) $request->id }}, '{{ $request->status }}')"
+                                            title="Talebi sil">
                                         Sil
                                     </button>
                                 </td>
                             </tr>
-                            @endforeach
+                            @empty
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">Kayıt yok.</td>
+                            </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
-                <!-- Pagination -->
-                <div class="d-flex justify-content-center mt-3">
-                    {{ $requests->links('pagination::bootstrap-4') }}
+                <!-- Pagination: 10'arlı, filtre korunur -->
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+                    <div class="small text-muted">
+                        @if($requests->total() > 0)
+                            {{ $requests->firstItem() }}–{{ $requests->lastItem() }} / {{ $requests->total() }}
+                        @endif
+                        · en yeni talep önce (oluşturma tarihi)
+                    </div>
+                    <div>
+                        {{ $requests->onEachSide(1)->links('pagination::bootstrap-4') }}
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+{{-- Ödül onay modal --}}
+<div class="modal fade" id="rewardApproveModal" tabindex="-1" aria-labelledby="rewardApproveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border:0;border-radius:14px;overflow:hidden">
+            <div class="modal-header border-0 pb-0" style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff">
+                <div>
+                    <h5 class="modal-title mb-1" id="rewardApproveModalLabel" style="color:#fff !important">Ödül ver</h5>
+                    <div class="small" style="color:#fff !important;opacity:.85">Talep #<span id="approveRequestIdLabel">—</span></div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <form id="rewardApproveForm">
+                <div class="modal-body pt-3">
+                    <input type="hidden" id="approveRequestId" value="">
+                    <div class="mb-3">
+                        <label for="approvePayoutMethod" class="form-label">Ödeme yöntemi</label>
+                        <select id="approvePayoutMethod" class="form-select" required>
+                            <option value="multinet" selected>Multinet</option>
+                            <option value="papara">Papara</option>
+                            <option value="havale">Havale</option>
+                            <option value="other">Diğer</option>
+                        </select>
+                    </div>
+                    <div class="mb-1">
+                        <label for="approvePayoutAmount" class="form-label">Ödenen tutar (₺)</label>
+                        <div class="input-group">
+                            <input type="number" id="approvePayoutAmount" class="form-control" min="0" max="999999" step="0.01"
+                                   value="{{ $defaultGiftPayoutTry }}" inputmode="decimal">
+                            <span class="input-group-text">₺</span>
+                        </div>
+                        <div class="form-text">Varsayılan {{ number_format($defaultGiftPayoutTry, 0, ',', '.') }} ₺ — gerekirse elle değiştirilebilir.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                    <button type="submit" class="btn btn-success" id="approveSubmitBtn">
+                        Ödülü onayla
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -195,6 +281,9 @@
 
 @push('scripts')
 <script>
+@php
+    $defaultGiftPayoutTryJs = (float) $defaultGiftPayoutTry;
+@endphp
 $(document).ready(function() {
     toastr.options = {
         "closeButton": true,
@@ -213,31 +302,71 @@ $(document).ready(function() {
         "showMethod": "fadeIn",
         "hideMethod": "fadeOut"
     };
+
+    $('#rewardApproveForm').on('submit', function (e) {
+        e.preventDefault();
+        submitApproveRequest();
+    });
 });
 
+var defaultGiftPayoutTry = {{ json_encode($defaultGiftPayoutTryJs) }};
+var approveModal = null;
+
+function getApproveModal() {
+    if (!approveModal) {
+        var el = document.getElementById('rewardApproveModal');
+        approveModal = bootstrap.Modal.getOrCreateInstance(el);
+    }
+    return approveModal;
+}
+
 function approveRequest(id) {
-    var method = prompt('Ödeme yöntemi yazın: multinet / papara / havale / parsela / other', 'multinet');
-    if (method === null) return;
-    method = String(method).trim().toLowerCase();
-    var allowed = ['multinet', 'papara', 'havale', 'parsela', 'other'];
-    if (allowed.indexOf(method) === -1) {
-        toastr.error('Geçersiz yöntem. multinet, papara, havale, parsela veya other yazın.');
+    $('#approveRequestId').val(id);
+    $('#approveRequestIdLabel').text(id);
+    $('#approvePayoutMethod').val('multinet');
+    $('#approvePayoutAmount').val(defaultGiftPayoutTry);
+    getApproveModal().show();
+    setTimeout(function () { $('#approvePayoutMethod').trigger('focus'); }, 250);
+}
+
+function submitApproveRequest() {
+    var id = $('#approveRequestId').val();
+    var method = String($('#approvePayoutMethod').val() || '').trim().toLowerCase();
+    var amountRaw = String($('#approvePayoutAmount').val() || '').trim();
+    var allowed = ['multinet', 'papara', 'havale', 'other'];
+
+    if (!id) {
+        toastr.error('Talep bulunamadı.');
         return;
     }
-    var amountRaw = prompt('Ödenen tutar (₺). Boş bırakırsan dönem ayarı kullanılır.', '');
-    if (amountRaw === null) return;
+    if (allowed.indexOf(method) === -1) {
+        toastr.error('Geçersiz ödeme yöntemi.');
+        return;
+    }
+
     var payload = {
         _token: '{{ csrf_token() }}',
         payout_method: method
     };
-    if (String(amountRaw).trim() !== '') {
-        var raw = String(amountRaw).trim().replace(/\s/g, '');
+
+    if (amountRaw !== '') {
+        var raw = amountRaw.replace(/\s/g, '');
         if (raw.indexOf(',') >= 0) {
             raw = raw.replace(/\./g, '').replace(',', '.');
         }
+        var num = parseFloat(raw);
+        if (isNaN(num) || num < 0) {
+            toastr.error('Geçerli bir tutar girin.');
+            return;
+        }
         payload.payout_amount = raw;
+    } else {
+        toastr.error('Ödenen tutarı girin.');
+        return;
     }
-    if (!confirm('Onaylansın mı? (' + method + ')')) return;
+
+    var $btn = $('#approveSubmitBtn');
+    $btn.prop('disabled', true).text('Onaylanıyor…');
 
     $.ajax({
         url: '/admin/reward-requests/' + id + '/approve',
@@ -245,6 +374,7 @@ function approveRequest(id) {
         data: payload,
         success: function(response) {
             if (response.success) {
+                getApproveModal().hide();
                 toastr.success(response.message);
                 location.reload();
             } else {
@@ -263,6 +393,9 @@ function approveRequest(id) {
             } else {
                 toastr.error('Ödül talebi onaylanırken bir hata oluştu!');
             }
+        },
+        complete: function () {
+            $btn.prop('disabled', false).text('Ödülü onayla');
         }
     });
 }
@@ -297,8 +430,17 @@ function rejectRequest(id) {
     }
 }
 
-function deleteRequest(id) {
-    if (!confirm('Bu ödül talebini kalıcı olarak silmek istediğinizden emin misiniz?')) {
+function deleteRequest(id, status) {
+    status = status || '';
+    var msg = 'Bu ödül talebini kalıcı olarak silmek istediğinizden emin misiniz?';
+    if (status === 'approved') {
+        msg = 'Onaylı talep silinecek.\n\n• Jeton iade EDİLMEZ\n• Finans gider kaydı kaldırılır\n\nDevam edilsin mi?';
+    } else if (status === 'pending') {
+        msg = 'Bekleyen talep silinecek.\n\n• Talepte düşülen düello jetonları iade edilir\n\nDevam edilsin mi?';
+    } else if (status === 'rejected') {
+        msg = 'Reddedilmiş talep silinecek.\n\n• Jeton zaten iade edilmiş olmalı; ekstra iade yok\n\nDevam edilsin mi?';
+    }
+    if (!confirm(msg)) {
         return;
     }
 

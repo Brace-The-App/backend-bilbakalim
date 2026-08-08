@@ -8,7 +8,7 @@
 .fin-coin-hero {
     background: linear-gradient(135deg, #0c1a14 0%, #14352a 55%, #1a4d3a 100%);
     border-radius: 14px; color: #fff; padding: 1.35rem 1.5rem; margin-bottom: 1rem;
-    position: relative; overflow: hidden;
+    position: relative; overflow: visible;
 }
 .fin-coin-hero-main { display:flex; align-items:center; gap:.85rem; min-width:0; }
 .fin-coin-hero-icon { width:28px; height:28px; flex-shrink:0; object-fit:contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
@@ -20,18 +20,39 @@
 }
 .fin-coin-hero a.fin-link-hero:hover { background: rgba(255,255,255,.16); }
 .fin-coin-spin-wrap {
-    width: 58px; height: 58px; flex-shrink: 0;
-    perspective: 240px; display:flex; align-items:center; justify-content:center;
-}
-.fin-coin-spin {
-    width: 58px; height: 58px; object-fit: contain;
-    animation: fin-coin-y-spin 2.6s linear infinite;
-    transform-style: preserve-3d;
+    width: 73px; height: 73px; flex-shrink: 0;
+    perspective: 280px; display:flex; align-items:center; justify-content:center;
+    cursor: pointer; z-index: 3;
+    transition: transform .28s ease;
+    transform-origin: center center;
     filter: drop-shadow(0 4px 10px rgba(0,0,0,.28));
 }
+.fin-coin-spin-wrap:hover {
+    transform: scale(2);
+}
+.fin-coin-spin {
+    position: relative;
+    width: 73px; height: 73px;
+    transform-style: preserve-3d;
+    animation: fin-coin-y-spin 2.4s ease-in-out infinite;
+    pointer-events: none;
+}
+.fin-coin-spin-face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+.fin-coin-spin-face.is-back {
+    transform: rotateY(180deg);
+}
 @keyframes fin-coin-y-spin {
-    from { transform: rotateY(0deg); }
-    to { transform: rotateY(360deg); }
+    0%   { transform: rotateY(0deg); }
+    50%  { transform: rotateY(180deg); }
+    100% { transform: rotateY(0deg); }
 }
 .fin-presets { display:flex; flex-wrap:wrap; gap:.4rem; }
 .fin-presets a {
@@ -238,7 +259,10 @@
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <div class="fin-coin-spin-wrap" title="Jeton">
-                <img class="fin-coin-spin" src="{{ $coinImg }}" alt="" width="58" height="58">
+                <div class="fin-coin-spin" aria-hidden="true">
+                    <img class="fin-coin-spin-face is-front" src="{{ $coinImg }}" alt="" width="73" height="73">
+                    <img class="fin-coin-spin-face is-back" src="{{ $coinImg }}" alt="" width="73" height="73">
+                </div>
             </div>
             <a class="fin-link-hero" href="{{ route('admin.finance.index') }}">TL (nakit) finans</a>
         </div>
@@ -410,8 +434,7 @@
                             <path d="M 18 62 A 42 42 0 0 1 102 62" fill="none" stroke="#e2e8f0" stroke-width="10" stroke-linecap="round"/>
                             <path d="M 18 62 A 42 42 0 0 1 102 62" fill="none" stroke="#15803d" stroke-width="10" stroke-linecap="round"
                                   stroke-dasharray="{{ $gaugeLen }}" stroke-dashoffset="{{ $gaugeOffset }}"/>
-                            <text x="60" y="58" text-anchor="middle" fill="#14532d" font-size="20" font-weight="700">{{ (int) $pressure['capacity'] }}</text>
-                            <text x="60" y="72" text-anchor="middle" fill="#64748b" font-size="8">hediye kapasitesi · bot hariç</text>
+                            <text x="60" y="64" text-anchor="middle" fill="#14532d" font-size="20" font-weight="700">{{ (int) $pressure['capacity'] }}</text>
                         </svg>
                         <div class="fin-gauge-sub">
                             İnsan düello havuzu · sonraki hediyeye <strong>{{ number_format($needNext, 0, ',', '.') }}</strong>

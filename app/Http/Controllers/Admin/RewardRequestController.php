@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\FinanceLedgerEntry;
 use App\Models\RewardRequest;
 use App\Models\User;
 use App\Services\FinanceService;
@@ -18,14 +19,56 @@ class RewardRequestController extends Controller
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        // surname kolonu henüz DB'de yok — select'e alma
-        $requests = RewardRequest::with(['user:id,name,email,phone,coins,duel_earned_coins', 'approver:id,name'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(20);
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
 
-        return view('admin.reward-requests.index', compact('requests'));
+        $allowedStatuses = ['pending', 'approved', 'rejected'];
+        if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
+            $status = '';
+        }
+
+        // surname kolonu henüz DB'de yok — select'e alma
+        $query = RewardRequest::with(['user:id,name,email,phone,coins,duel_earned_coins', 'approver:id,name']);
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+        if ($q !== '') {
+            if (ctype_digit($q)) {
+                $query->where(function ($w) use ($q) {
+                    $w->where('id', (int) $q)->orWhere('user_id', (int) $q);
+                });
+            } else {
+                $query->whereHas('user', function ($w) use ($q) {
+                    $w->where('name', 'like', '%' . $q . '%')
+                        ->orWhere('email', 'like', '%' . $q . '%')
+                        ->orWhere('phone', 'like', '%' . $q . '%');
+                });
+            }
+        }
+
+        // Her zaman en yeni talep önce (created_at — onay/red updated_at'i kaydırmaz)
+        $requests = $query
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate(10)
+            ->withQueryString();
+
+        $counts = [
+            'all' => RewardRequest::query()->count(),
+            'pending' => RewardRequest::query()->where('status', 'pending')->count(),
+            'approved' => RewardRequest::query()->where('status', 'approved')->count(),
+            'rejected' => RewardRequest::query()->where('status', 'rejected')->count(),
+        ];
+
+        return view('admin.reward-requests.index', compact(
+            'requests',
+            'status',
+            'q',
+            'counts'
+        ));
     }
 
     public function approve(Request $request, RewardRequest $rewardRequest)
@@ -38,10 +81,12 @@ class RewardRequestController extends Controller
         }
 
         $validated = $request->validate([
-            'payout_method' => 'required|in:multinet,papara,havale,parsela,other',
-            'payout_amount' => 'nullable|numeric|min:0|max:999999',
+            'payout_method' => 'required|in:multinet,papara,havale,other',
+            'payout_amount' => 'required|numeric|min:0|max:999999',
         ], [
             'payout_method.required' => 'Ödeme yöntemi seçin.',
+            'payout_amount.required' => 'Ödenen tutarı girin.',
+            'payout_amount.numeric' => 'Ödenen tutar sayı olmalı.',
         ]);
 
         $remainingDuelCoins = 0;
@@ -96,9 +141,7 @@ class RewardRequestController extends Controller
                 'metadata' => $meta,
             ]);
 
-            $amountOverride = isset($validated['payout_amount'])
-                ? (float) $validated['payout_amount']
-                : null;
+            $amountOverride = (float) $validated['payout_amount'];
 
             $ledger = FinanceService::recordGiftPayout(
                 $rewardRequest->fresh(),
@@ -109,6 +152,7 @@ class RewardRequestController extends Controller
 
             $meta['finance_ledger_id'] = $ledger->id;
             $meta['finance_payout_try'] = (float) $ledger->amount_try;
+            $meta['finance_payout_manual'] = true;
             $rewardRequest->update(['metadata' => $meta]);
         });
 
@@ -189,11 +233,66 @@ class RewardRequestController extends Controller
 
     public function destroy(RewardRequest $rewardRequest)
     {
-        $rewardRequest->delete();
+        $status = (string) $rewardRequest->status;
+        $didRefund = false;
+        $removedLedger = false;
+
+        DB::transaction(function () use ($rewardRequest, $status, &$didRefund, &$removedLedger) {
+            $rewardRequest->refresh();
+
+            // Onaylı talep: jeton iade YOK (hediye verilmiş sayılır). Finans gider kaydını kaldır.
+            if ($status === 'approved') {
+                $removed = FinanceLedgerEntry::query()
+                    ->where('reference_type', RewardRequest::class)
+                    ->where('reference_id', $rewardRequest->id)
+                    ->delete();
+                $removedLedger = $removed > 0;
+
+                // meta'daki ledger id ile yedek silme
+                $meta = is_array($rewardRequest->metadata) ? $rewardRequest->metadata : [];
+                if (!empty($meta['finance_ledger_id'])) {
+                    $n = FinanceLedgerEntry::query()->where('id', (int) $meta['finance_ledger_id'])->delete();
+                    $removedLedger = $removedLedger || $n > 0;
+                }
+            }
+
+            // Bekleyen talep silinirse: claim'de düşülen düello jetonunu iade et
+            if ($status === 'pending' && $rewardRequest->reward_type === 'duel' && $rewardRequest->user_id) {
+                $meta = is_array($rewardRequest->metadata) ? $rewardRequest->metadata : [];
+                if (isset($meta['claimed_amount']) || isset($meta['duel_earned_at_claim_after'])) {
+                    $refund = (int) ($meta['claimed_amount'] ?? FinanceService::giftClaimMinCoins());
+                    if ($refund > 0) {
+                        $user = User::query()
+                            ->where('id', $rewardRequest->user_id)
+                            ->lockForUpdate()
+                            ->first();
+                        if ($user) {
+                            $user->duel_earned_coins = (int) ($user->duel_earned_coins ?? 0) + $refund;
+                            $user->save();
+                            $didRefund = true;
+                        }
+                    }
+                }
+            }
+
+            // Reddedilmiş: zaten iade edilmiş olmalı; ekstra iade yok
+            $rewardRequest->delete();
+        });
+
+        $msg = 'Ödül talebi silindi.';
+        if ($status === 'approved') {
+            $msg = 'Onaylı talep silindi. Jeton iade edilmedi'
+                . ($removedLedger ? '; finans gider kaydı kaldırıldı.' : '.');
+        } elseif ($status === 'pending') {
+            $msg = 'Bekleyen talep silindi'
+                . ($didRefund ? ' (düello jetonları iade edildi).' : '.');
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Ödül talebi silindi.'
+            'message' => $msg,
+            'refunded' => $didRefund,
+            'ledger_removed' => $removedLedger,
         ]);
     }
 }

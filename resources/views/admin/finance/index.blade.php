@@ -349,7 +349,7 @@
             <div class="fin-row"><span>IAP iade net</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_net']) }}</span></div>
             <div class="fin-row"><span>IAP net (iade sonrası)</span><span class="amt fin-pos">{{ $fmt($s['iap']['net_after_refunds']) }}</span></div>
         @else
-            <div class="fin-row"><span class="fin-muted">IAP iade</span><span class="amt fin-muted">0 (refunded_at / status=refunded)</span></div>
+            <div class="fin-row"><span class="fin-muted">Uygulama içi iade</span><span class="amt fin-muted">0</span></div>
         @endif
         <div class="fin-row"><span>Reklam geliri (manuel)</span><span class="amt fin-pos">{{ $fmt($s['ad_revenue']) }}</span></div>
         <div class="fin-row"><span>Diğer gelir (manuel)</span><span class="amt fin-pos">{{ $fmt($s['other_income'] ?? 0) }}</span></div>

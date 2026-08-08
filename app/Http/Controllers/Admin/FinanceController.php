@@ -133,7 +133,7 @@ class FinanceController extends Controller
             'counts_for_tax' => 'nullable|boolean',
             'label' => 'nullable|string|max:200',
             'note' => 'nullable|string|max:2000',
-            'payout_method' => 'nullable|in:multinet,papara,havale,parsela,other',
+            'payout_method' => 'nullable|in:multinet,papara,havale,other',
         ], [
             'entry_date.required' => 'Tarih gerekli.',
         ]);

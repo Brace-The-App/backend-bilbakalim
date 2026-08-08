@@ -601,7 +601,7 @@ class FinanceService
     ): FinanceLedgerEntry {
         $when = $rewardRequest->approved_at ?? now();
         $rate = self::rateFor($when);
-        $amount = $amountOverride !== null ? $amountOverride : (float) $rate->gift_payout_try;
+        $amount = $amountOverride !== null ? round((float) $amountOverride, 2) : round((float) $rate->gift_payout_try, 2);
         $cat = FinanceExpenseCategory::query()->where('slug', 'gift')->first();
 
         $entry = FinanceLedgerEntry::query()->create([
@@ -609,16 +609,20 @@ class FinanceService
             'source' => FinanceLedgerEntry::SOURCE_GIFT,
             'category_id' => $cat?->id,
             'entry_date' => Carbon::parse($when)->toDateString(),
-            'amount_try' => round($amount, 2),
+            'amount_try' => $amount,
             'currency' => 'TRY',
             'label' => 'Ödül talebi #' . $rewardRequest->id,
-            'note' => null,
+            'note' => $amountOverride !== null
+                ? ('Manuel ödenen tutar: ' . number_format($amount, 2, ',', '.') . ' ₺')
+                : ('Dönem oranı: ' . number_format((float) $rate->gift_payout_try, 2, ',', '.') . ' ₺'),
             'payout_method' => $payoutMethod,
             'reference_type' => RewardRequest::class,
             'reference_id' => $rewardRequest->id,
             'meta' => [
                 'user_id' => $rewardRequest->user_id,
                 'gift_claim_coins' => $rewardRequest->coins_earned,
+                'amount_source' => $amountOverride !== null ? 'manual' : 'rate',
+                'rate_gift_payout_try' => (float) $rate->gift_payout_try,
             ],
             'created_by' => $actorId ?? Auth::id(),
         ]);
