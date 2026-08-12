@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Translatable\HasTranslations;
 
 class Question extends Model
 {
     use HasTranslations;
+    use SoftDeletes;
 
     public $translatable = ['question', 'one_choice', 'two_choice', 'three_choice', 'four_choice'];
 
@@ -26,7 +28,9 @@ class Question extends Model
         'image',
         'is_active',
         'admin_status',
-        'check'
+        'check',
+        'ai_accepted',
+        'ai_quality_review_id',
     ];
 
     protected $casts = [
@@ -35,13 +39,20 @@ class Question extends Model
         'coin_value' => 'integer',
         'is_active' => 'boolean',
         'category_id' => 'integer',
-        'check' => 'boolean'
+        'check' => 'boolean',
+        'ai_accepted' => 'boolean',
+        'ai_quality_review_id' => 'integer',
     ];
 
     // Relationships
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function aiQualityReview(): BelongsTo
+    {
+        return $this->belongsTo(QuestionQualityReview::class, 'ai_quality_review_id');
     }
 
     public function answers(): HasMany
@@ -148,5 +159,24 @@ class Question extends Model
     public function getCorrectChoiceTextAttribute()
     {
         return $this->choices[$this->correct_answer] ?? '';
+    }
+
+    public const DELETED_LABEL_TR = 'Soru silinmiş';
+
+    public function isRemoved(): bool
+    {
+        return $this->trashed();
+    }
+
+    /** Geçmiş ekranları için metin (silinmiş soruda sabit etiket). */
+    public function displayQuestionTr(): string
+    {
+        if ($this->trashed()) {
+            return self::DELETED_LABEL_TR;
+        }
+
+        $text = $this->getTranslation('question', 'tr', false);
+
+        return $text !== '' ? $text : self::DELETED_LABEL_TR;
     }
 }

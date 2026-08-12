@@ -126,6 +126,11 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
 
     // AI soru kalite review (permission: view/edit question quality)
     Route::get('question-quality-reviews', [QuestionQualityReviewController::class, 'index'])->name('question-quality-reviews.index');
+    Route::get('question-quality-reviews/duplicates', [QuestionQualityReviewController::class, 'duplicates'])->name('question-quality-reviews.duplicates');
+    Route::post('question-quality-reviews/duplicates/deactivate', [QuestionQualityReviewController::class, 'deactivateDuplicate'])->name('question-quality-reviews.duplicates.deactivate');
+    Route::post('question-quality-reviews/duplicates/keep-oldest', [QuestionQualityReviewController::class, 'keepOldestDuplicates'])->name('question-quality-reviews.duplicates.keep-oldest');
+    Route::post('question-quality-reviews/duplicates/delete', [QuestionQualityReviewController::class, 'deleteDuplicate'])->name('question-quality-reviews.duplicates.delete');
+    Route::post('question-quality-reviews/duplicates/dismiss', [QuestionQualityReviewController::class, 'dismissDuplicateGroup'])->name('question-quality-reviews.duplicates.dismiss');
     Route::get('question-quality-reviews/poll', [QuestionQualityReviewController::class, 'poll'])->name('question-quality-reviews.poll');
     Route::post('question-quality-reviews/bulk-apply-revision', [QuestionQualityReviewController::class, 'bulkApplyRevision'])->name('question-quality-reviews.bulk-apply-revision');
     Route::get('question-quality-reviews/{id}', [QuestionQualityReviewController::class, 'show'])->name('question-quality-reviews.show')->whereNumber('id');

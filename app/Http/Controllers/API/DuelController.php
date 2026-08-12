@@ -2115,6 +2115,26 @@ class DuelController extends Controller
             return null;
         }
 
+        if ($question->trashed()) {
+            return [
+                'id' => $question->id,
+                'deleted' => true,
+                'question' => [
+                    'tr' => Question::DELETED_LABEL_TR,
+                    'en' => 'Question deleted',
+                ],
+                'choices' => [
+                    'tr' => ['1' => '', '2' => '', '3' => '', '4' => ''],
+                    'en' => ['1' => '', '2' => '', '3' => '', '4' => ''],
+                ],
+                'correct_answer' => null,
+                'question_level' => null,
+                'coin_value' => 0,
+                'image' => null,
+                'category' => null,
+            ];
+        }
+
         $question->loadMissing('category');
 
         $imageUrl = $question->image;

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Duel;
 use App\Models\GeneralSetting;
+use App\Models\Question;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -1162,11 +1163,17 @@ class DuelBotSettings
                 }
             }
             $q = $ans->question;
-            if ($q && $byQuestion[$qid]['question'] === null) {
-                $byQuestion[$qid]['question'] = method_exists($q, 'getTranslation')
-                    ? (string) $q->getTranslation('question', 'tr')
-                    : (string) ($q->question ?? '');
-                $byQuestion[$qid]['correct_answer'] = (string) ($q->correct_answer ?? '');
+            if ($byQuestion[$qid]['question'] === null) {
+                if ($q && ! $q->trashed()) {
+                    $byQuestion[$qid]['question'] = method_exists($q, 'getTranslation')
+                        ? (string) $q->getTranslation('question', 'tr')
+                        : (string) ($q->question ?? '');
+                    $byQuestion[$qid]['correct_answer'] = (string) ($q->correct_answer ?? '');
+                    $byQuestion[$qid]['question_deleted'] = false;
+                } else {
+                    $byQuestion[$qid]['question'] = Question::DELETED_LABEL_TR;
+                    $byQuestion[$qid]['question_deleted'] = true;
+                }
             }
             $row = [
                 'selected' => (string) $ans->selected_answer,

@@ -1759,7 +1759,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 return '<tr>'
                     + '<td>Q' + q.n + '</td>'
                     + '<td><span class="badge bg-secondary">' + esc(String(mx)) + '</span></td>'
-                    + '<td class="small" style="max-width:360px">' + esc(q.question || '') + '</td>'
+                    + '<td class="small" style="max-width:360px">' + esc(q.question || '') + (q.question_deleted ? ' <span class="badge bg-warning text-dark">Silinmiş</span>' : '') + '</td>'
                     + '<td>' + esc(String(q.correct_answer || '')) + '</td>'
                     + '<td>' + ansCell(q.bot) + '</td>'
                     + '<td>' + ansCell(q.human) + '</td>'

@@ -24,18 +24,23 @@
 }
 .aqr-stat {
     border: 0; border-radius: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.06);
-    height: 100%; transition: box-shadow .15s ease, transform .15s ease;
+    height: 100%; width: 100%; transition: box-shadow .15s ease, transform .15s ease;
 }
-a.aqr-stat-link { text-decoration: none; color: inherit; display: block; height: 100%; }
-a.aqr-stat-link:hover .aqr-stat { box-shadow: 0 10px 24px rgba(15,23,42,.12); transform: translateY(-1px); }
-a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
+.aqr-stat-row > [class*="col"] { display: flex; }
+.aqr-stat-row .aqr-stat-link,
+.aqr-stat-row .aqr-stat-btn {
+    display: flex; flex: 1; width: 100%; height: 100%; text-decoration: none; color: inherit;
+}
+.aqr-stat-row .aqr-stat-link:hover .aqr-stat { box-shadow: 0 10px 24px rgba(15,23,42,.12); transform: translateY(-1px); }
+.aqr-stat-row .aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
 .aqr-stat .card-body {
     padding: 1rem 1.1rem;
-    height: 100%;
+    width: 100%;
+    min-height: 5.75rem;
     display: flex;
     flex-direction: column;
-    gap: .55rem;
-    min-height: 6.25rem;
+    justify-content: space-between;
+    gap: .5rem;
 }
 .aqr-stat .label {
     font-size: .78rem;
@@ -43,19 +48,15 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
     text-transform: uppercase;
     letter-spacing: .03em;
     line-height: 1.3;
-    flex: 1 1 auto;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
     min-height: 2.6em;
+    display: flex;
+    align-items: flex-end;
 }
 .aqr-stat .value {
     font-size: 1.75rem;
     font-weight: 700;
     color: #0f172a;
     margin: 0;
-    margin-top: auto;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
@@ -104,6 +105,34 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
     max-height: 280px; overflow: auto; background: #0f172a; color: #e2e8f0;
     border-radius: 10px; padding: .75rem 1rem; font-size: .82rem; white-space: pre-wrap;
 }
+.aqr-stat-btn { width:100%; text-align:left; border:0; background:transparent; padding:0; }
+.dup-modal .modal-dialog { max-width: 920px; }
+.dup-modal .modal-body { max-height: 70vh; overflow:auto; }
+.dup-tabs { display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.85rem; }
+.dup-tabs button {
+    font-size:.8rem; font-weight:600; padding:.35rem .7rem; border-radius:999px;
+    border:1px solid #e2e8f0; color:#334155; background:#fff;
+}
+.dup-tabs button.is-on { background:#0f172a; color:#fff; border-color:#0f172a; }
+.dup-group { background:#fff; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:.7rem; overflow:hidden; }
+.dup-group-hd {
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.4rem;
+    padding:.5rem .8rem; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:.82rem;
+}
+.dup-group-hd .dup-group-actions { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+.dup-row { display:grid; grid-template-columns: 78px 1fr auto; gap:.55rem; align-items:start; padding:.7rem .8rem; border-top:1px solid #f1f5f9; }
+.dup-row:first-of-type { border-top:0; }
+.dup-row.is-keep { background:#f0fdf4; }
+.dup-row.is-off { opacity:.55; }
+.dup-mark { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding-top:.15rem; }
+.dup-mark.keep { color:#166534; }
+.dup-mark.copy { color:#9a3412; }
+.dup-mark.off { color:#64748b; }
+.dup-txt { font-size:.95rem; line-height:1.4; color:#0f172a; }
+.dup-meta { font-size:.75rem; color:#94a3b8; margin-top:.2rem; }
+.dup-acts { display:flex; flex-wrap:wrap; gap:.3rem; justify-content:flex-end; }
+.dup-acts .btn { font-size:.72rem; padding:.18rem .45rem; }
+@media (max-width: 700px) { .dup-row { grid-template-columns: 1fr; } }
 </style>
 @endpush
 
@@ -115,8 +144,8 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         <p class="mt-2 mb-0" style="font-size:1.15rem;font-weight:650;color:#fff">
             Toplam <span style="color:#4ade80">{{ number_format($stats['total']) }}</span> inceleme
             <span style="opacity:.85;font-weight:500;font-size:.95rem">
-                · <span style="color:#4ade80">{{ number_format($stats['reviewed']) }}</span> başarılı deneme
-                · <span style="color:#fca5a5">{{ number_format($stats['failed']) }}</span> başarısız deneme
+                · <span style="color:#4ade80">{{ number_format($stats['reviewed']) }}</span> başarılı
+                · <span style="color:#fca5a5">{{ number_format($stats['failed']) }}</span> başarısız
                 @if(($stats['pending'] ?? 0) > 0)
                     · <span style="color:#fde047">{{ number_format($stats['pending']) }}</span> beklemede
                 @endif
@@ -127,13 +156,11 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         </p>
         <p class="mt-1 mb-0" style="font-size:.95rem;font-weight:500;color:rgba(255,255,255,.8)">
             {{ number_format($stats['questions_reviewed']) }} soru başarıyla kontrol edildi
-            <span style="opacity:.75">({{ number_format($stats['reviewed']) }} başarılı deneme)</span>
             · {{ number_format($stats['admin_accepted'] ?? 0) }} uygulandı
             · {{ number_format($stats['reviewed_open'] ?? 0) }} uygulama bekliyor
         </p>
         <p class="mt-1 mb-0" style="font-size:.95rem;font-weight:500;color:rgba(255,255,255,.8)">
             {{ number_format($stats['questions_failed'] ?? 0) }} başarısız soru
-            <span style="opacity:.75">({{ number_format($stats['failed']) }} deneme)</span>
             <span style="opacity:.65"> · fail’ler onay / toplu uygulamaya girmez</span>
         </p>
         @php $byDay = $stats['reviewed_by_day'] ?? []; @endphp
@@ -181,14 +208,19 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
     @endphp
     <div class="row g-2 mb-3 aqr-stat-row align-items-stretch">
         <div class="col-6 col-md">
+            <button type="button" class="aqr-stat-link aqr-stat-btn" id="aqrDupOpen" data-bs-toggle="modal" data-bs-target="#aqrDupModal">
+                <div class="card aqr-stat"><div class="card-body">
+                    <div class="label">Benzer sorular</div>
+                    <div class="value" id="aqrDupCount" style="color:#7c3aed">{{ isset($dupStats['involved']) ? number_format((int) $dupStats['involved']) : '—' }}</div>
+                </div></div>
+            </button>
+        </div>
+        <div class="col-6 col-md">
             <a href="{{ route('admin.question-quality-reviews.index', array_merge($filterKeep, ['scope' => 'all_success'])) }}"
                class="aqr-stat-link {{ $cardSuccess ? 'is-active' : '' }}">
                 <div class="card aqr-stat"><div class="card-body">
                     <div class="label">Başarılı kontrol</div>
                     <div class="value" style="color:#166534">{{ number_format($stats['questions_reviewed']) }}</div>
-                    <div class="small text-muted mt-1" style="font-size:.72rem;text-transform:none;letter-spacing:0">
-                        ({{ number_format($stats['reviewed']) }} deneme)
-                    </div>
                 </div></div>
             </a>
         </div>
@@ -234,14 +266,11 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
                 <div class="card aqr-stat"><div class="card-body">
                     <div class="label">Başarısız soru</div>
                     <div class="value" style="color:#b91c1c">{{ number_format($stats['questions_failed'] ?? 0) }}</div>
-                    <div class="small text-muted mt-1" style="font-size:.72rem;text-transform:none;letter-spacing:0">
-                        ({{ number_format($stats['failed']) }} deneme)
-                    </div>
                 </div></div>
             </a>
         </div>
-        <div class="col-6 col-md">
-            <div class="card aqr-stat"><div class="card-body">
+        <div class="col-6 col-md d-flex">
+            <div class="card aqr-stat w-100"><div class="card-body">
                 <div class="label">Ort. skor</div>
                 <div class="value">{{ $stats['avg_score'] ? number_format($stats['avg_score'], 1) : '—' }}</div>
             </div></div>
@@ -484,6 +513,26 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
         </div>
     </div>
 </div>
+
+<div class="modal fade dup-modal" id="aqrDupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Benzer sorular</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <div class="dup-tabs">
+                    <button type="button" class="is-on" data-dup-type="all">Tümü</button>
+                    <button type="button" data-dup-type="exact">Birebir</button>
+                    <button type="button" data-dup-type="near">Benzer</button>
+                </div>
+                <div id="aqrDupStatus" class="text-muted small mb-2">Yükleniyor…</div>
+                <div id="aqrDupList"></div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -688,6 +737,179 @@ a.aqr-stat-link.is-active .aqr-stat { outline: 2px solid #0f172a; }
 
     if (snapshot.pending > 0) {
         schedule();
+    }
+
+    var dupUrl = @json(route('admin.question-quality-reviews.duplicates'));
+    var dupDeactivateUrl = @json(route('admin.question-quality-reviews.duplicates.deactivate'));
+    var dupDeleteUrl = @json(route('admin.question-quality-reviews.duplicates.delete'));
+    var dupDismissUrl = @json(route('admin.question-quality-reviews.duplicates.dismiss'));
+    var dupEditBase = @json(url('/admin/questions'));
+    var dupCache = null;
+    var dupType = 'all';
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderDup() {
+        var box = document.getElementById('aqrDupList');
+        var st = document.getElementById('aqrDupStatus');
+        if (!box || !dupCache) return;
+        var groups = (dupCache.groups || []).filter(function (g) {
+            return dupType === 'all' || g.type === dupType;
+        });
+        var stats = dupCache.stats || {};
+        if (st) {
+            st.textContent = (stats.involved || 0) + ' soru · '
+                + (stats.exact_groups || 0) + ' birebir grup · '
+                + (stats.near_groups || 0) + ' benzer grup';
+        }
+        var countEl = document.getElementById('aqrDupCount');
+        if (countEl && stats.involved != null) {
+            countEl.textContent = Number(stats.involved).toLocaleString('tr-TR');
+        }
+        if (!groups.length) {
+            box.innerHTML = '<div class="alert alert-light border mb-0">Bu filtrede grup yok.</div>';
+            return;
+        }
+        box.innerHTML = groups.map(function (g) {
+            var qs = g.questions || [];
+            var keepId = parseInt(g.keep_id || (qs[0] && qs[0].id) || 0, 10);
+            var rows = qs.map(function (q) {
+                var id = parseInt(q.id, 10);
+                var isKeep = id === keepId;
+                var isOff = !q.active;
+                var mark = isOff ? 'Pasif' : (isKeep ? 'Tutulan' : 'Kopya');
+                var cls = 'dup-row' + (isKeep ? ' is-keep' : '') + (isOff ? ' is-off' : '');
+                var markCls = isOff ? 'off' : (isKeep ? 'keep' : 'copy');
+                var acts = '<a class="btn btn-outline-secondary" href="' + dupEditBase + '/' + id + '/edit">Düzenle</a>';
+                if (!isKeep && !isOff) {
+                    acts += '<button type="button" class="btn btn-outline-danger" data-dup-act="passive" data-id="' + id + '">Pasif</button>';
+                }
+                if (!isKeep) {
+                    acts += '<button type="button" class="btn btn-danger" data-dup-act="delete" data-id="' + id + '">Sil</button>';
+                }
+                return '<div class="' + cls + '">'
+                    + '<div class="dup-mark ' + markCls + '">' + mark + '</div>'
+                    + '<div><div class="dup-txt">' + esc(q.text) + '</div>'
+                    + '<div class="dup-meta">#' + id + ' · ' + esc(q.category || '—') + ' · ' + esc(q.level || '—') + '</div></div>'
+                    + '<div class="dup-acts">' + acts + '</div></div>';
+            }).join('');
+            var badge = g.type === 'exact'
+                ? '<span class="badge bg-danger">Birebir</span>'
+                : '<span class="badge bg-warning text-dark">Benzer</span>';
+            var idsAttr = qs.map(function (q) { return parseInt(q.id, 10); }).join(',');
+            return '<div class="dup-group" data-dup-type="' + esc(g.type || 'near') + '"><div class="dup-group-hd">'
+                + '<div>' + badge
+                + '<span class="text-muted ms-1">' + qs.length + ' kayıt · tutulan #' + keepId + '</span></div>'
+                + '<div class="dup-group-actions">'
+                + '<button type="button" class="btn btn-sm btn-outline-secondary" data-dup-act="dismiss" data-type="' + esc(g.type || 'near') + '" data-ids="' + idsAttr + '">Listeden çıkar</button>'
+                + '</div></div>'
+                + rows + '</div>';
+        }).join('');
+    }
+
+    function loadDup(fresh) {
+        var st = document.getElementById('aqrDupStatus');
+        if (st) st.textContent = 'Yükleniyor…';
+        var url = dupUrl + (fresh ? '?fresh=1' : '');
+        fetch(url, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (d) { dupCache = d; renderDup(); })
+            .catch(function () {
+                if (st) st.textContent = 'Liste yüklenemedi.';
+            });
+    }
+
+    function postDupForm(url, fields) {
+        var body = new URLSearchParams();
+        Object.keys(fields).forEach(function (k) {
+            var v = fields[k];
+            if (Array.isArray(v)) {
+                v.forEach(function (item) { body.append(k + '[]', String(item)); });
+            } else {
+                body.set(k, String(v));
+            }
+        });
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-TOKEN': csrf,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: body.toString()
+        }).then(function (r) {
+            return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+        });
+    }
+
+    function postDup(url, id) {
+        return postDupForm(url, { question_id: id });
+    }
+
+    var dupModal = document.getElementById('aqrDupModal');
+    if (dupModal) {
+        dupModal.addEventListener('show.bs.modal', function () {
+            if (!dupCache) loadDup(false);
+            else renderDup();
+        });
+        document.querySelectorAll('[data-dup-type]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                dupType = btn.getAttribute('data-dup-type') || 'all';
+                document.querySelectorAll('[data-dup-type]').forEach(function (b) {
+                    b.classList.toggle('is-on', b === btn);
+                });
+                renderDup();
+            });
+        });
+        var list = document.getElementById('aqrDupList');
+        if (list) {
+            list.addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-dup-act]');
+                if (!btn) return;
+                var id = parseInt(btn.getAttribute('data-id'), 10);
+                var act = btn.getAttribute('data-dup-act');
+                if (!id && act !== 'dismiss') return;
+                if (act === 'passive' && !window.confirm('Soru #' + id + ' pasif olsun?')) return;
+                if (act === 'delete' && !window.confirm('Soru #' + id + ' silinsin? Geri alınamaz.')) return;
+                if (act === 'dismiss') {
+                    var ids = (btn.getAttribute('data-ids') || '').split(',').map(function (x) { return parseInt(x, 10); }).filter(Boolean);
+                    if (ids.length < 2) return;
+                    if (!window.confirm('Bu grup aynı soru değil — listeden çıkarılsın mı? Sorulara dokunulmaz.')) return;
+                    postDupForm(dupDismissUrl, { question_ids: ids, type: btn.getAttribute('data-type') || 'near' })
+                        .then(function (res) {
+                            if (window.toastr) {
+                                if (res.ok && res.j && res.j.success) toastr.success(res.j.message);
+                                else toastr.error((res.j && res.j.message) || 'İşlem başarısız');
+                            }
+                            if (res.ok) loadDup(true);
+                        })
+                        .catch(function () {
+                            if (window.toastr) toastr.error('İstek başarısız');
+                        });
+                    return;
+                }
+                postDup(act === 'delete' ? dupDeleteUrl : dupDeactivateUrl, id)
+                    .then(function (res) {
+                        if (window.toastr) {
+                            if (res.ok && res.j && res.j.success) toastr.success(res.j.message);
+                            else toastr.error((res.j && res.j.message) || 'İşlem başarısız');
+                        }
+                        if (res.ok) loadDup(true);
+                    })
+                    .catch(function () {
+                        if (window.toastr) toastr.error('İstek başarısız');
+                    });
+            });
+        }
     }
 })();
 </script>

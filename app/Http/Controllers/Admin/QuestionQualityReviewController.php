@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Question;
 use App\Models\QuestionAdminLog;
 use App\Models\QuestionQualityReview;
+use App\Services\QuestionDuplicateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -22,10 +24,14 @@ class QuestionQualityReviewController extends Controller
                 'deactivateQuestion',
                 'activateQuestion',
                 'applyRevision',
+                'deactivateDuplicate',
+                'keepOldestDuplicates',
+                'deleteDuplicate',
+                'dismissDuplicateGroup',
             ]);
     }
 
-    public function index(Request $request)
+    public function index(Request $request, QuestionDuplicateService $finder)
     {
         $status = trim((string) $request->query('status', ''));
         $band = trim((string) $request->query('band', ''));
@@ -230,6 +236,7 @@ class QuestionQualityReviewController extends Controller
         }
 
         $configuredModel = (string) config('services.anthropic.model_label', 'claude-opus-5');
+        $dupStats = $finder->cachedStats();
 
         return view('admin.question-quality-reviews.index', compact(
             'reviews',
@@ -243,8 +250,165 @@ class QuestionQualityReviewController extends Controller
             'laterSuccessByQuestion',
             'adminAccepted',
             'attemptCountByQuestion',
-            'scope'
+            'scope',
+            'dupStats'
         ));
+    }
+
+    public function duplicates(Request $request, QuestionDuplicateService $finder)
+    {
+        $type = (string) $request->query('type', 'all');
+        if (! in_array($type, ['all', 'exact', 'near'], true)) {
+            $type = 'all';
+        }
+
+        $data = $finder->find($request->boolean('fresh'));
+        $groups = $data['groups'];
+        if ($type !== 'all') {
+            $groups = array_values(array_filter($groups, fn ($g) => ($g['type'] ?? '') === $type));
+        }
+
+        foreach ($groups as &$g) {
+            $qs = $g['questions'] ?? [];
+            usort($qs, fn ($a, $b) => ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0)));
+            $g['questions'] = $qs;
+            $g['keep_id'] = (int) ($qs[0]['id'] ?? 0);
+            $g['group_key'] = QuestionDuplicateService::groupKey(array_map(fn ($q) => (int) ($q['id'] ?? 0), $qs));
+        }
+        unset($g);
+
+        return response()->json([
+            'stats' => $data['stats'],
+            'groups' => array_values($groups),
+            'type' => $type,
+        ]);
+    }
+
+    public function deactivateDuplicate(Request $request, QuestionDuplicateService $finder)
+    {
+        $id = (int) $request->input('question_id');
+        $question = Question::query()->findOrFail($id);
+        DB::transaction(fn () => $this->setQuestionPassive($question, 'duplicate_deactivate'));
+        $finder->forgetCache();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Soru #{$question->id} pasife alındı.",
+        ]);
+    }
+
+    public function keepOldestDuplicates(Request $request, QuestionDuplicateService $finder)
+    {
+        $ids = collect($request->input('question_ids', []))
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($ids->count() < 2) {
+            return response()->json(['success' => false, 'message' => 'Grupta en az iki soru olmalı.'], 422);
+        }
+
+        $keepId = (int) ($request->input('keep_id') ?: $ids->min());
+        if (! $ids->contains($keepId)) {
+            $keepId = (int) $ids->min();
+        }
+
+        $passives = [];
+        DB::transaction(function () use ($ids, $keepId, &$passives) {
+            $questions = Question::query()->whereIn('id', $ids->all())->lockForUpdate()->get();
+            foreach ($questions as $question) {
+                if ((int) $question->id === $keepId) {
+                    continue;
+                }
+                if ($question->is_active) {
+                    $this->setQuestionPassive($question, 'duplicate_keep_oldest');
+                    $passives[] = (int) $question->id;
+                }
+            }
+        });
+
+        $finder->forgetCache();
+        $msg = $passives === []
+            ? "Grupta pasif edilecek aktif kopya yok. Tutulan #{$keepId}."
+            : 'Tutulan #'.$keepId.' · pasif: #'.implode(', #', $passives);
+
+        return response()->json(['success' => true, 'message' => $msg]);
+    }
+
+    public function deleteDuplicate(Request $request, QuestionDuplicateService $finder)
+    {
+        $id = (int) $request->input('question_id');
+        $question = Question::query()->findOrFail($id);
+
+        $qid = (int) $question->id;
+        if (! $question->trashed()) {
+            $question->delete();
+        }
+        $finder->forgetCache();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Soru #{$qid} silindi.",
+        ]);
+    }
+
+    public function dismissDuplicateGroup(Request $request, QuestionDuplicateService $finder)
+    {
+        $ids = collect($request->input('question_ids', []))
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        if (count($ids) < 2) {
+            return response()->json(['success' => false, 'message' => 'Grupta en az iki soru olmalı.'], 422);
+        }
+
+        $type = (string) $request->input('type', 'near');
+        $finder->dismissGroup($ids, $type, Auth::id());
+        $finder->forgetCache();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Grup listeden çıkarıldı. Sorulara dokunulmadı.',
+        ]);
+    }
+
+    private function setQuestionPassive(Question $question, string $action): void
+    {
+        $oldActive = $question->is_active ? '1' : '0';
+        $oldStatus = (string) ($question->admin_status ?? '');
+
+        $question->is_active = false;
+        if (in_array($question->admin_status, ['active', 'passive', 'maintenance', null], true)
+            || $question->admin_status === null
+            || $question->admin_status === '') {
+            $question->admin_status = 'passive';
+        }
+        $question->save();
+
+        QuestionAdminLog::create([
+            'question_id' => $question->id,
+            'admin_id' => Auth::id(),
+            'action' => $action,
+            'field' => 'is_active',
+            'old_value' => $oldActive,
+            'new_value' => '0',
+        ]);
+
+        if ($oldStatus !== (string) $question->admin_status) {
+            QuestionAdminLog::create([
+                'question_id' => $question->id,
+                'admin_id' => Auth::id(),
+                'action' => $action,
+                'field' => 'admin_status',
+                'old_value' => $oldStatus,
+                'new_value' => (string) $question->admin_status,
+            ]);
+        }
     }
 
     /** Liste auto-refresh için hafif durum snapshot. */
