@@ -1575,6 +1575,7 @@ class DuelController extends Controller
                 'disconnect' => 'Bağlantı koptu: düello bitti.',
                 'afk_streak' => 'Üst üste cevap verilmedi: düello bitti.',
                 'requeue' => 'Yeni eşleşme için önceki düello kapatıldı.',
+                'admin_end' => 'Admin botu maçtan çekti: düello bitti.',
                 default => 'Düellodan çekildiniz.',
             };
 
@@ -1622,6 +1623,7 @@ class DuelController extends Controller
             'disconnect' => 'DISCONNECT',
             'afk_streak' => 'AFK',
             'requeue' => 'REQUEUE',
+            'admin_end' => 'ADMIN_END',
             default => 'LEAVE',
         };
 

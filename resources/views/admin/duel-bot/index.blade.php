@@ -172,6 +172,16 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
     line-height: 1.4;
 }
 .duel-bot-bulk__row.is-busy { opacity: .65; pointer-events: none; }
+#duelBotLiveTable tr.is-ending-match {
+    background: rgba(255, 193, 7, 0.12);
+}
+#duelBotLiveTable .js-ending-hint {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #9a6700;
+}
 .duel-bot-modal-pager {
     display: flex;
     flex-wrap: wrap;
@@ -537,6 +547,12 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                             <button type="button" class="btn btn-sm btn-outline-primary js-bot-duels"
                                     data-bot-id="{{ $bot->id }}"
                                     data-bot-name="{{ $bot->name }}">Düello geçmişi</button>
+                            <button type="button"
+                                    id="duelBotEndMatchBtn"
+                                    class="btn btn-sm btn-outline-danger js-bot-end-match {{ empty($selected['busy']) ? 'd-none' : '' }}"
+                                    data-bot-id="{{ $bot->id }}"
+                                    data-bot-name="{{ $bot->name }}"
+                                    title="Botu maçtan çeker; rakip kazanır">Maçı bitir</button>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <span class="badge bg-dark">BOT</span>
@@ -560,9 +576,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                                 </span>
                             @endif
                             <span id="duelBotWaitBadge" class="badge bg-light text-dark">Bekleme {{ $settings['match_wait_seconds'] }} sn</span>
-                            @if(!empty($selected['busy']))
-                                <span class="badge bg-warning text-dark">Şu an maçta</span>
-                            @endif
+                            <span id="duelBotBusyBadge" class="badge bg-warning text-dark {{ empty($selected['busy']) ? 'd-none' : '' }}">Şu an maçta</span>
                             <span class="badge bg-light text-dark">Normal: <span id="duelBotCoinsLabel">{{ number_format((int) $bot->coins) }}</span></span>
                             <span class="badge bg-light text-dark">Düello: <span id="duelBotDuelCoinsLabel">{{ number_format((int) ($bot->duel_earned_coins ?? 0)) }}</span></span>
                         </div>
@@ -740,6 +754,29 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Vazgeç</button>
                 <button type="button" class="btn btn-primary" id="duelBotCreateBtn">Oluştur</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Maçı bitir onay --}}
+<div class="modal fade" id="duelBotEndMatchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title">Maçı bitir</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p class="mb-2" id="duelBotEndMatchModalText">Bu botu maçtan çekmek istediğinize emin misiniz?</p>
+                <p class="small text-muted mb-0">
+                    Bot çekilir, rakip kazanır. Jeton kuralı leave ile aynıdır. İşlem sonrası satırda
+                    <strong>Birazdan maç bitecek</strong> görünür.
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                <button type="button" class="btn btn-danger" id="duelBotEndMatchConfirmBtn">Evet, bitir</button>
             </div>
         </div>
     </div>
@@ -1360,6 +1397,9 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
 
 <script>
 (function () {
+    var csrf = @json(csrf_token());
+    var botUserId = @json((int) ((!empty($showDetail) && !empty($bot)) ? $bot->id : 0));
+
     function esc(s) {
         return String(s == null ? '' : s).replace(/</g, '&lt;');
     }
@@ -1436,17 +1476,43 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         var body = document.getElementById('duelBotLiveBody');
         var liveMeta = document.getElementById('duelBotLiveMeta');
         if (!body) return;
+        var selectedId = String(typeof botUserId !== 'undefined' ? botUserId : '');
+        var selectedBusy = false;
+        var selectedEnding = false;
         body.innerHTML = (bots || []).map(function (s) {
-            var status = !s.is_active
-                ? '<span class="badge bg-secondary">Pasif</span>'
-                : (s.busy
-                    ? '<span class="badge bg-warning text-dark">Maçta #' + s.duel_id + '</span>'
-                    : '<span class="badge bg-success">Boşta</span>');
+            var idKey = String(s.user_id);
+            var ending = !!endingMatchBots[idKey];
+            if (ending && !s.busy) {
+                delete endingMatchBots[idKey];
+                ending = false;
+            }
+            var status;
+            if (ending) {
+                status = '<span class="badge bg-warning text-dark">Bitiriliyor…</span>'
+                    + '<span class="js-ending-hint">Birazdan maç bitecek</span>';
+            } else if (!s.is_active) {
+                status = '<span class="badge bg-secondary">Pasif</span>';
+            } else if (s.busy) {
+                status = '<span class="badge bg-warning text-dark">Maçta #' + s.duel_id + '</span>';
+            } else {
+                status = '<span class="badge bg-success">Boşta</span>';
+            }
             var opp = s.opponent_name ? ('#' + s.opponent_id + ' ' + s.opponent_name) : '—';
             var q = s.question_number ? ('Q' + s.question_number) : '—';
             var acc = s.answered > 0 ? (s.correct + '/' + s.answered + ' (%' + s.accuracy_pct + ')') : '—';
             var bet = s.pending_bet || '—';
-            return '<tr data-bot-id="' + s.user_id + '">'
+            if (String(s.user_id) === selectedId && s.busy) selectedBusy = true;
+            if (String(s.user_id) === selectedId && ending) selectedEnding = true;
+            var actions = '<button type="button" class="btn btn-sm btn-outline-primary js-bot-duels" data-bot-id="'
+                + s.user_id + '" data-bot-name="' + esc(s.name).replace(/"/g, '&quot;') + '">Geçmiş</button>';
+            if (s.busy && !ending) {
+                actions += ' <button type="button" class="btn btn-sm btn-outline-danger js-bot-end-match" data-bot-id="'
+                    + s.user_id + '" data-bot-name="' + esc(s.name).replace(/"/g, '&quot;')
+                    + '" data-duel-id="' + (s.duel_id || '') + '">Maçı bitir</button>';
+            } else if (ending) {
+                actions += ' <button type="button" class="btn btn-sm btn-warning" disabled>Bekleniyor…</button>';
+            }
+            return '<tr data-bot-id="' + s.user_id + '"' + (ending ? ' class="is-ending-match"' : '') + '>'
                 + '<td><strong>' + esc(s.name) + '</strong> '
                 + '<span class="' + tierBadgeClass(s.difficulty) + '">' + tierTr(s.difficulty) + '</span></td>'
                 + '<td>' + status + '</td>'
@@ -1455,15 +1521,188 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 + '<td>' + acc + '</td>'
                 + '<td>' + bet + '</td>'
                 + '<td>' + Number(s.coins || 0).toLocaleString('tr-TR') + '</td>'
-                + '<td><button type="button" class="btn btn-sm btn-outline-primary js-bot-duels" data-bot-id="'
-                + s.user_id + '" data-bot-name="' + esc(s.name).replace(/"/g, '&quot;') + '">Geçmiş</button></td>'
+                + '<td class="text-nowrap">' + actions + '</td>'
                 + '</tr>';
         }).join('') || '<tr><td colspan="8" class="text-muted">Bot yok</td></tr>';
         if (liveMeta) liveMeta.textContent = 'canlı';
+
+        var endBtn = document.getElementById('duelBotEndMatchBtn');
+        var busyBadge = document.getElementById('duelBotBusyBadge');
+        if (endBtn) {
+            endBtn.classList.toggle('d-none', !selectedBusy || selectedEnding);
+            endBtn.disabled = !!selectedEnding;
+        }
+        if (busyBadge) {
+            if (selectedEnding) {
+                busyBadge.classList.remove('d-none');
+                busyBadge.textContent = 'Birazdan maç bitecek';
+            } else if (selectedBusy) {
+                busyBadge.classList.remove('d-none');
+                busyBadge.textContent = 'Şu an maçta';
+            } else {
+                busyBadge.classList.add('d-none');
+                busyBadge.textContent = 'Şu an maçta';
+            }
+        }
     }
 
     var liveUrl = @json(route('admin.duel-bot.live'));
+    var endMatchUrl = @json(route('admin.duel-bot.end-match'));
     var duelsUrlTpl = @json(url('/admin/duel-bot'));
+    var endingMatchBots = {};
+
+    function markBotEnding(botId, on) {
+        var idKey = String(botId);
+        if (on) endingMatchBots[idKey] = Date.now();
+        else delete endingMatchBots[idKey];
+
+        var row = document.querySelector('#duelBotLiveBody tr[data-bot-id="' + idKey + '"]');
+        if (row) {
+            row.classList.toggle('is-ending-match', !!on);
+            var statusTd = row.children[1];
+            if (statusTd && on) {
+                statusTd.innerHTML = '<span class="badge bg-warning text-dark">Bitiriliyor…</span>'
+                    + '<span class="js-ending-hint">Birazdan maç bitecek</span>';
+            }
+            row.querySelectorAll('.js-bot-end-match').forEach(function (b) {
+                b.disabled = true;
+                b.textContent = 'Bekleniyor…';
+                b.classList.remove('btn-outline-danger');
+                b.classList.add('btn-warning');
+            });
+        }
+
+        var endBtn = document.getElementById('duelBotEndMatchBtn');
+        var busyBadge = document.getElementById('duelBotBusyBadge');
+        if (String(typeof botUserId !== 'undefined' ? botUserId : '') === idKey) {
+            if (endBtn) {
+                endBtn.disabled = !!on;
+                if (on) endBtn.textContent = 'Bekleniyor…';
+                else endBtn.textContent = 'Maçı bitir';
+            }
+            if (busyBadge && on) {
+                busyBadge.classList.remove('d-none');
+                busyBadge.textContent = 'Birazdan maç bitecek';
+            }
+        }
+    }
+
+    function endBotMatch(botId, botName) {
+        var name = botName || ('#' + botId);
+        var pending = { botId: String(botId), botName: name };
+        var modalEl = document.getElementById('duelBotEndMatchModal');
+        var textEl = document.getElementById('duelBotEndMatchModalText');
+        var confirmBtn = document.getElementById('duelBotEndMatchConfirmBtn');
+        if (textEl) {
+            textEl.innerHTML = '<strong>' + esc(name) + '</strong> maçtan çekilsin mi?';
+        }
+        if (!modalEl || !confirmBtn) {
+            // Fallback: modal yoksa eski davranış
+            if (!window.confirm(name + ' maçtan çekilsin mi?')) return;
+            executeEndBotMatch(pending.botId, pending.botName);
+            return;
+        }
+        confirmBtn.onclick = function () {
+            var modal = window.bootstrap && bootstrap.Modal
+                ? bootstrap.Modal.getOrCreateInstance(modalEl)
+                : null;
+            if (modal) modal.hide();
+            else {
+                modalEl.classList.remove('show');
+                modalEl.style.display = 'none';
+            }
+            executeEndBotMatch(pending.botId, pending.botName);
+        };
+        var modal = window.bootstrap && bootstrap.Modal
+            ? bootstrap.Modal.getOrCreateInstance(modalEl)
+            : null;
+        if (modal) modal.show();
+        else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+        }
+    }
+
+    function executeEndBotMatch(botId, botName) {
+        markBotEnding(botId, true);
+        var buttons = document.querySelectorAll('.js-bot-end-match[data-bot-id="' + botId + '"]');
+        buttons.forEach(function (b) { b.disabled = true; });
+        var token = csrf
+            || (document.querySelector('meta[name="csrf-token"]') || {}).content
+            || '';
+        var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
+        fetch(endMatchUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': token
+            },
+            body: JSON.stringify({ user_id: Number(botId) })
+        })
+            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (res) {
+                if (timer) clearTimeout(timer);
+                var toast = document.getElementById('duelBotToast');
+                var msg = (res.data && res.data.message) ? res.data.message : 'İşlem başarısız';
+                if (toast) {
+                    toast.className = 'alert ' + ((res.data && res.data.success) ? 'alert-success' : 'alert-danger');
+                    toast.textContent = msg;
+                    toast.classList.remove('d-none');
+                    setTimeout(function () { toast.classList.add('d-none'); }, 4000);
+                }
+                if (!(res.data && res.data.success)) {
+                    markBotEnding(botId, false);
+                    buttons.forEach(function (b) {
+                        b.disabled = false;
+                        b.textContent = 'Maçı bitir';
+                        b.classList.add('btn-outline-danger');
+                        b.classList.remove('btn-warning');
+                    });
+                    var endBtn = document.getElementById('duelBotEndMatchBtn');
+                    if (endBtn) {
+                        endBtn.disabled = false;
+                        endBtn.textContent = 'Maçı bitir';
+                    }
+                    refreshLive();
+                    return;
+                }
+                setTimeout(refreshLive, 400);
+                setTimeout(refreshLive, 1500);
+            })
+            .catch(function (err) {
+                if (timer) clearTimeout(timer);
+                markBotEnding(botId, false);
+                buttons.forEach(function (b) {
+                    b.disabled = false;
+                    b.textContent = 'Maçı bitir';
+                    b.classList.add('btn-outline-danger');
+                    b.classList.remove('btn-warning');
+                });
+                var toast = document.getElementById('duelBotToast');
+                if (toast) {
+                    toast.className = 'alert alert-danger';
+                    toast.textContent = (err && err.name === 'AbortError')
+                        ? 'Maç bitirme zaman aşımına uğradı. Tekrar dene.'
+                        : 'Maç bitirme isteği gönderilemedi. Sayfayı yenileyip tekrar dene.';
+                    toast.classList.remove('d-none');
+                    setTimeout(function () { toast.classList.add('d-none'); }, 5000);
+                }
+                refreshLive();
+            });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.js-bot-end-match');
+        if (!btn) return;
+        e.preventDefault();
+        endBotMatch(btn.getAttribute('data-bot-id'), btn.getAttribute('data-bot-name'));
+    });
+
     function refreshLive() {
         fetch(liveUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
@@ -1484,18 +1723,28 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         if (r === 'galibiyet_timeout') return '<span class="badge bg-success">Galibiyet · timeout</span>';
         if (r === 'galibiyet_disconnect') return '<span class="badge bg-success">Galibiyet · disconnect</span>';
         if (r === 'galibiyet_leave') return '<span class="badge bg-success">Galibiyet · leave</span>';
+        if (r === 'galibiyet_requeue') return '<span class="badge bg-success">Galibiyet · requeue</span>';
+        if (r === 'galibiyet_admin') return '<span class="badge bg-success">Galibiyet · admin</span>';
+        if (r === 'galibiyet_afk') return '<span class="badge bg-success">Galibiyet · AFK</span>';
         if (r === 'mağlubiyet') return '<span class="badge bg-danger">Mağlubiyet</span>';
         if (r === 'maglubiyet_timeout') return '<span class="badge bg-danger">Mağlubiyet · timeout</span>';
         if (r === 'maglubiyet_disconnect') return '<span class="badge bg-danger">Mağlubiyet · disconnect</span>';
         if (r === 'maglubiyet_leave') return '<span class="badge bg-danger">Mağlubiyet · leave</span>';
-        if (r === 'galibiyet_afk') return '<span class="badge bg-success">Galibiyet · AFK</span>';
+        if (r === 'maglubiyet_requeue') return '<span class="badge bg-danger">Mağlubiyet · requeue</span>';
+        if (r === 'maglubiyet_admin') return '<span class="badge bg-danger">Mağlubiyet · admin</span>';
         if (r === 'maglubiyet_afk') return '<span class="badge bg-danger">Mağlubiyet · AFK</span>';
         if (r === 'afk') return '<span class="badge bg-secondary">AFK</span>';
         if (r === 'timeout') return '<span class="badge bg-secondary">Zaman aşımı</span>';
         if (r === 'disconnect') return '<span class="badge bg-secondary">Bağlantı koptu</span>';
         if (r === 'leave') return '<span class="badge bg-secondary">Ayrılma</span>';
+        if (r === 'requeue') return '<span class="badge bg-secondary">Requeue</span>';
+        if (r === 'admin_end') return '<span class="badge bg-secondary">Admin bitirdi</span>';
         if (r === 'iptal') return '<span class="badge bg-secondary">İptal</span>';
         if (r === 'berabere') return '<span class="badge bg-secondary">İptal</span>';
+        // Bilinmeyen bitmiş sonuç: "Devam" yanıltır
+        if (r && r !== 'devam') {
+            return '<span class="badge bg-secondary">' + String(r).replace(/_/g, ' · ') + '</span>';
+        }
         return '<span class="badge bg-warning text-dark">Devam</span>';
     }
 

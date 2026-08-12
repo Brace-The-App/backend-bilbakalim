@@ -27,6 +27,7 @@ class DuelBotController extends Controller
                 'updateProfile',
                 'updateAvatar',
                 'update',
+                'endMatch',
             ]);
     }
 
@@ -294,6 +295,37 @@ class DuelBotController extends Controller
             'updated' => $result['updated'],
             'difficulty' => $result['difficulty'],
             'is_active' => $result['is_active'],
+        ]);
+    }
+
+    /** Seçili botun aktif maçını bitir (bot çekilir). */
+    public function endMatch(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $result = DuelBotSettings::endActiveMatch((int) $validated['user_id']);
+
+        if (! ($result['success'] ?? false)) {
+            $status = (int) ($result['http_status'] ?? 400);
+            if ($status < 400) {
+                $status = 400;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => (string) ($result['message'] ?? 'Maç bitirilemedi.'),
+                'duel_id' => $result['duel_id'] ?? null,
+                'user_id' => (int) $validated['user_id'],
+            ], $status);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => (string) ($result['message'] ?? 'Maç bitirildi.'),
+            'duel_id' => $result['duel_id'] ?? null,
+            'user_id' => (int) $validated['user_id'],
         ]);
     }
 

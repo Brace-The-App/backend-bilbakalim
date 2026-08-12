@@ -374,6 +374,71 @@ class DuelBotSettings
             ->exists();
     }
 
+    /**
+     * Admin: botun aktif/waiting maçını bitir (bot çekilir → rakip kazanır, leave ekonomisi).
+     *
+     * @return array{success:bool,message:string,duel_id?:int,http_status?:int}
+     */
+    public static function endActiveMatch(int $botUserId): array
+    {
+        if ($botUserId <= 0 || ! self::findBotConfig($botUserId)) {
+            return [
+                'success' => false,
+                'message' => 'Bu kullanıcı bot havuzunda değil.',
+                'http_status' => 404,
+            ];
+        }
+
+        $bot = User::query()->find($botUserId);
+        if (! $bot) {
+            return [
+                'success' => false,
+                'message' => 'Bot kullanıcı bulunamadı.',
+                'http_status' => 404,
+            ];
+        }
+
+        $duel = Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->where(function ($q) use ($botUserId) {
+                $q->where('challenger_id', $botUserId)->orWhere('opponent_id', $botUserId);
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $duel) {
+            return [
+                'success' => false,
+                'message' => 'Bu botun aktif maçı yok.',
+                'http_status' => 404,
+            ];
+        }
+
+        /** @var \App\Http\Controllers\API\DuelController $duelApi */
+        $duelApi = app(\App\Http\Controllers\API\DuelController::class);
+        $result = $duelApi->forfeitAsLeave($duel, $bot, 'admin_end');
+
+        Cache::forget(self::CACHE_LIVE);
+        Cache::forget(self::CACHE_ADMIN_MM);
+
+        if (! ($result['success'] ?? false)) {
+            return [
+                'success' => false,
+                'message' => (string) ($result['message'] ?? 'Maç bitirilemedi.'),
+                'duel_id' => (int) $duel->id,
+                'http_status' => (int) ($result['http_status'] ?? 500),
+            ];
+        }
+
+        self::log("ADMIN_END · düello #{$duel->id} · bot #{$botUserId} çekildi · rakip kazandı");
+
+        return [
+            'success' => true,
+            'message' => "Maç #{$duel->id} bitirildi; bot çekildi.",
+            'duel_id' => (int) $duel->id,
+        ];
+    }
+
     /** Varsayılan isabet → bot zorluk bantları */
     public static function defaultMatchBands(): array
     {
@@ -1452,14 +1517,16 @@ class DuelBotSettings
                         'leave' => 'leave',
                         'afk_streak' => 'afk',
                         'requeue' => 'requeue',
+                        'admin_end' => 'admin_end',
                         default => 'iptal',
                     };
                 } elseif ((int) $duel->winner_id === $botUserId) {
                     $result = match ($forfeitReason) {
-                        'answer_timeout', 'disconnect', 'leave', 'afk_streak', 'requeue' => 'galibiyet_' . (
+                        'answer_timeout', 'disconnect', 'leave', 'afk_streak', 'requeue', 'admin_end' => 'galibiyet_' . (
                             $forfeitReason === 'answer_timeout' ? 'timeout'
                                 : ($forfeitReason === 'afk_streak' ? 'afk'
-                                : ($forfeitReason === 'requeue' ? 'requeue' : $forfeitReason))
+                                : ($forfeitReason === 'requeue' ? 'requeue'
+                                : ($forfeitReason === 'admin_end' ? 'admin' : $forfeitReason)))
                         ),
                         default => 'galibiyet',
                     };
@@ -1469,6 +1536,8 @@ class DuelBotSettings
                         'disconnect' => 'maglubiyet_disconnect',
                         'leave' => 'maglubiyet_leave',
                         'afk_streak' => 'maglubiyet_afk',
+                        'requeue' => 'maglubiyet_requeue',
+                        'admin_end' => 'maglubiyet_admin',
                         default => 'mağlubiyet',
                     };
                 }

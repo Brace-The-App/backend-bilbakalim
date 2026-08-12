@@ -17,9 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->runInBackground();
 
-        // Gece Claude soru kalite kontrolü — günde max 100 (komut içi limit); fail'ler önce denenir
+        // Gece Claude soru kalite kontrolü — günde max daily_limit (varsayılan 250)
         $at = (string) config('ai_question_review.schedule_at', '02:00');
-        $schedule->command('question:ai-review --limit=100')
+        $dailyLimit = max(1, (int) config('ai_question_review.daily_limit', 250));
+        $schedule->command("question:ai-review --limit={$dailyLimit}")
             ->dailyAt($at)
             ->timezone('Europe/Istanbul')
             ->withoutOverlapping(240)

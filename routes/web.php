@@ -118,6 +118,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('duel-bot/logs/clear', [DuelBotController::class, 'clearLogs'])->name('duel-bot.logs.clear');
     Route::post('duel-bot/active', [DuelBotController::class, 'updateActive'])->name('duel-bot.active');
     Route::post('duel-bot/bulk-active', [DuelBotController::class, 'bulkActive'])->name('duel-bot.bulk-active');
+    Route::post('duel-bot/end-match', [DuelBotController::class, 'endMatch'])->name('duel-bot.end-match');
     Route::post('duel-bot/behavior', [DuelBotController::class, 'updateBehavior'])->name('duel-bot.behavior');
     Route::post('duel-bot/matchmaking', [DuelBotController::class, 'updateMatchmaking'])->name('duel-bot.matchmaking');
     Route::put('duel-bot/profile', [DuelBotController::class, 'updateProfile'])->name('duel-bot.profile');
