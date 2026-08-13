@@ -59,4 +59,20 @@ return Application::configure(basePath: dirname(__DIR__))
                 'retry_after_seconds' => $retryAfter,
             ], 429);
         });
+
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            $public = \App\Services\QuestionQualityReviewHelper::publicFailReasonFromThrowable($e);
+            if ($public === null) {
+                return null;
+            }
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $public,
+                ], 503);
+            }
+
+            return response($public, 503);
+        });
     })->create();

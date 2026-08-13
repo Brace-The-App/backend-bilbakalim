@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\QuestionQualityReview;
 use App\Services\ClaudeQuestionReviewService;
+use App\Services\QuestionQualityReviewHelper;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -153,12 +154,14 @@ class QuestionAiReviewCommand extends Command
                 );
                 $ok++;
             } catch (Throwable $e) {
-                $claude->markFailed($review, $e->getMessage(), [
+                $public = QuestionQualityReviewHelper::publicFailReasonFromThrowable($e);
+                $reason = $public ?? $e->getMessage();
+                $claude->markFailed($review, $reason, [
                     'provider' => 'anthropic',
                     'model' => $model,
                     'package' => $package,
                 ], $claude->lastRawText());
-                $this->error('  FAIL · deneme ' . $attempt . ' · ' . $e->getMessage());
+                $this->error('  FAIL · deneme ' . $attempt . ' · ' . $reason);
                 $fail++;
             }
         }

@@ -42,6 +42,49 @@ class QuestionQualityReviewHelper
         return max(5, (int) config('ai_question_review.pending_timeout_minutes', 30));
     }
 
+    public static function providerCapacityPublicMessage(): string
+    {
+        return (string) config(
+            'ai_question_review.capacity_error_message',
+            'This process heavily consumes our highest-tier analysis infrastructure. The system cannot currently cover the cost of this load. Please try again later.'
+        );
+    }
+
+    /** Kredi / billing / kota tipi sağlayıcı hataları — müşteriye ham metin gitmesin. */
+    public static function looksLikeProviderCapacityError(string $text): bool
+    {
+        $h = strtolower($text);
+
+        return str_contains($h, 'credit balance is too low')
+            || str_contains($h, 'purchase credits')
+            || str_contains($h, 'plans & billing')
+            || (str_contains($h, 'credit balance') && str_contains($h, 'too low'));
+    }
+
+    public static function publicFailReason(?string $reason): ?string
+    {
+        if ($reason === null || $reason === '') {
+            return $reason;
+        }
+
+        return self::looksLikeProviderCapacityError($reason)
+            ? self::providerCapacityPublicMessage()
+            : $reason;
+    }
+
+    public static function publicFailReasonFromThrowable(\Throwable $e): ?string
+    {
+        $parts = [$e->getMessage()];
+        $prev = $e->getPrevious();
+        if ($prev) {
+            $parts[] = $prev->getMessage();
+        }
+
+        return self::looksLikeProviderCapacityError(implode("\n", $parts))
+            ? self::providerCapacityPublicMessage()
+            : null;
+    }
+
     /**
      * @param  array<string, mixed>  $raw  kriter_analizleri veya eski criteria_scores
      * @return array<string, array{puan:int, max_puan:int, yuzde:float|int, max?:int, score?:int}>

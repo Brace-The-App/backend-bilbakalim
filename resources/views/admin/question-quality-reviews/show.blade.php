@@ -85,8 +85,10 @@
     $revised = is_array($review->revised_content) && $review->revised_content !== []
         ? $review->revised_content
         : (is_array($analiz['duzeltilmis_icerik'] ?? null) ? $analiz['duzeltilmis_icerik'] : null);
-    $analizMsg = $analiz['analiz_mesaji'] ?? null;
-    $editReason = $review->edit_reason ?: ($analiz['duzeltme_gerekcesi'] ?? null);
+    $analizMsg = \App\Services\QuestionQualityReviewHelper::publicFailReason($analiz['analiz_mesaji'] ?? null);
+    $editReason = \App\Services\QuestionQualityReviewHelper::publicFailReason(
+        $review->edit_reason ?: ($analiz['duzeltme_gerekcesi'] ?? null)
+    );
     $question = $review->question;
     $isActive = $question ? (bool) $question->is_active : null;
     $score = $review->quality_score;
@@ -147,7 +149,9 @@
 
     @if ($review->status === 'failed')
         @php
-            $failMsg = $editReason ?: (data_get($raw, 'fail_reason') ?: data_get($raw, 'error') ?: 'Sebep kaydı yok.');
+            $failMsg = \App\Services\QuestionQualityReviewHelper::publicFailReason(
+                $editReason ?: (data_get($raw, 'fail_reason') ?: data_get($raw, 'error') ?: 'Sebep kaydı yok.')
+            );
             $failExcerpt = (string) (data_get($raw, 'raw_text_excerpt') ?: '');
             $failSample = '';
             if ($failExcerpt !== '' && preg_match('/[^\n]{0,80}"[^"\n]{0,60}"[A-Za-zÀ-ÿ][^\n]{0,80}/u', $failExcerpt, $fm)) {

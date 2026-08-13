@@ -297,17 +297,25 @@ class ClaudeQuestionReviewService
         $userContent = "Aşağıdaki soru JSON'unu analiz et ve SADECE zorunlu çıktı JSON'unu döndür.\n\n"
             . json_encode($flatQuestion, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $message = $client->messages->create(
-            maxTokens: $maxTokens,
-            messages: [
-                [
-                    'role' => 'user',
-                    'content' => $userContent,
+        try {
+            $message = $client->messages->create(
+                maxTokens: $maxTokens,
+                messages: [
+                    [
+                        'role' => 'user',
+                        'content' => $userContent,
+                    ],
                 ],
-            ],
-            model: $model,
-            system: QuestionQualityReviewHelper::prompt(),
-        );
+                model: $model,
+                system: QuestionQualityReviewHelper::prompt(),
+            );
+        } catch (\Throwable $e) {
+            $public = QuestionQualityReviewHelper::publicFailReasonFromThrowable($e);
+            if ($public !== null) {
+                throw new RuntimeException($public, 0, $e);
+            }
+            throw $e;
+        }
 
         $rawText = $this->extractText($message->content ?? []);
         $this->lastRawText = $rawText;
@@ -394,9 +402,11 @@ class ClaudeQuestionReviewService
 
     public function markFailed(QuestionQualityReview $review, string $reason, array $meta = [], ?string $rawText = null): QuestionQualityReview
     {
+        $publicReason = QuestionQualityReviewHelper::publicFailReason($reason) ?? $reason;
+
         $rawPayload = [
             'failed' => true,
-            'fail_reason' => $reason,
+            'fail_reason' => $publicReason,
             'meta' => $meta,
             'attempt' => (int) ($review->attempt ?? 1),
         ];
@@ -410,7 +420,7 @@ class ClaudeQuestionReviewService
             'provider' => $meta['provider'] ?? 'anthropic',
             'model' => $meta['model'] ?? $this->modelLabel(),
             'package' => $meta['package'] ?? '4',
-            'edit_reason' => mb_substr($reason, 0, 2000),
+            'edit_reason' => mb_substr($publicReason, 0, 2000),
             'raw_response' => $rawPayload,
             'reviewed_at' => now(),
         ])->save();

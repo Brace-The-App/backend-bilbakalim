@@ -386,10 +386,12 @@
                                 default => $review->status,
                             };
                             $failReason = $review->status === 'failed'
-                                ? (string) ($review->edit_reason
-                                    ?: data_get($review->raw_response, 'fail_reason')
-                                    ?: data_get($review->raw_response, 'error')
-                                    ?: '')
+                                ? (string) (\App\Services\QuestionQualityReviewHelper::publicFailReason(
+                                    (string) ($review->edit_reason
+                                        ?: data_get($review->raw_response, 'fail_reason')
+                                        ?: data_get($review->raw_response, 'error')
+                                        ?: '')
+                                ) ?? '')
                                 : '';
                             // Liste: uzun teknik mesajı 2 satırda okunabilir tut
                             $failReasonShort = $failReason !== ''

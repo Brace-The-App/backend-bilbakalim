@@ -4,6 +4,7 @@ namespace App\Exceptions;
 
 use Abbasudo\Purity\Exceptions\FieldNotSupported;
 use App\Http\Custom\Response;
+use App\Services\QuestionQualityReviewHelper;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Validation\ValidationException;
@@ -51,6 +52,22 @@ class Handler extends ExceptionHandler
                     'errors' => $e->errors(),
                 ], 422);
             }
+        });
+
+        $this->renderable(function (Throwable $e, $request) {
+            $public = QuestionQualityReviewHelper::publicFailReasonFromThrowable($e);
+            if ($public === null) {
+                return null;
+            }
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $public,
+                ], 503);
+            }
+
+            return response($public, 503);
         });
     }
 }

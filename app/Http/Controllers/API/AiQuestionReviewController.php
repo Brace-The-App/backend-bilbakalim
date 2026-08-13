@@ -138,7 +138,9 @@ class AiQuestionReviewController extends Controller
                 'model' => $extracted['model'] ?? $review->model,
                 'package' => $extracted['package'] ?? $review->package,
                 'external_job_id' => $extracted['external_job_id'] ?? $review->external_job_id,
-                'edit_reason' => $extracted['fail_reason'] ?? $extracted['edit_reason'] ?? $review->edit_reason,
+                'edit_reason' => QuestionQualityReviewHelper::publicFailReason(
+                    $extracted['fail_reason'] ?? $extracted['edit_reason'] ?? $review->edit_reason
+                ),
                 'raw_response' => $payload,
                 'reviewed_at' => now(),
             ])->save();
