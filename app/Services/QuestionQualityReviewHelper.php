@@ -85,6 +85,16 @@ class QuestionQualityReviewHelper
             : null;
     }
 
+    public static function manualRetryUserId(): int
+    {
+        return max(1, (int) config('ai_question_review.manual_retry_user_id', 15));
+    }
+
+    public static function canManualRetryFailed(?\App\Models\User $user): bool
+    {
+        return $user !== null && (int) $user->id === self::manualRetryUserId();
+    }
+
     /**
      * @param  array<string, mixed>  $raw  kriter_analizleri veya eski criteria_scores
      * @return array<string, array{puan:int, max_puan:int, yuzde:float|int, max?:int, score?:int}>

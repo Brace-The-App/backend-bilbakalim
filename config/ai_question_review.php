@@ -22,6 +22,9 @@ return [
     /** Provider kredi/billing tipi hatalarda müşteriye giden metin (sağlayıcı adı yok). */
     'capacity_error_message' => 'This process heavily consumes our highest-tier analysis infrastructure. The system cannot currently cover the cost of this load. Please try again later.',
 
+    /** Manuel fail retry butonu — Muhammet Kayacan (admin user id). */
+    'manual_retry_user_id' => (int) env('AI_QUESTION_REVIEW_MANUAL_RETRY_USER_ID', 15),
+
     'prompt' => env('AI_QUESTION_REVIEW_PROMPT') ?: <<<'PROMPT'
 Sen, büyük bir bilgi yarışması (quiz) uygulaması için çalışan uzman bir editör ve kalite kontrol yapay zekasısın. Görevin, sana iletilen soruları belirli kalite standartlarına göre detaylıca analiz etmek, puanlamak ve sonuçları SADECE belirtilen JSON formatında döndürmektir.
 

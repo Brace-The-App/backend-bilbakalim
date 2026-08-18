@@ -7,6 +7,8 @@ use App\Models\Question;
 use App\Models\QuestionAdminLog;
 use App\Models\QuestionQualityReview;
 use App\Services\QuestionDuplicateService;
+use App\Services\ClaudeQuestionReviewService;
+use App\Services\QuestionQualityReviewHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -86,15 +88,9 @@ class QuestionQualityReviewController extends Controller
             }
         }
 
-        // Sonraki denemesi başarılı olan fail'leri gizle (sadece gerçekten açık fail kalsın)
+        // Sonraki denemesi başarılı olmayan açık fail'ler (soru başına en son deneme, silinmiş soru yok)
         $openFailConstraint = function ($q) {
-            $q->whereNotExists(function ($e) {
-                $e->selectRaw('1')
-                    ->from('question_quality_reviews as later_ok')
-                    ->whereColumn('later_ok.question_id', 'question_quality_reviews.question_id')
-                    ->where('later_ok.status', QuestionQualityReview::STATUS_REVIEWED)
-                    ->whereColumn('later_ok.id', '>', 'question_quality_reviews.id');
-            });
+            $q->latestOpenFailedPerQuestion();
         };
 
         if ($status !== '' && $scope !== 'all_success') {
@@ -159,15 +155,7 @@ class QuestionQualityReviewController extends Controller
             }
         }
 
-        $openFailedQuery = QuestionQualityReview::query()
-            ->where('status', 'failed')
-            ->whereNotExists(function ($e) {
-                $e->selectRaw('1')
-                    ->from('question_quality_reviews as later_ok')
-                    ->whereColumn('later_ok.question_id', 'question_quality_reviews.question_id')
-                    ->where('later_ok.status', QuestionQualityReview::STATUS_REVIEWED)
-                    ->whereColumn('later_ok.id', '>', 'question_quality_reviews.id');
-            });
+        $openFailedQuery = QuestionQualityReview::query()->latestOpenFailedPerQuestion();
 
         $stats = [
             'total' => QuestionQualityReview::query()->count(),
@@ -237,6 +225,7 @@ class QuestionQualityReviewController extends Controller
 
         $configuredModel = (string) config('services.anthropic.model_label', 'claude-opus-5');
         $dupStats = $finder->cachedStats();
+        $canManualRetryFailed = QuestionQualityReviewHelper::canManualRetryFailed(Auth::user());
 
         return view('admin.question-quality-reviews.index', compact(
             'reviews',
@@ -251,7 +240,8 @@ class QuestionQualityReviewController extends Controller
             'adminAccepted',
             'attemptCountByQuestion',
             'scope',
-            'dupStats'
+            'dupStats',
+            'canManualRetryFailed'
         ));
     }
 
@@ -409,6 +399,43 @@ class QuestionQualityReviewController extends Controller
                 'new_value' => (string) $question->admin_status,
             ]);
         }
+    }
+
+    /** Muhammet Kayacan: açık fail kayıtlarını anında 1 kez daha dene. */
+    public function retryFailedOpen(Request $request, ClaudeQuestionReviewService $claude)
+    {
+        if (!QuestionQualityReviewHelper::canManualRetryFailed($request->user())) {
+            abort(403, 'Bu işlem için yetkiniz yok.');
+        }
+
+        $open = $claude->countOpenFailedReviews();
+        if ($open <= 0) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Yeniden denenecek açık başarısız kayıt yok.',
+                'data' => ['ok' => 0, 'fail' => 0, 'processed' => 0, 'remaining' => 0],
+            ]);
+        }
+
+        @set_time_limit(0);
+
+        $result = $claude->retryOpenFailedBatch($open, true);
+
+        if (!empty($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error'],
+                'data' => $result,
+            ], 422);
+        }
+
+        $msg = "Yeniden deneme bitti · başarılı {$result['ok']} · yine başarısız {$result['fail']} · toplam {$result['processed']}";
+
+        return response()->json([
+            'success' => true,
+            'message' => $msg,
+            'data' => $result,
+        ]);
     }
 
     /** Liste auto-refresh için hafif durum snapshot. */

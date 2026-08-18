@@ -113,18 +113,14 @@ class ClaudeQuestionReviewService
 
         return DB::transaction(function () use ($maxAttempts, $ignoreMaxAttempts) {
             $failed = QuestionQualityReview::query()
-                ->where('status', QuestionQualityReview::STATUS_FAILED)
+                ->openFailed()
                 ->when(! $ignoreMaxAttempts, fn ($q) => $q->where('attempt', '<', $maxAttempts))
                 ->whereNotExists(function ($q) {
                     $q->select(DB::raw(1))
                         ->from('question_quality_reviews as r2')
                         ->whereColumn('r2.question_id', 'question_quality_reviews.question_id')
-                        ->whereIn('r2.status', [
-                            QuestionQualityReview::STATUS_PENDING,
-                            QuestionQualityReview::STATUS_REVIEWED,
-                        ]);
+                        ->where('r2.status', QuestionQualityReview::STATUS_PENDING);
                 })
-                // Aynı soru için en yüksek attempt'li fail satırı
                 ->whereIn('id', function ($q) {
                     $q->selectRaw('MAX(id)')
                         ->from('question_quality_reviews')
@@ -428,6 +424,83 @@ class ClaudeQuestionReviewService
         return $review->fresh();
     }
 
+    public function countOpenFailedReviews(): int
+    {
+        return (int) QuestionQualityReview::query()->latestOpenFailedPerQuestion()->count();
+    }
+
+    /**
+     * Açık fail kayıtlarını manuel yeniden dene (panel butonu).
+     *
+     * @return array{ok:int, fail:int, processed:int, remaining:int, error?:string}
+     */
+    public function retryOpenFailedBatch(int $limit, bool $forceRetry = true): array
+    {
+        if (!$this->apiKeyConfigured()) {
+            return [
+                'ok' => 0,
+                'fail' => 0,
+                'processed' => 0,
+                'remaining' => $this->countOpenFailedReviews(),
+                'error' => 'YZ analiz anahtarı tanımlı değil.',
+            ];
+        }
+
+        $limit = max(1, $limit);
+        $model = $this->modelLabel();
+        $package = '4';
+        $ok = 0;
+        $fail = 0;
+        $processed = 0;
+
+        for ($i = 0; $i < $limit; $i++) {
+            try {
+                $review = $this->assignNextFailedRetry($forceRetry);
+            } catch (\Throwable $e) {
+                return [
+                    'ok' => $ok,
+                    'fail' => $fail,
+                    'processed' => $processed,
+                    'remaining' => $this->countOpenFailedReviews(),
+                    'error' => $e->getMessage(),
+                ];
+            }
+
+            if (!$review) {
+                break;
+            }
+
+            $processed++;
+            $flat = is_array($review->question_snapshot) ? $review->question_snapshot : [];
+
+            try {
+                $result = $this->analyze($flat);
+                $this->saveReviewed($review, $result['parsed'], [
+                    'provider' => 'anthropic',
+                    'model' => $result['model'],
+                    'package' => $package,
+                ]);
+                $ok++;
+            } catch (\Throwable $e) {
+                $public = QuestionQualityReviewHelper::publicFailReasonFromThrowable($e);
+                $reason = $public ?? $e->getMessage();
+                $this->markFailed($review, $reason, [
+                    'provider' => 'anthropic',
+                    'model' => $model,
+                    'package' => $package,
+                ], $this->lastRawText());
+                $fail++;
+            }
+        }
+
+        return [
+            'ok' => $ok,
+            'fail' => $fail,
+            'processed' => $processed,
+            'remaining' => $this->countOpenFailedReviews(),
+        ];
+    }
+
     /**
      * @param  iterable<mixed>  $content
      */
@@ -689,7 +762,21 @@ class ClaudeQuestionReviewService
                     $j++;
                 }
                 $next = $j < $len ? $json[$j] : '';
-                if ($next === ',' || $next === '}' || $next === ']' || $next === ':' || $next === '') {
+
+                $isStringEnd = false;
+                if ($next === '}' || $next === ']' || $next === ':' || $next === '') {
+                    $isStringEnd = true;
+                } elseif ($next === ',') {
+                    $k = $j + 1;
+                    while ($k < $len && ctype_space($json[$k])) {
+                        $k++;
+                    }
+                    $afterComma = $k < $len ? $json[$k] : '';
+                    // "Avatar", for … → iç tırnak; "KARIŞIK",\n    "key" → gerçek string sonu
+                    $isStringEnd = in_array($afterComma, ['"', '}', ']', ''], true);
+                }
+
+                if ($isStringEnd) {
                     $out .= '"';
                     $inString = false;
                 } else {

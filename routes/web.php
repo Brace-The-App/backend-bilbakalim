@@ -133,6 +133,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('question-quality-reviews/duplicates/delete', [QuestionQualityReviewController::class, 'deleteDuplicate'])->name('question-quality-reviews.duplicates.delete');
     Route::post('question-quality-reviews/duplicates/dismiss', [QuestionQualityReviewController::class, 'dismissDuplicateGroup'])->name('question-quality-reviews.duplicates.dismiss');
     Route::get('question-quality-reviews/poll', [QuestionQualityReviewController::class, 'poll'])->name('question-quality-reviews.poll');
+    Route::post('question-quality-reviews/retry-failed-open', [QuestionQualityReviewController::class, 'retryFailedOpen'])->name('question-quality-reviews.retry-failed-open');
     Route::post('question-quality-reviews/bulk-apply-revision', [QuestionQualityReviewController::class, 'bulkApplyRevision'])->name('question-quality-reviews.bulk-apply-revision');
     Route::get('question-quality-reviews/{id}', [QuestionQualityReviewController::class, 'show'])->name('question-quality-reviews.show')->whereNumber('id');
     Route::post('question-quality-reviews/{id}/deactivate', [QuestionQualityReviewController::class, 'deactivateQuestion'])->name('question-quality-reviews.deactivate')->whereNumber('id');

@@ -420,7 +420,8 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 <h5 class="mb-0">Botlar</h5>
                 <div class="d-flex align-items-center gap-1">
                     <span class="badge bg-light text-dark" id="duelBotListCount">{{ count($bots) }}</span>
-                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#duelBotCreateModal">
+                    {{-- Yeni bot: şimdilik gizli, ileride d-none kaldırılacak --}}
+                    <button type="button" class="btn btn-sm btn-primary d-none" data-bs-toggle="modal" data-bs-target="#duelBotCreateModal">
                         Yeni bot
                     </button>
                 </div>
@@ -526,7 +527,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         @if(!empty($selected['is_dummy']))
             <div class="duel-bot-dummy-panel">
                 <h5 class="mb-2">{{ $selected['name'] }}</h5>
-                <p class="mb-0">Soldan bir bot seçin veya <strong>Yeni bot</strong> ile zorluk seçerek hızlı oluşturun.</p>
+                <p class="mb-0">Soldan bir bot seçin.</p>
             </div>
         @elseif(!$bot || !$showDetail)
             <div class="alert alert-warning mb-0">Bot bulunamadı veya seçilemedi.</div>

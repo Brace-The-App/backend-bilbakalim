@@ -68,4 +68,40 @@ class QuestionQualityReview extends Model
     {
         return $this->belongsTo(self::class, 'previous_review_id');
     }
+
+    /**
+     * Sonraki denemesi başarılı olmayan açık fail kayıtları.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeOpenFailed($query)
+    {
+        return $query->where('status', self::STATUS_FAILED)
+            ->whereHas('question')
+            ->whereNotExists(function ($e) {
+                $e->selectRaw('1')
+                    ->from('question_quality_reviews as later_ok')
+                    ->whereColumn('later_ok.question_id', 'question_quality_reviews.question_id')
+                    ->where('later_ok.status', self::STATUS_REVIEWED)
+                    ->whereColumn('later_ok.id', '>', 'question_quality_reviews.id');
+            });
+    }
+
+    /**
+     * Soru başına yalnızca en son açık fail satırı (silinmiş soru yok, eski denemeler gizli).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
+     */
+    public function scopeLatestOpenFailedPerQuestion($query)
+    {
+        return $query->openFailed()
+            ->whereIn('id', function ($q) {
+                $q->selectRaw('MAX(id)')
+                    ->from('question_quality_reviews')
+                    ->where('status', self::STATUS_FAILED)
+                    ->groupBy('question_id');
+            });
+    }
 }

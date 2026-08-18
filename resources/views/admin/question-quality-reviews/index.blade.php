@@ -514,6 +514,34 @@
             @endif
         </div>
     </div>
+
+    @if (!empty($canManualRetryFailed))
+        <div class="card aqr-panel mt-3 border-warning-subtle">
+            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <div class="fw-semibold">Başarısız incelemeleri yeniden dene</div>
+                    <div class="small text-muted">
+                        Ödeme / kapasite nedeniyle başarısız kalan açık kayıtlar için anında 1 ek deneme.
+                        Otomatik gece retry kapalı — yalnızca bu butonla.
+                        @if ((int) ($stats['failed'] ?? 0) > 0)
+                            Şu an <strong>{{ number_format((int) $stats['failed']) }}</strong> açık fail var — hepsi yeniden denenir.
+                        @else
+                            Şu an açık fail yok.
+                        @endif
+                    </div>
+                </div>
+                <button type="button"
+                        class="btn btn-warning"
+                        id="aqrRetryFailedBtn"
+                        @if ((int) ($stats['failed'] ?? 0) <= 0) disabled @endif>
+                    Başarısızları yeniden dene
+                </button>
+            </div>
+            <div class="px-3 pb-3 d-none" id="aqrRetryFailedStatus">
+                <div class="small text-muted" id="aqrRetryFailedStatusText">Deneniyor…</div>
+            </div>
+        </div>
+    @endif
 </div>
 
 <div class="modal fade dup-modal" id="aqrDupModal" tabindex="-1" aria-hidden="true">
@@ -542,6 +570,7 @@
 (function () {
     var pollUrl = @json(route('admin.question-quality-reviews.poll'));
     var bulkUrl = @json(route('admin.question-quality-reviews.bulk-apply-revision'));
+    var retryFailedUrl = @json(route('admin.question-quality-reviews.retry-failed-open'));
     var csrf = @json(csrf_token());
     var snapshot = {
         pending: {{ (int) $stats['pending'] }},
@@ -691,6 +720,62 @@
                 .finally(function () {
                     runBtn.disabled = false;
                     runBtn.textContent = 'AI düzeltmesini uygula';
+                });
+        });
+    }
+
+    var retryFailedBtn = document.getElementById('aqrRetryFailedBtn');
+    if (retryFailedBtn && retryFailedUrl) {
+        retryFailedBtn.addEventListener('click', function () {
+            var openFail = {{ (int) ($stats['failed'] ?? 0) }};
+            if (openFail <= 0) return;
+            if (!window.confirm(
+                openFail + ' açık başarısız inceleme yeniden denenecek (her soru için 1 ek deneme). '
+                + 'Bu işlem uzun sürebilir. Devam?'
+            )) {
+                return;
+            }
+            var statusWrap = document.getElementById('aqrRetryFailedStatus');
+            var statusText = document.getElementById('aqrRetryFailedStatusText');
+            retryFailedBtn.disabled = true;
+            retryFailedBtn.textContent = 'Deneniyor…';
+            if (statusWrap) statusWrap.classList.remove('d-none');
+            if (statusText) statusText.textContent = 'Başarısız kayıtlar yeniden deneniyor… Lütfen bekleyin.';
+            fetch(retryFailedUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({})
+            })
+                .then(function (r) {
+                    return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+                })
+                .then(function (res) {
+                    var msg = (res.j && res.j.message) ? res.j.message : (res.ok ? 'Tamamlandı' : 'Hata');
+                    if (window.toastr) {
+                        if (res.ok && res.j && res.j.success) toastr.success(msg);
+                        else toastr.error(msg);
+                    } else {
+                        alert(msg);
+                    }
+                    if (statusText) statusText.textContent = msg;
+                    if (res.ok) {
+                        setTimeout(function () { window.location.reload(); }, 1200);
+                    }
+                })
+                .catch(function () {
+                    if (window.toastr) toastr.error('İstek başarısız');
+                    else alert('İstek başarısız');
+                    if (statusText) statusText.textContent = 'İstek başarısız.';
+                })
+                .finally(function () {
+                    retryFailedBtn.disabled = false;
+                    retryFailedBtn.textContent = 'Başarısızları yeniden dene';
                 });
         });
     }
