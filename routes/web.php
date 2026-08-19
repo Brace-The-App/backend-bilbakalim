@@ -96,6 +96,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('permissions/roles/{role}/permissions', [PermissionController::class, 'updateRolePermissions'])->name('permissions.roles.permissions.update');
 
     // Notifications management
+    Route::get('notifications/users/search', [NotificationController::class, 'searchUsers'])->name('notifications.users.search');
     Route::resource('notifications', NotificationController::class);
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
 

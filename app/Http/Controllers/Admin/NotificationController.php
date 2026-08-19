@@ -18,7 +18,7 @@ class NotificationController extends Controller
     {
         $this->notificationService = $notificationService;
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view notifications')->only(['index', 'show']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store', 'send']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store', 'send', 'searchUsers']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit notifications')->only(['edit', 'update']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete notifications')->only(['destroy']);
     }
@@ -26,7 +26,7 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         $query = Notification::with('creator');
-        
+
         // Arama
         if ($request->filled('search')) {
             $search = $request->search;
@@ -35,20 +35,36 @@ class NotificationController extends Controller
                   ->orWhere('content', 'like', "%{$search}%");
             });
         }
-        
+
         // Tip filtresi
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
-        
+
         // Durum filtresi
         if ($request->filled('status')) {
             $query->where('is_active', $request->status === 'active');
         }
 
         $notifications = $query->latest()->paginate(10);
-        
-        return view('admin.notifications.index', compact('notifications'));
+        $stats = $this->notificationStats();
+
+        return view('admin.notifications.index', compact('notifications', 'stats'));
+    }
+
+    private function notificationStats(): array
+    {
+        $channelTypes = ['email', 'sms', 'fcm'];
+
+        return [
+            'total' => Notification::whereIn('type', $channelTypes)->count(),
+            'fcm' => Notification::where('type', 'fcm')->count(),
+            'sms' => Notification::where('type', 'sms')->count(),
+            'email' => Notification::where('type', 'email')->count(),
+            'recent_30' => Notification::whereIn('type', $channelTypes)
+                ->where('created_at', '>=', now()->subDays(30))
+                ->count(),
+        ];
     }
 
     public function store(Request $request)
@@ -96,9 +112,10 @@ class NotificationController extends Controller
     public function show(Notification $notification)
     {
         $notification->load('creator');
+
         return response()->json([
             'success' => true,
-            'notification' => $notification
+            'notification' => $notification,
         ]);
     }
 
@@ -163,6 +180,68 @@ class NotificationController extends Controller
     }
 
     /**
+     * Search app users for notification targeting.
+     */
+    public function searchUsers(Request $request)
+    {
+        $search = trim((string) $request->input('q', ''));
+        $type = (string) $request->input('type', '');
+
+        if ($search === '' || (strlen($search) < 2 && !ctype_digit($search))) {
+            return response()->json(['users' => []]);
+        }
+
+        $like = '%' . addcslashes($search, '%_\\') . '%';
+
+        $users = User::notBot()
+            ->where('role_id', 3)
+            ->where(function ($q) use ($search, $like) {
+                $q->where('name', 'like', $like)
+                    ->orWhere('email', 'like', $like)
+                    ->orWhere('phone', 'like', $like);
+
+                if (ctype_digit($search)) {
+                    $q->orWhere('id', (int) $search);
+                }
+            })
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get(['id', 'name', 'email', 'phone', 'device_id']);
+
+        $users = $users->map(function (User $user) use ($type) {
+            $label = trim((string) $user->name);
+            if ($label === '') {
+                $label = 'Kullanıcı #' . $user->id;
+            }
+
+            $eligible = match ($type) {
+                'fcm' => filled($user->device_id),
+                'sms' => filled($user->phone),
+                'email' => filled($user->email),
+                default => true,
+            };
+
+            $eligibleNote = match ($type) {
+                'fcm' => filled($user->device_id) ? 'Push uygun' : 'Cihaz kaydı yok',
+                'sms' => filled($user->phone) ? 'SMS uygun' : 'Telefon yok',
+                'email' => filled($user->email) ? 'E-posta uygun' : 'E-posta yok',
+                default => '',
+            };
+
+            return [
+                'id' => $user->id,
+                'label' => $label,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'eligible' => $eligible,
+                'eligible_note' => $eligibleNote,
+            ];
+        })->values();
+
+        return response()->json(['users' => $users]);
+    }
+
+    /**
      * Send notification to users
      */
     public function send(Request $request)
@@ -180,12 +259,13 @@ class NotificationController extends Controller
                 $targetUsers = array_map('intval', explode(',', $validated['target_users']));
             }
 
-     
+
             $result = $this->notificationService->sendNotification(
                 $validated['title'],
                 $validated['content'],
                 $validated['type'],
-                $targetUsers
+                $targetUsers,
+                auth()->id()
             );
             return response()->json($result, $result['success'] ? 200 : 500);
 

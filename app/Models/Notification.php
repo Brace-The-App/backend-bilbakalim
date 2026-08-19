@@ -12,14 +12,18 @@ class Notification extends Model
         'title',
         'content',
         'type',
+        'target_users',
         'send_at',
         'is_active',
-        'created_by'
+        'sent_count',
+        'created_by',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'send_at' => 'datetime',
+        'target_users' => 'array',
+        'sent_count' => 'integer',
     ];
 
     // Bildirimi oluşturan kullanıcı
@@ -56,6 +60,25 @@ class Notification extends Model
             'fcm' => 'smartphone',
             default => 'bell'
         };
+    }
+
+    public function getTypeLabelAttribute(): string
+    {
+        return match($this->type) {
+            'email' => 'E-posta',
+            'sms' => 'SMS',
+            'fcm' => 'Push (FCM)',
+            default => ucfirst($this->type),
+        };
+    }
+
+    public function getIsSentAttribute(): bool
+    {
+        if (($this->sent_count ?? 0) > 0) {
+            return true;
+        }
+
+        return $this->send_at !== null && $this->send_at->isPast();
     }
 
     // Kısa içerik

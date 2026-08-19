@@ -11,8 +11,7 @@
     <meta name="author" content="pixelstrap">
     <meta name="user-id" content="{{ auth()->id() }}">
     <meta name="api-token" content="{{ auth()->user()->createToken('admin')->plainTextToken ?? '' }}">
-    <link rel="icon" href="../assets/images/favicon.png" type="image/x-icon">
-    <link rel="shortcut icon" href="../assets/images/favicon.png" type="image/x-icon">
+    @include('admin.layouts.favicon')
     <title>Bil Bakalim - Admin Panel</title>
     <!-- Google font-->
     <link href="https://fonts.googleapis.com/css?family=Rubik:400,400i,500,500i,700,700i&amp;display=swap"

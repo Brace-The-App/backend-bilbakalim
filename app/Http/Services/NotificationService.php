@@ -15,15 +15,16 @@ class NotificationService
     /**
      * Send notification to users based on type
      */
-    public function sendNotification($title, $content, $type, $targetUsers = null)
+    public function sendNotification($title, $content, $type, $targetUsers = null, ?int $createdBy = null)
     {
         try {
             $notification = NotificationModel::create([
                 'title' => $title,
                 'content' => $content,
                 'type' => $type,
-                'target_users' => $targetUsers ? json_encode($targetUsers) : null,
+                'target_users' => is_array($targetUsers) && count($targetUsers) > 0 ? $targetUsers : null,
                 'send_at' => now(),
+                'created_by' => $createdBy,
             ]);
 
             $sentCount = 0;

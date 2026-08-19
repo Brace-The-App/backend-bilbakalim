@@ -8,13 +8,13 @@
     <meta name="keywords" content="quiz, admin, bilbakalim, login">
     <meta name="author" content="BilBakalim">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="icon" href="{{ asset('assets/images/favicon.png') }}" type="image/x-icon">
+    @include('admin.layouts.favicon')
     <title>Admin Giriş | BilBakalim</title>
-    
+
     <!-- Google font-->
     <link href="https://fonts.googleapis.com/css?family=Rubik:400,400i,500,500i,700,700i&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,500,500i,700,700i,900&display=swap" rel="stylesheet">
-    
+
     <!-- Font Awesome-->
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/fontawesome.css') }}">
     <!-- ico-font-->
@@ -32,7 +32,7 @@
     <link id="color" rel="stylesheet" href="{{ asset('assets/css/color-1.css') }}" media="screen">
     <!-- Responsive css-->
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/responsive.css') }}">
-    
+
     <style>
         .show-hide {
             position: absolute;
@@ -56,7 +56,7 @@
     <!-- login page start-->
     <div class="container-fluid p-0">
         <div class="row m-0">
-            <div class="col-12 p-0">    
+            <div class="col-12 p-0">
                 <div class="login-card login-dark">
                     <div>
                         <div>
@@ -65,12 +65,12 @@
                                 <img class="img-fluid for-dark" src="{{ asset('assets/images/logo/logo_dark.png') }}" alt="BilBakalim">
                             </a>
                         </div>
-                        <div class="login-main"> 
+                        <div class="login-main">
                             <form class="theme-form" method="POST" action="{{ route('login.post') }}">
                                 @csrf
                                 <h4>Admin Paneli Giriş</h4>
                                 <p>Email ve şifrenizi girerek giriş yapın</p>
-                                
+
                                 @if ($errors->any())
                                     <div class="alert alert-danger">
                                         <ul class="mb-0">
@@ -86,28 +86,28 @@
                                         {{ session('error') }}
                                     </div>
                                 @endif
-                                
+
                                 <div class="form-group">
                                     <label class="col-form-label">Email Adresi</label>
-                                    <input class="form-control @error('email') is-invalid @enderror" 
-                                           type="email" 
-                                           name="email" 
-                                           value="{{ old('email') }}" 
-                                           required 
+                                    <input class="form-control @error('email') is-invalid @enderror"
+                                           type="email"
+                                           name="email"
+                                           value="{{ old('email') }}"
+                                           required
                                            placeholder="example@mail.com"
                                            autocomplete="email">
                                     @error('email')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                
+
                                 <div class="form-group">
                                     <label class="col-form-label">Şifre</label>
                                     <div class="form-input position-relative">
-                                        <input class="form-control @error('password') is-invalid @enderror" 
-                                               type="password" 
-                                               name="password" 
-                                               required 
+                                        <input class="form-control @error('password') is-invalid @enderror"
+                                               type="password"
+                                               name="password"
+                                               required
                                                placeholder="*********"
                                                autocomplete="current-password">
                                         <div class="show-hide"><span class="show"></span></div>
@@ -116,7 +116,7 @@
                                         @enderror
                                     </div>
                                 </div>
-                                
+
                                 <div class="form-group mb-0">
                                     <div class="checkbox p-0">
                                         <input id="checkbox1" type="checkbox" name="remember">
@@ -126,9 +126,9 @@
                                         <button class="btn btn-primary btn-block w-100" type="submit">Giriş Yap</button>
                                     </div>
                                 </div>
-                                
-                              
-                                
+
+
+
                                 <p class="mt-4 mb-0 text-center">
                                     <a href="{{ route('welcome') }}">← Ana Sayfaya Dön</a>
                                 </p>
@@ -140,7 +140,7 @@
         </div>
     </div>
     <!-- login page end-->
-    
+
     <!-- latest jquery-->
     <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
     <!-- Bootstrap js-->
@@ -150,7 +150,7 @@
     <script src="{{ asset('assets/js/icons/feather-icon/feather-icon.js') }}"></script>
     <!-- Theme js-->
     <script src="{{ asset('assets/js/script.js') }}"></script>
-    
+
     <script>
         $(document).ready(function() {
             // Show/hide password
@@ -159,13 +159,13 @@
                 var input = $(this).siblings('input[type="password"], input[type="text"]');
                 var type = input.attr('type');
                 var showText = $(this).find('.show');
-                
+
                 if (type === 'password') {
                     input.attr('type', 'text');
-                  
+
                 } else {
                     input.attr('type', 'password');
-                 
+
                 }
             });
         });
