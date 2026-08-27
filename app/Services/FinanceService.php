@@ -16,11 +16,36 @@ use Illuminate\Support\Facades\DB;
 
 class FinanceService
 {
-    public const ALLOWED_VIEWER_USER_ID = 15;
-
+    /** Panel finans sayfaları: admin veya personel. */
     public static function canAccess(?User $user): bool
     {
-        return $user !== null && (int) $user->id === self::ALLOWED_VIEWER_USER_ID;
+        return $user !== null && $user->hasAnyRole(['admin', 'personel']);
+    }
+
+    /**
+     * “Tüm zamanlar” için rapor epoch’u.
+     * Paket / fiyat yenilemesi sonrası (varsayılan 2026-08-08); eski IAP rakamları karışmasın.
+     * Soft-delete yok — sadece tarih filtresi.
+     */
+    public static function reportingEpochFrom(): Carbon
+    {
+        $raw = (string) config('app.finance_reporting_epoch', '2026-08-08');
+        try {
+            $epoch = Carbon::parse($raw)->startOfDay();
+        } catch (\Throwable) {
+            $epoch = Carbon::parse('2026-08-08')->startOfDay();
+        }
+
+        return $epoch;
+    }
+
+    /**
+     * Tüm zamanlar başlangıcı = paket/fiyat yenileme epoch’u (varsayılan 2026-08-08).
+     * Soft-delete yok; sadece bu tarihten sonraki kayıtlar.
+     */
+    public static function allTimeFrom(): Carbon
+    {
+        return self::reportingEpochFrom()->copy();
     }
 
     /**

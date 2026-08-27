@@ -4,15 +4,128 @@ namespace App\Http\Services;
 
 use App\Models\DuelAnswer;
 use App\Models\GameAnswer;
+use App\Models\GeneralSetting;
 use App\Models\Question;
+use App\Models\QuestionAdminLog;
 use App\Models\QuestionAnswerStat;
 use App\Models\TournamentUser;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class QuestionAnswerStatsService
 {
+    public const AUTO_FIX_MISMATCH_KEY = 'qas_auto_fix_mismatch';
+    public const AUTO_FIX_MISMATCH_BY_KEY = 'qas_auto_fix_mismatch_by';
+
+    public static function isAutoFixMismatchEnabled(): bool
+    {
+        return GeneralSetting::get(self::AUTO_FIX_MISMATCH_KEY, '0') === '1';
+    }
+
+    public static function setAutoFixMismatchEnabled(bool $enabled, ?int $adminId = null): void
+    {
+        GeneralSetting::set(
+            self::AUTO_FIX_MISMATCH_KEY,
+            $enabled ? '1' : '0',
+            'boolean',
+            'Güvenilir uyumsuz zorlukları otomatik düzelt (dakikada 1)'
+        );
+
+        if ($enabled && $adminId) {
+            GeneralSetting::set(
+                self::AUTO_FIX_MISMATCH_BY_KEY,
+                (string) $adminId,
+                'number',
+                'Otomatik zorluk düzeltmesini açan admin'
+            );
+        }
+    }
+
+    public static function autoFixMismatchActorId(): ?int
+    {
+        $raw = GeneralSetting::get(self::AUTO_FIX_MISMATCH_BY_KEY);
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        $id = (int) $raw;
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * Güvenilir uyumsuzlardan bir soruyu gözlenen zorluğa çeker.
+     * Kapalıysa veya aday yoksa null döner (cron boşuna iş yapmasın).
+     *
+     * @return array{question_id:int,old:string,new:string}|null
+     */
+    public function fixOneReliableMismatch(): ?array
+    {
+        if (!self::isAutoFixMismatchEnabled()) {
+            return null;
+        }
+
+        $adminId = self::autoFixMismatchActorId();
+        if (!$adminId) {
+            Log::warning('QAS auto-fix mismatch: enabled but actor admin_id missing');
+
+            return null;
+        }
+
+        $row = DB::table('questions')
+            ->join('question_answer_stats as qas', 'questions.id', '=', 'qas.question_id')
+            ->where('qas.total_answers', '>=', 5)
+            ->where('qas.data_sufficient', true)
+            ->whereIn('qas.observed_difficulty', ['easy', 'medium', 'hard'])
+            ->whereColumn('questions.question_level', '!=', 'qas.observed_difficulty')
+            ->orderBy('questions.id')
+            ->select([
+                'questions.id',
+                'questions.question_level',
+                'qas.observed_difficulty',
+            ])
+            ->first();
+
+        if (!$row) {
+            return null;
+        }
+
+        $question = Question::query()->find((int) $row->id);
+        if (!$question) {
+            return null;
+        }
+
+        $old = (string) $question->question_level;
+        $new = (string) $row->observed_difficulty;
+
+        if ($old === $new || !in_array($new, ['easy', 'medium', 'hard'], true)) {
+            return null;
+        }
+
+        DB::transaction(function () use ($question, $old, $new, $adminId) {
+            $question->update(['question_level' => $new]);
+
+            QuestionAdminLog::create([
+                'question_id' => $question->id,
+                'admin_id' => $adminId,
+                'action' => 'auto_fix_level',
+                'field' => 'question_level',
+                'old_value' => $old,
+                'new_value' => $new,
+            ]);
+        });
+
+        Cache::forget('qas.chart_data.v1');
+
+        return [
+            'question_id' => (int) $question->id,
+            'old' => $old,
+            'new' => $new,
+        ];
+    }
+
     public function refreshAll(): int
     {
         @set_time_limit(0);

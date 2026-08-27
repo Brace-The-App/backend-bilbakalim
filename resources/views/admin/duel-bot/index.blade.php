@@ -241,10 +241,15 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
 
 @section('content')
 <div class="page-title">
-    <div class="row align-items-center">
-        <div class="col-12">
+    <div class="row align-items-center g-2">
+        <div class="col-md-8">
             <h3 class="mb-1">Düello Bot</h3>
             <p class="text-muted mb-0 small">Soldan bot seç · sağda ayar / log (çoklu bot yapısına hazır)</p>
+        </div>
+        <div class="col-md-4 text-md-end">
+            <button type="button" class="btn btn-danger" id="duelBotEmergencyResetBtn" title="Açık bot maçlarını kapatır · sistemi toparlar · insan–insan maçlara dokunmaz">
+                <i data-feather="alert-triangle" class="me-1"></i> Acil sistem reset
+            </button>
         </div>
     </div>
 </div>
@@ -280,7 +285,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
                 AFK/zaman aşımı {{ (int)(($fr['answer_timeout'] ?? 0) + ($fr['disconnect'] ?? 0) + ($fr['afk_streak'] ?? 0)) }}
             </span>
             <span class="badge bg-info text-dark" id="duelBotOpsLeave">ayrılma {{ (int)($fr['leave'] ?? 0) }}</span>
-            <span class="badge bg-secondary" id="duelBotOpsRestart">worker yeniden başlatma {{ (int)($ops['worker_restarts'] ?? 0) }}</span>
+            <span class="badge bg-secondary" id="duelBotOpsRestart">sistem yenileme {{ (int)($ops['worker_restarts'] ?? 0) }}</span>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2 px-1" id="duelBotTierBar">
             @foreach(($tierCov['tiers'] ?? []) as $tc)
@@ -1423,7 +1428,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         var afkN = (fr.answer_timeout || 0) + (fr.disconnect || 0) + (fr.afk_streak || 0);
         if (afk) afk.textContent = 'AFK/zaman aşımı ' + afkN;
         if (leave) leave.textContent = 'ayrılma ' + (fr.leave || 0);
-        if (restart) restart.textContent = 'worker yeniden başlatma ' + (ops.worker_restarts || 0);
+        if (restart) restart.textContent = 'sistem yenileme ' + (ops.worker_restarts || 0);
 
         var cov = mm.tier_coverage || {};
         var tierBar = document.getElementById('duelBotTierBar');
@@ -1549,6 +1554,7 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
 
     var liveUrl = @json(route('admin.duel-bot.live'));
     var endMatchUrl = @json(route('admin.duel-bot.end-match'));
+    var emergencyResetUrl = @json(route('admin.duel-bot.emergency-reset'));
     var duelsUrlTpl = @json(url('/admin/duel-bot'));
     var endingMatchBots = {};
 
@@ -1703,6 +1709,60 @@ tr[data-tier="professor"].table-primary { --bs-table-bg: #e2d9f3; }
         e.preventDefault();
         endBotMatch(btn.getAttribute('data-bot-id'), btn.getAttribute('data-bot-name'));
     });
+
+    var emergencyResetBtn = document.getElementById('duelBotEmergencyResetBtn');
+    if (emergencyResetBtn) {
+        emergencyResetBtn.addEventListener('click', function () {
+            if (!confirm('Açık bot maçları kapatılacak ve sistem toparlanacak.\n\nİnsan–insan maçlara dokunulmaz.\nDevam edilsin mi?')) return;
+            emergencyResetBtn.disabled = true;
+            emergencyResetBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Resetleniyor…';
+            fetch(emergencyResetUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({})
+            })
+                .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+                .then(function (res) {
+                    var toast = document.getElementById('duelBotToast');
+                    if (toast) {
+                        var parts = [];
+                        if (res.data && res.data.message) parts.push(res.data.message);
+                        if (res.data && typeof res.data.human_open_after === 'number' && res.data.human_open_after > 0) {
+                            parts.push('İnsan–insan korundu (' + res.data.human_open_after + ' açık)');
+                        }
+                        if (res.data && res.data.socket && res.data.socket.skipped) {
+                            parts.push('İnsan–insan maçlara dokunulmadı');
+                        }
+                        if (res.data && typeof res.data.bot_open_after === 'number' && res.data.bot_open_after > 0) {
+                            parts.push('Bazı bot maçları hâlâ açık: ' + (res.data.bot_open_after || 0));
+                        }
+                        toast.textContent = parts.length ? parts.join(' · ') : (res.ok ? 'Acil sistem reset tamamlandı.' : 'Reset başarısız.');
+                        toast.classList.remove('d-none', 'bg-success', 'bg-danger');
+                        toast.classList.add(res.ok ? 'bg-success' : 'bg-danger');
+                        setTimeout(function () { toast.classList.add('d-none'); }, 8000);
+                    }
+                    if (res.ok && typeof refreshLive === 'function') refreshLive();
+                })
+                .catch(function () {
+                    var toast = document.getElementById('duelBotToast');
+                    if (toast) {
+                        toast.textContent = 'Acil reset isteği gönderilemedi.';
+                        toast.classList.remove('d-none');
+                        setTimeout(function () { toast.classList.add('d-none'); }, 5000);
+                    }
+                })
+                .finally(function () {
+                    emergencyResetBtn.disabled = false;
+                    emergencyResetBtn.innerHTML = '<i data-feather="alert-triangle" class="me-1"></i> Acil sistem reset';
+                    if (typeof feather !== 'undefined') feather.replace();
+                });
+        });
+    }
 
     function refreshLive() {
         fetch(liveUrl, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })

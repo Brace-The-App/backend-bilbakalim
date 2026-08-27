@@ -28,6 +28,7 @@ class DuelBotController extends Controller
                 'updateAvatar',
                 'update',
                 'endMatch',
+                'emergencyReset',
             ]);
     }
 
@@ -327,6 +328,17 @@ class DuelBotController extends Controller
             'duel_id' => $result['duel_id'] ?? null,
             'user_id' => (int) $validated['user_id'],
         ]);
+    }
+
+    /** Bot maçlarını kapat + sistem toparlama (insan–insan aktif maçlara dokunmaz). */
+    public function emergencyReset(Request $request)
+    {
+        $includeHuman = (bool) $request->boolean('include_human');
+        $result = DuelBotSettings::emergencyResetAll('admin', $includeHuman);
+
+        $status = ($result['success'] ?? false) ? 200 : 500;
+
+        return response()->json($result, $status);
     }
 
     /** Zorluk / bekleme — anında (AJAX) */

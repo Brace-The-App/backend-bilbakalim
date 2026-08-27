@@ -65,6 +65,61 @@
         outline: 2px solid #38bdf8;
         outline-offset: 2px;
     }
+    .qas-page .qas-mismatch-wrap {
+        display: flex;
+        align-items: stretch;
+        gap: .55rem;
+        height: 100%;
+    }
+    .qas-page .qas-mismatch-wrap .qas-stat-card {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-bottom: 0;
+        height: 100%;
+    }
+    .qas-page .qas-autofix-side {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .35rem;
+        min-width: 4.25rem;
+        padding: .55rem .4rem;
+        border-radius: 12px;
+        background: #fff;
+        border: 1px solid rgba(15, 23, 42, .08);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+        user-select: none;
+    }
+    .qas-page .qas-autofix-side .form-check-input {
+        width: 2.4rem;
+        height: 1.25rem;
+        margin: 0;
+        cursor: pointer;
+    }
+    .qas-page .qas-autofix-side .qas-autofix-label {
+        font-size: .68rem;
+        line-height: 1.15;
+        text-align: center;
+        color: #64748b;
+        font-weight: 600;
+        max-width: 4.2rem;
+    }
+    .qas-page .qas-autofix-side.is-on {
+        border-color: rgba(22, 163, 74, .35);
+        background: linear-gradient(180deg, #f0fdf4, #fff);
+    }
+    .qas-page .qas-autofix-side.is-on .qas-autofix-label {
+        color: #15803d;
+    }
+    .qas-page .qas-stat-hint.is-autofix-on {
+        color: #15803d;
+        font-weight: 600;
+    }
+    .qas-page .qas-stat-hint.is-autofix-off {
+        color: #94a3b8;
+    }
     #summaryModal .qas-sum-row {
         display: flex;
         justify-content: space-between;
@@ -517,15 +572,42 @@
             </div>
         </div>
         <div class="col-6 col-xl-3">
-            <div class="card qas-stat-card" role="button" tabindex="0" data-summary="mismatch" title="Özeti göster">
-                <div class="card-body d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="qas-stat-label">Uyumsuz (güvenilir)</div>
-                        <p class="qas-stat-value">{{ number_format($s['mismatch']) }}</p>
-                        <div class="qas-stat-hint">Tanımlı ≠ gözlenen · tıkla</div>
+            <div class="qas-mismatch-wrap">
+                <div class="card qas-stat-card" role="button" tabindex="0" data-summary="mismatch" title="Özeti göster">
+                    <div class="card-body d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="qas-stat-label">Uyumsuz (güvenilir)</div>
+                            <p class="qas-stat-value">{{ number_format($s['mismatch']) }}</p>
+                            <div class="qas-stat-hint {{ !empty($autoFixMismatch) ? 'is-autofix-on' : 'is-autofix-off' }}" id="qasAutoFixHint">
+                                @if(!empty($autoFixMismatch))
+                                    Altında otomatik düzenleniyor · dakikada 1
+                                @else
+                                    Tanımlı ≠ gözlenen · tıkla · otomatik kapalı
+                                @endif
+                            </div>
+                        </div>
+                        <div class="qas-stat-icon qas-icon-rose"><i data-feather="alert-triangle"></i></div>
                     </div>
-                    <div class="qas-stat-icon qas-icon-rose"><i data-feather="alert-triangle"></i></div>
                 </div>
+                @can('edit answer statistics')
+                <div class="qas-autofix-side {{ !empty($autoFixMismatch) ? 'is-on' : '' }}" id="qasAutoFixSide" title="Açıkken dakikada bir güvenilir uyumsuz soru gözlenen zorluğa çekilir">
+                    <div class="form-check form-switch m-0 p-0 d-flex justify-content-center">
+                        <input class="form-check-input" type="checkbox" role="switch" id="qasAutoFixToggle"
+                               {{ !empty($autoFixMismatch) ? 'checked' : '' }}
+                               data-url="{{ route('admin.question-answer-stats.auto-fix-mismatch') }}"
+                               aria-label="Otomatik uyumsuz düzeltme">
+                    </div>
+                    <div class="qas-autofix-label" id="qasAutoFixLabel">
+                        {{ !empty($autoFixMismatch) ? 'Otomatik açık' : 'Otomatik kapalı' }}
+                    </div>
+                </div>
+                @else
+                <div class="qas-autofix-side {{ !empty($autoFixMismatch) ? 'is-on' : '' }}">
+                    <div class="qas-autofix-label">
+                        {{ !empty($autoFixMismatch) ? 'Otomatik açık' : 'Otomatik kapalı' }}
+                    </div>
+                </div>
+                @endcan
             </div>
         </div>
     </div>
@@ -663,6 +745,13 @@
                     <select name="missing_en" class="form-select form-select-sm">
                         <option value="">Tümü</option>
                         <option value="1" {{ request('missing_en') === '1' ? 'selected' : '' }}>EN yok</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3 col-lg-1">
+                    <label class="form-label small text-muted mb-1">Resim</label>
+                    <select name="has_image" class="form-select form-select-sm">
+                        <option value="">Tümü</option>
+                        <option value="1" {{ request('has_image') === '1' ? 'selected' : '' }}>Resimli</option>
                     </select>
                 </div>
                 <div class="col-12 col-lg-auto d-flex gap-2">
@@ -1589,6 +1678,69 @@
                 }
             });
         });
+
+        (function initAutoFixMismatchToggle() {
+            const toggle = document.getElementById('qasAutoFixToggle');
+            const side = document.getElementById('qasAutoFixSide');
+            const label = document.getElementById('qasAutoFixLabel');
+            const hint = document.getElementById('qasAutoFixHint');
+            if (!toggle) return;
+
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const applyUi = function (on) {
+                if (side) side.classList.toggle('is-on', on);
+                if (label) label.textContent = on ? 'Otomatik açık' : 'Otomatik kapalı';
+                if (hint) {
+                    hint.classList.toggle('is-autofix-on', on);
+                    hint.classList.toggle('is-autofix-off', !on);
+                    hint.textContent = on
+                        ? 'Altında otomatik düzenleniyor · dakikada 1'
+                        : 'Tanımlı ≠ gözlenen · tıkla · otomatik kapalı';
+                }
+            };
+
+            if (side) {
+                side.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            }
+
+            toggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+
+            toggle.addEventListener('change', async function () {
+                const enabled = !!toggle.checked;
+                const prev = !enabled;
+                toggle.disabled = true;
+                applyUi(enabled);
+                try {
+                    const res = await fetch(toggle.dataset.url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf || '',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ enabled: enabled }),
+                    });
+                    const data = await res.json().catch(function () { return {}; });
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'Kayıt başarısız');
+                    }
+                    applyUi(!!data.enabled);
+                    toggle.checked = !!data.enabled;
+                } catch (err) {
+                    toggle.checked = prev;
+                    applyUi(prev);
+                    alert(err.message || 'Otomatik düzenleme kaydedilemedi.');
+                } finally {
+                    toggle.disabled = false;
+                }
+            });
+        })();
 
         document.querySelectorAll('.view-detail-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {

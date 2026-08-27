@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 
-@section('title', 'Finans · Coin')
+@section('title', 'Finans · Jeton')
 
 @push('styles')
 <style>
@@ -215,7 +215,7 @@
     ];
     $heat = $s['heat_calendar'] ?? $dailyNet;
     $pendingOpen = (int) ($alert['pending_count'] ?? 0);
-    $fmt = fn ($n) => number_format((int) $n, 0, ',', '.') . ' coin';
+    $fmt = fn ($n) => number_format((int) $n, 0, ',', '.') . ' jeton';
     $deltaFmt = function (int $n) {
         $sign = $n > 0 ? '+' : '';
         return $sign . number_format($n, 0, ',', '.');
@@ -253,7 +253,7 @@
         <div class="fin-coin-hero-main">
             <img class="fin-coin-hero-icon" src="{{ $coinImg }}" alt="" width="28" height="28">
             <div>
-                <h3>Finans · Coin</h3>
+                <h3>Finans · Jeton</h3>
                 <p>Jeton ekonomisi · {{ tr_time($from, 'd.m.Y') }} – {{ tr_time($to, 'd.m.Y') }}</p>
             </div>
         </div>
@@ -294,8 +294,8 @@
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div class="fin-presets">
-            <a href="{{ route('admin.finance.coin.index', ['range' => 'agreed']) }}" class="{{ $range === 'agreed' ? 'is-on' : '' }}">Kararlaştırılan Tarihten itibaren</a>
-            <a href="{{ route('admin.finance.coin.index', ['range' => 'all']) }}" class="{{ $range === 'all' ? 'is-on' : '' }}">Tüm zamanlar</a>
+            <a href="{{ route('admin.finance.coin.index', ['range' => 'agreed']) }}" class="{{ $range === 'agreed' ? 'is-on' : '' }}" title="{{ tr_time($agreedFrom, 'd.m.Y') }} 00:00">Kararlaştırılan tarihten</a>
+            <a href="{{ route('admin.finance.coin.index', ['range' => 'all']) }}" class="{{ $range === 'all' ? 'is-on' : '' }}" title="Paket/fiyat yenilemesinden itibaren ({{ tr_time($reportingEpoch ?? $allFrom ?? $from, 'd.m.Y') }})">Tüm zamanlar · {{ tr_time($reportingEpoch ?? $allFrom ?? $from, 'd.m.Y') }}’den</a>
             <a href="{{ route('admin.finance.coin.index', ['range' => 'today']) }}" class="{{ $range === 'today' ? 'is-on' : '' }}">Sadece bugün</a>
             <a href="{{ route('admin.finance.coin.index', ['range' => 'month']) }}" class="{{ $range === 'month' ? 'is-on' : '' }}">Bu ay</a>
             <a href="{{ route('admin.finance.coin.index', ['range' => 'last_month']) }}" class="{{ $range === 'last_month' ? 'is-on' : '' }}">Geçen ay</a>
@@ -367,7 +367,7 @@
                 }
                 $poly = implode(' ', $points);
             @endphp
-            <svg class="fin-spark" viewBox="0 0 {{ $w }} {{ $h }}" preserveAspectRatio="none" aria-label="Günlük net coin">
+            <svg class="fin-spark" viewBox="0 0 {{ $w }} {{ $h }}" preserveAspectRatio="none" aria-label="Günlük net jeton">
                 <line x1="0" y1="{{ $h/2 }}" x2="{{ $w }}" y2="{{ $h/2 }}" stroke="#e2e8f0" stroke-width="1"/>
                 <polyline fill="none" stroke="#15803d" stroke-width="2" points="{{ $poly }}"/>
             </svg>
@@ -394,7 +394,7 @@
                 <div class="fin-flow-node is-in">
                     <div class="t">Paket</div>
                     <div class="n">{{ number_format((int) $s['income']['iap'], 0, ',', '.') }}</div>
-                    <div class="h">dönem IAP girişi</div>
+                    <div class="h">dönem uygulama içi satış girişi</div>
                 </div>
                 <div class="fin-flow-arrow">→</div>
                 <div class="fin-flow-node">
@@ -447,7 +447,7 @@
         </div>
         <div class="col-lg-7">
             <div class="fin-card">
-                <div class="hd">Isı takvimi · son 30 gün net coin</div>
+                <div class="hd">Isı takvimi · son 30 gün net jeton</div>
                 <div class="bd">
                     <div class="fin-heat" aria-label="Günlük net ısı haritası">
                         @php
@@ -587,7 +587,7 @@
         </div>
         <div class="col-lg-6">
             <div class="fin-card fin-card--muted">
-                <div class="hd">Bot · referans (P&L dışı)</div>
+                <div class="hd">Bot · referans (kâr/zarar dışı)</div>
                 <div class="bd">
                     <div class="fin-row">
                         <span class="text-muted">Bot cüzdan ({{ (int) $p['bot_count'] }} bot)</span>

@@ -266,7 +266,7 @@
                     </li>
                     @endcan
 
-                    {{-- Finans: sadece Muhammet Kayacan (user #15) --}}
+                    {{-- Finans: admin | personel --}}
                     @if(\App\Services\FinanceService::canAccess(auth()->user()))
                     <li class="sidebar-main-title">
                         <div>
@@ -286,7 +286,7 @@
                         <a class="sidebar-link sidebar-title {{ request()->routeIs('admin.finance.coin.*') ? 'active' : '' }}"
                            href="{{ route('admin.finance.coin.index') }}">
                             <i data-feather="disc"></i>
-                            <span>Coin · jeton</span>
+                            <span>Jeton ekonomisi</span>
                         </a>
                     </li>
                     @endif

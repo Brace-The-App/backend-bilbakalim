@@ -74,6 +74,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     // Kullanıcı cevap istatistikleri
     Route::get('question-answer-stats', [QuestionAnswerStatsController::class, 'index'])->name('question-answer-stats.index');
     Route::post('question-answer-stats/refresh', [QuestionAnswerStatsController::class, 'refresh'])->name('question-answer-stats.refresh');
+    Route::post('question-answer-stats/auto-fix-mismatch', [QuestionAnswerStatsController::class, 'updateAutoFixMismatch'])->name('question-answer-stats.auto-fix-mismatch');
     Route::patch('question-answer-stats/{question}/level', [QuestionAnswerStatsController::class, 'updateLevel'])->name('question-answer-stats.update-level');
     Route::patch('question-answer-stats/{question}/status', [QuestionAnswerStatsController::class, 'updateStatus'])->name('question-answer-stats.update-status');
     Route::get('question-answer-stats/{question}/detail', [QuestionAnswerStatsController::class, 'showDetail'])->name('question-answer-stats.detail');
@@ -120,6 +121,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('duel-bot/active', [DuelBotController::class, 'updateActive'])->name('duel-bot.active');
     Route::post('duel-bot/bulk-active', [DuelBotController::class, 'bulkActive'])->name('duel-bot.bulk-active');
     Route::post('duel-bot/end-match', [DuelBotController::class, 'endMatch'])->name('duel-bot.end-match');
+    Route::post('duel-bot/emergency-reset', [DuelBotController::class, 'emergencyReset'])->name('duel-bot.emergency-reset');
     Route::post('duel-bot/behavior', [DuelBotController::class, 'updateBehavior'])->name('duel-bot.behavior');
     Route::post('duel-bot/matchmaking', [DuelBotController::class, 'updateMatchmaking'])->name('duel-bot.matchmaking');
     Route::put('duel-bot/profile', [DuelBotController::class, 'updateProfile'])->name('duel-bot.profile');
@@ -149,7 +151,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::post('support/{id}/reply', [SupportMessageController::class, 'reply'])->name('support.reply')->whereNumber('id');
     Route::delete('support/{id}', [SupportMessageController::class, 'destroy'])->name('support.destroy')->whereNumber('id');
 
-    // Finans (şimdilik sadece user #15)
+    // Finans (admin | personel)
     Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
     Route::get('finance/settings', [FinanceController::class, 'settings'])->name('finance.settings');
     Route::post('finance/periods', [FinanceController::class, 'storePeriod'])->name('finance.periods.store');

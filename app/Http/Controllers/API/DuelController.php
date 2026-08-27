@@ -302,10 +302,112 @@ class DuelController extends Controller
     }
 
     /**
+     * Bahis teklifine süre içinde cevap gelmezse reddedilmiş say (teklif eden kazanır).
+     */
+    public function forfeitPendingBetTimeout(Duel $duel): bool
+    {
+        if ($duel->status !== 'active') {
+            return false;
+        }
+
+        $settings = $duel->settings ?? [];
+        $currentBet = $settings['current_bet'] ?? null;
+        if (! $currentBet || ($currentBet['status'] ?? null) !== 'pending') {
+            return false;
+        }
+
+        $settings['current_bet']['status'] = 'rejected';
+        $settings['current_bet']['responded_at'] = now()->toISOString();
+        $settings['forfeit_reason'] = 'bet_timeout';
+        $settings['forfeit_at'] = now()->toIso8601String();
+        $duel->update(['settings' => $settings]);
+
+        $winnerId = (int) $currentBet['initiator_id'];
+        $this->finishDuel($duel->fresh(), $winnerId);
+        $this->sendDuelFinishedWebhook($duel->fresh());
+        $this->sendDuelQuestionBetRespondedWebhook($duel->fresh(), $settings['current_bet']);
+
+        return true;
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/duel/socket-requeue-prep",
+     *     summary="[Internal] Kuyruğa girmeden önce ghost temizliği",
+     *     description="Waiting ve bot’lu ghost maçları kapatır. Aktif insan–insan maç varsa blocked=true döner (forfeit yok).",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"user_id"},
+     *             @OA\Property(property="user_id", type="integer", example=15),
+     *             @OA\Property(property="secret", type="string", description="Opsiyonel; header X-Socket-Secret tercih edilir")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="closed", type="integer", example=1),
+     *             @OA\Property(property="user_id", type="integer", example=15),
+     *             @OA\Property(property="blocked", type="boolean", example=false),
+     *             @OA\Property(property="duel_id", type="integer", nullable=true, example=null),
+     *             @OA\Property(property="message", type="string", nullable=true)
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
+     */
+    public function socketRequeuePrep(Request $request): JsonResponse
+    {
+        $secret = $request->header('X-Socket-Secret') ?: $request->input('secret');
+        if (! hash_equals((string) config('app.socket_internal_secret'), (string) $secret)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $userId = (int) $request->input('user_id');
+        $user = User::query()->find($userId);
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Kullanıcı yok.'], 404);
+        }
+
+        $closed = $this->abandonActiveDuelsForRequeue($user);
+
+        $blocking = Duel::query()
+            ->where('status', 'active')
+            ->whereNotNull('opponent_id')
+            ->where(function ($q) use ($user) {
+                $q->where('challenger_id', $user->id)->orWhere('opponent_id', $user->id);
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        $blocked = false;
+        $duelId = null;
+        if ($blocking && ! $this->duelInvolvesBot($blocking)) {
+            $blocked = true;
+            $duelId = (int) $blocking->id;
+        }
+
+        return response()->json([
+            'success' => true,
+            'closed' => $closed,
+            'user_id' => $userId,
+            'blocked' => $blocked,
+            'duel_id' => $duelId,
+            'message' => $blocked
+                ? 'Zaten aktif bir düellodasınız.'
+                : null,
+        ]);
+    }
+
+    /**
      * @OA\Post(
      *     path="/api/duel/create",
-     *     summary="Düello Oluştur",
-     *     description="Yeni bir düello oluşturur. X1 otomatik başlar, X2/X4/X8 karşı tarafa istek gönderir.",
+     *     summary="Düello Oluştur (legacy)",
+     *     description="Match ekranı artık düello oluşturmaz. Mobil sadece socket `duel-ready` emit eder; eşleşme socket + /api/duel/socket-match ile yapılır. Bu endpoint 400 döner.",
      *     tags={"Duel"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -366,7 +468,28 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket: bot havuzu aktif mi / bekleme / (legacy) bot_user_id
+     * @OA\Get(
+     *     path="/api/duel/bot-matchmaking-config",
+     *     summary="[Internal] Bot eşleşme config",
+     *     description="Havuz aktif mi, idle bot var mı, wait_seconds (cache ~2sn).",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\Parameter(name="secret", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="active", type="boolean", example=true),
+     *             @OA\Property(property="pool_active", type="boolean", example=true),
+     *             @OA\Property(property="bot_user_id", type="integer", example=128),
+     *             @OA\Property(property="wait_seconds", type="integer", example=3),
+     *             @OA\Property(property="difficulty", type="string", nullable=true, example="medium"),
+     *             @OA\Property(property="idle_available", type="boolean", example=true)
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function botMatchmakingConfig(Request $request): JsonResponse
     {
@@ -398,7 +521,32 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket: yalnız bekleyen insan için boş bot seç.
+     * @OA\Post(
+     *     path="/api/duel/bot-matchmaking-pick",
+     *     summary="[Internal] İnsan için bot seç",
+     *     description="Skill band + soft-cap + cooldown ile boş bot seçer. wait_bump soft-cap ekstra bekleme sn.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"challenger_id"},
+     *             @OA\Property(property="challenger_id", type="integer", example=15)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="bot_user_id", type="integer", example=145),
+     *             @OA\Property(property="bot_name", type="string", example="Ali Tekin"),
+     *             @OA\Property(property="difficulty", type="string", example="easy"),
+     *             @OA\Property(property="wait_bump", type="integer", example=0)
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function botMatchmakingPick(Request $request): JsonResponse
     {
@@ -564,8 +712,36 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket eşleşme kuyruğundan gelen match isteği.
-     * İki hazır kullanıcıyı tek düelloda birleştirir.
+     * @OA\Post(
+     *     path="/api/duel/socket-match",
+     *     summary="[Internal] İki oyuncuyu eşleştir",
+     *     description="İnsan–insan veya insan–bot. Active düello + ilk soru oluşturur; webhook duel-started yayınlanır.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"challenger_id","opponent_id","multiplier"},
+     *             @OA\Property(property="challenger_id", type="integer", example=15),
+     *             @OA\Property(property="opponent_id", type="integer", example=145),
+     *             @OA\Property(property="multiplier", type="string", enum={"x1","x2","x4","x8"}, example="x1"),
+     *             @OA\Property(property="secret", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Eşleşme OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="duel", type="object"),
+     *             @OA\Property(property="question", type="object", nullable=true),
+     *             @OA\Property(property="challenger", type="object", nullable=true),
+     *             @OA\Property(property="opponent", type="object", nullable=true)
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Eşleşme oluşturulamadı")
+     * )
      */
     public function socketMatch(Request $request): JsonResponse
     {
@@ -738,6 +914,7 @@ class DuelController extends Controller
                 'opponent_coins_before' => (int) $opponent->coins,
                 'current_question_id' => $firstQuestion->id,
                 'current_question_number' => 1,
+                'settings' => $this->questionStartedSettings(),
             ]);
 
             $duel->load(['challenger', 'opponent', 'currentQuestion']);
@@ -1058,6 +1235,7 @@ class DuelController extends Controller
                 $duel->update([
                     'current_question_id' => $firstQuestion->id,
                     'current_question_number' => 1,
+                    'settings' => $this->questionStartedSettings($duel->settings ?? []),
                 ]);
             }
 
@@ -1181,6 +1359,7 @@ class DuelController extends Controller
                 $duel->update([
                     'current_question_id' => $firstQuestion->id,
                     'current_question_number' => 1,
+                    'settings' => $this->questionStartedSettings($duel->settings ?? []),
                 ]);
             }
 
@@ -1362,7 +1541,25 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket: bağlantı koptu + AFK süresi doldu → leave ile aynı sonuç.
+     * @OA\Post(
+     *     path="/api/duel/socket-afk-timeout",
+     *     summary="[Internal] AFK / disconnect forfeit",
+     *     description="Socket kopunca 45sn sonra leave ile aynı ekonomi.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"duel_id","user_id"},
+     *             @OA\Property(property="duel_id", type="integer", example=1495),
+     *             @OA\Property(property="user_id", type="integer", example=15),
+     *             @OA\Property(property="reason", type="string", example="disconnect")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Forfeit sonucu"),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=404, description="Düello veya kullanıcı yok")
+     * )
      */
     public function socketAfkTimeout(Request $request): JsonResponse
     {
@@ -1388,7 +1585,22 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket boot: aktif düelloları userDuelMap hydrate.
+     * @OA\Get(
+     *     path="/api/duel/socket-active-map",
+     *     summary="[Internal] Aktif düello haritası",
+     *     description="Socket boot hydrate: userDuelMap için active düellolar.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="duels", type="array", @OA\Items(type="object"))
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function socketActiveMap(Request $request): JsonResponse
     {
@@ -1422,7 +1634,23 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket user_join: kullanıcının aktif düellosu (map boşsa).
+     * @OA\Get(
+     *     path="/api/duel/socket-user-active",
+     *     summary="[Internal] Kullanıcının aktif düellosu",
+     *     description="user_join / reconnect: map boşsa DB’den aktif maç.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\Parameter(name="user_id", in="query", required=true, @OA\Schema(type="integer", example=15)),
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="duel", type="object", nullable=true)
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function socketUserActive(Request $request): JsonResponse
     {
@@ -1465,7 +1693,17 @@ class DuelController extends Controller
     }
 
     /**
-     * Socket: düello durumu (bitmişse result). Token bitince / event kaçınca UI kurtarma.
+     * @OA\Get(
+     *     path="/api/duel/socket-duel-snapshot",
+     *     summary="[Internal] Düello snapshot",
+     *     description="Bitmişse result; token bitince / event kaçınca UI kurtarma.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\Parameter(name="duel_id", in="query", required=true, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="user_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="OK"),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function socketDuelSnapshot(Request $request): JsonResponse
     {
@@ -1928,6 +2166,12 @@ class DuelController extends Controller
     /**
      * Oyuncu tekrar kuyruğa / bot pick isterken açık düelloyu forfeit et (bot işgalini kes).
      */
+    /**
+     * Kuyruğa girerken / bot pick öncesi:
+     * - waiting: her zaman kapat (ghost challenge)
+     * - active + bot: kapat (worker/ghost bot kilidi)
+     * - active + insan–insan: dokunma
+     */
     private function abandonActiveDuelsForRequeue(User $user): int
     {
         $duels = Duel::query()
@@ -1940,13 +2184,40 @@ class DuelController extends Controller
 
         $n = 0;
         foreach ($duels as $duel) {
+            if ($duel->status === 'active' && ! $this->duelInvolvesBot($duel)) {
+                continue;
+            }
+
             $result = $this->forfeitAsLeave($duel, $user, 'requeue');
-            if (!empty($result['success'])) {
+            if (! empty($result['success'])) {
                 $n++;
             }
         }
 
         return $n;
+    }
+
+    private function duelInvolvesBot(Duel $duel): bool
+    {
+        $ids = array_values(array_filter([
+            (int) $duel->challenger_id,
+            $duel->opponent_id ? (int) $duel->opponent_id : 0,
+        ]));
+        if ($ids === []) {
+            return false;
+        }
+
+        $botSet = array_flip(\App\Services\DuelBotSettings::allBotUserIds());
+        foreach ($ids as $id) {
+            if (isset($botSet[$id])) {
+                return true;
+            }
+        }
+
+        return User::withTrashed()
+            ->whereIn('id', $ids)
+            ->where('is_bot', true)
+            ->exists();
     }
 
     /**
@@ -1995,6 +2266,20 @@ class DuelController extends Controller
     }
 
     /**
+     * Soru başlangıç zaman damgası — sessizlik timeout tespiti için.
+     *
+     * @param  array<string, mixed>|null  $settings
+     * @return array<string, mixed>
+     */
+    private function questionStartedSettings(?array $settings = null): array
+    {
+        $settings = $settings ?? [];
+        $settings['current_question_started_at'] = now()->toIso8601String();
+
+        return $settings;
+    }
+
+    /**
      * Sonraki soruya geç veya düello bitir
      */
     private function moveToNextQuestion(Duel $duel): void
@@ -2013,6 +2298,7 @@ class DuelController extends Controller
             $settings = $duel->settings ?? [];
             // Kabul edilen soru çarpanı sonraki sorularda da devam eder; sadece bekleyen teklifi temizle
             unset($settings['current_bet']);
+            $settings = $this->questionStartedSettings($settings);
             // Eski davranış (bug): her soruda çarpan 1'e düşüyordu
             // unset($settings['current_question_multiplier'], $settings['current_bet']);
 
@@ -2305,7 +2591,7 @@ class DuelController extends Controller
         }
     }
 
-    private function sendDuelFinishedWebhook(Duel $duel): void
+    public function sendDuelFinishedWebhook(Duel $duel): void
     {
         try {
             $duel->refresh()->load(['challenger', 'opponent', 'answers']);
@@ -2394,8 +2680,16 @@ class DuelController extends Controller
         ];
     }
 
-    private function formatDuelPlayerIdentity(User $user): array
+    private function formatDuelPlayerIdentity(?User $user): array
     {
+        if (! $user) {
+            return [
+                'id' => null,
+                'name' => '—',
+                'avatar' => null,
+            ];
+        }
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -2626,6 +2920,7 @@ class DuelController extends Controller
             $waitingDuel->update([
                 'current_question_id' => $firstQuestion->id,
                 'current_question_number' => 1,
+                'settings' => $this->questionStartedSettings($waitingDuel->settings ?? []),
             ]);
         }
 

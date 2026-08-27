@@ -17,6 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->runInBackground();
 
+        // Güvenilir uyumsuz zorluk: toggle açıksa dakikada 1 (kapalıysa / 0’da no-op)
+        $schedule->command('questions:auto-fix-mismatch')
+            ->everyMinute()
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(55)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/qas-auto-fix-mismatch.log'));
+
         // Gece Claude soru kalite kontrolü — günde max daily_limit (varsayılan 250)
         $at = (string) config('ai_question_review.schedule_at', '02:00');
         $dailyLimit = max(1, (int) config('ai_question_review.daily_limit', 250));
@@ -33,6 +41,28 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping(120)
             ->runInBackground()
             ->appendOutputTo(storage_path('logs/question-ai-review.log'));
+
+        // Bot-only stuck recovery; insan–insan maçlara dokunmaz
+        $schedule->command('duel:bot-reset-stuck --minutes=3')
+            ->everyMinute()
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(55)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/duel-bot-reset-stuck.log'));
+
+        $schedule->command('duel:bot-health --stale-seconds=90')
+            ->everyMinute()
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(55)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/duel-bot-health.log'));
+
+        $schedule->command('duel:sweep-timeouts')
+            ->everyMinute()
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(55)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/duel-sweep-timeouts.log'));
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', [

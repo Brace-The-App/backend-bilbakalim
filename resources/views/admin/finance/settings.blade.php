@@ -117,7 +117,7 @@
             <p>Oran dönemleri geçmişi bozmaz: her kayıt/satış kendi tarihindeki dönem oranıyla hesaplanır. Yeni dönem ekleyince önceki açık uç kapanır.</p>
         </div>
         <div class="d-flex gap-2 flex-wrap align-items-start">
-            <a href="{{ route('admin.finance.coin.index') }}">Coin finans</a>
+            <a href="{{ route('admin.finance.coin.index') }}">Jeton finans</a>
             <a href="{{ route('admin.finance.index') }}">TL finansa dön</a>
         </div>
     </div>
@@ -145,8 +145,8 @@
             </div>
             <div class="s">
                 @if($activePeriod)
-                    Store %{{ number_format($activePeriod->store_fee_pct, 1, ',', '.') }}
-                    · GV %{{ number_format($activePeriod->income_tax_pct, 1, ',', '.') }}
+                    Mağaza %{{ number_format($activePeriod->store_fee_pct, 1, ',', '.') }}
+                    · Gelir vergisi %{{ number_format($activePeriod->income_tax_pct, 1, ',', '.') }}
                     · KDV %{{ number_format($activePeriod->kdv_pct, 1, ',', '.') }}
                 @else
                     Dönem yok
@@ -156,8 +156,8 @@
     </div>
 
     <div class="fin-info-soft">
-        Tarihler kritik: eski dönemdeki IAP/ödüller eski oranlarla kalır.
-        “Ödül / eşik ₺” aynı zamanda API talep eşiğidir (coin→₺ = 1,00 iken 250 ₺ = 250 jeton).
+        Tarihler kritik: eski dönemdeki satışlar/ödüller eski oranlarla kalır.
+        “Ödül / eşik ₺” aynı zamanda API talep eşiğidir (jeton→₺ = 1,00 iken 250 ₺ = 250 jeton).
     </div>
 
     <div class="row g-3">
@@ -173,12 +173,12 @@
                             <tr>
                                 <th class="ps-3">Başlangıç</th>
                                 <th>Bitiş</th>
-                                <th>Store</th>
-                                <th>GV</th>
+                                <th>Mağaza</th>
+                                <th>Gelir vergisi</th>
                                 <th>KDV</th>
-                                <th>KDV→P&L</th>
+                                <th>KDV→kâr/zarar</th>
                                 <th>Ödül ₺</th>
-                                <th>Coin→₺</th>
+                                <th>Jeton→₺</th>
                                 <th>Not</th>
                                 <th class="pe-3"></th>
                             </tr>
@@ -201,7 +201,7 @@
                                     <td>%{{ number_format($p->kdv_pct, 1, ',', '.') }}</td>
                                     <td>
                                         @if(!empty($p->kdv_to_pl))
-                                            <span class="fin-badge fin-badge-pl">P&L</span>
+                                            <span class="fin-badge fin-badge-pl">Kâr/zarar</span>
                                         @else
                                             <span class="fin-badge fin-badge-ref">Ref</span>
                                         @endif
@@ -253,7 +253,7 @@
                             <input type="date" name="effective_from" class="form-control form-control-sm" value="{{ now()->toDateString() }}" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="fin-set-label">Google kesinti %</label>
+                            <label class="fin-set-label">Mağaza kesintisi %</label>
                             <input type="text" inputmode="decimal" name="store_fee_pct" class="form-control form-control-sm"
                                    data-fin-num="pct" data-fin-suffix="%" value="40" required>
                         </div>
@@ -266,15 +266,15 @@
                             <label class="fin-set-label">Ödül / talep eşiği ₺</label>
                             <input type="text" inputmode="decimal" name="gift_payout_try" class="form-control form-control-sm"
                                    data-fin-num="money" data-fin-suffix="₺" value="{{ number_format($currentPayoutTry, 2, ',', '.') }}" required>
-                            <div class="form-text">API eşiği = bu / coin→₺</div>
+                            <div class="form-text">API eşiği = bu / jeton→₺</div>
                         </div>
                         <div class="col-md-4">
-                            <label class="fin-set-label">1 coin = ₺</label>
+                            <label class="fin-set-label">1 jeton = ₺</label>
                             <input type="text" inputmode="decimal" name="coin_to_try" class="form-control form-control-sm"
                                    data-fin-num="rate" data-fin-suffix="₺" value="1,00" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="fin-set-label">KDV % (referans / P&L)</label>
+                            <label class="fin-set-label">KDV % (referans / kâr-zarar)</label>
                             <input type="text" inputmode="decimal" name="kdv_pct" class="form-control form-control-sm"
                                    data-fin-num="pct" data-fin-suffix="%" value="0">
                         </div>
@@ -282,7 +282,7 @@
                             <label class="fin-set-label">KDV satış etkisi</label>
                             <select name="kdv_to_pl" class="form-select form-select-sm">
                                 <option value="0" selected>Sadece referans</option>
-                                <option value="1">P&L’ye gider yaz</option>
+                                <option value="1">Kâr/zarara gider yaz</option>
                             </select>
                         </div>
                         <div class="col-md-5">
@@ -387,7 +387,7 @@
                             <input type="date" name="effective_to" id="editTo" class="form-control form-control-sm">
                         </div>
                         <div class="col-6">
-                            <label class="fin-set-label">Google kesinti %</label>
+                            <label class="fin-set-label">Mağaza kesintisi %</label>
                             <input type="text" inputmode="decimal" name="store_fee_pct" id="editStore" class="form-control form-control-sm"
                                    data-fin-num="pct" data-fin-suffix="%" required>
                         </div>
@@ -402,7 +402,7 @@
                                    data-fin-num="money" data-fin-suffix="₺" required>
                         </div>
                         <div class="col-6">
-                            <label class="fin-set-label">1 coin = ₺</label>
+                            <label class="fin-set-label">1 jeton = ₺</label>
                             <input type="text" inputmode="decimal" name="coin_to_try" id="editCoin" class="form-control form-control-sm"
                                    data-fin-num="rate" data-fin-suffix="₺" required>
                         </div>
@@ -415,7 +415,7 @@
                             <label class="fin-set-label">KDV satış etkisi</label>
                             <select name="kdv_to_pl" id="editKdvPl" class="form-select form-select-sm">
                                 <option value="0">Sadece referans</option>
-                                <option value="1">P&L’ye gider yaz</option>
+                                <option value="1">Kâr/zarara gider yaz</option>
                             </select>
                         </div>
                         <div class="col-12">

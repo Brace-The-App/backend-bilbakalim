@@ -54,6 +54,7 @@ const LARAVEL_API_URL = (process.env.LARAVEL_API_URL || 'https://bil-bakalim.com
 const SOCKET_INTERNAL_SECRET = process.env.SOCKET_INTERNAL_SECRET || 'bilbakalim-socket-secret';
 const VALID_MULTIPLIERS = new Set(['x1', 'x2', 'x4', 'x8']);
 const DUEL_AFK_MS = 45000; // socket kopunca / cevap timeout ile aynı: 45 sn
+const DUEL_QUEUE_MAX_MS = 300000; // kuyrukta max 5 dk bekleme
 const DUEL_SOCKET_DEBUG = process.env.DUEL_SOCKET_DEBUG === '1';
 
 function duelDebugLog(...args) {
@@ -274,12 +275,57 @@ function startBotFallbackScanner() {
     console.log('🤖 Bot fallback scanner aktif (2sn)');
 }
 
+function evictStaleQueueEntries() {
+    const now = Date.now();
+    for (const [multiplier, queue] of duelMatchQueues.entries()) {
+        if (!queue || queue.length === 0) continue;
+        for (let i = queue.length - 1; i >= 0; i--) {
+            const entry = queue[i];
+            if (!entry || !entry.joinedAt) continue;
+            if ((now - entry.joinedAt) < DUEL_QUEUE_MAX_MS) continue;
+            queue.splice(i, 1);
+            const payload = {
+                success: false,
+                expired: true,
+                userId: entry.userId,
+                multiplier,
+                message: 'Eşleşme kuyruğu zaman aşımına uğradı. Tekrar deneyin.',
+                timestamp: new Date().toISOString(),
+            };
+            emitToUser(entry.userId, 'duel-ready-expired', payload);
+            emitToUser(entry.userId, 'duel_ready_expired', payload);
+            console.log(`⏱️ Kuyruk timeout: user ${entry.userId} ${multiplier}`);
+        }
+    }
+}
+
+async function prepareRequeueFromLaravel(userId) {
+    try {
+        const res = await axios.post(
+            `${LARAVEL_API_URL}/api/duel/socket-requeue-prep`,
+            { user_id: userId },
+            {
+                headers: {
+                    'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+                    Accept: 'application/json',
+                },
+                timeout: 8000,
+            }
+        );
+        return res.data || { success: true };
+    } catch (err) {
+        duelDebugLog(`⚠️ requeue-prep user ${userId}:`, err.response?.data?.message || err.message);
+        return { success: false, error: true };
+    }
+}
+
 async function scanQueuesForBotFallback() {
     if (botFallbackScanRunning) {
         return;
     }
     botFallbackScanRunning = true;
     try {
+        evictStaleQueueEntries();
         // 2s TTL (fetchBotMatchmakingConfig) — her tick bust etme; Laravel yükünü düşür
         const cfg = await fetchBotMatchmakingConfig();
         // Havuzda aktif bot yoksa hiç deneme; idle yoksa da (hepsi meşgul) bekle
@@ -333,6 +379,16 @@ function scheduleBotFallback(userId, multiplier) {
 }
 
 async function tryBotFallbackMatch(userId, multiplier) {
+    // İnsan–insan ile aynı kilit: pick/create sırasında 2. insan gelirse yarış olmasın
+    const prev = duelMatchLocks.get(multiplier) || Promise.resolve();
+    const run = prev
+        .catch(() => {})
+        .then(() => tryBotFallbackMatchLocked(userId, multiplier));
+    duelMatchLocks.set(multiplier, run);
+    return run;
+}
+
+async function tryBotFallbackMatchLocked(userId, multiplier) {
     const uid = parseInt(userId, 10);
     let queue = getMatchQueue(multiplier);
     let idx = queue.findIndex((e) => e.userId === uid);
@@ -353,7 +409,22 @@ async function tryBotFallbackMatch(userId, multiplier) {
 
     const picked = await pickBotForChallenger(uid);
     if (!picked || picked.error || !picked.bot_user_id || picked.bot_user_id === uid) {
-        console.log(`🤖 Pick: uygun bot yok (user=${uid})`, picked?.message || '');
+        const msg = picked?.message || 'Uygun bot yok';
+        console.log(`🤖 Pick: uygun bot yok (user=${uid})`, msg);
+        // Coin yoksa sonsuz kuyrukta bekletme — client'a hata bas
+        if (/coin|yeterli/i.test(String(msg))) {
+            removeUserFromMatchQueues(uid);
+            const err = {
+                success: false,
+                error_code: 'insufficient_coins',
+                message: 'Düelloya girmek için yeterli jetonunuz yok.',
+                userId: uid,
+                multiplier,
+            };
+            emitToUser(uid, 'duel-match-error', err);
+            emitToUser(uid, 'duel_match_error', err);
+            console.log(`🚫 Kuyruktan çıkarıldı (coin yok): user=${uid}`);
+        }
         return;
     }
 
@@ -381,9 +452,18 @@ async function tryBotFallbackMatch(userId, multiplier) {
         console.log(`🤖 Bot create iptal: pick sonrası kuyrukta ${queue.length} insan`);
         return;
     }
+    if (duelMatchCancelled.has(uid)) {
+        return;
+    }
 
     const human = queue.splice(idx, 1)[0];
     if (!human) {
+        return;
+    }
+
+    // Create öncesi son cancel kontrolü
+    if (duelMatchCancelled.has(uid)) {
+        console.log(`🤖 Bot create iptal: user ${uid} cancel`);
         return;
     }
 
@@ -564,6 +644,7 @@ async function hydrateUserDuelMapFromLaravel() {
             return;
         }
         let n = 0;
+        let afkArmed = 0;
         for (const d of data.duels || []) {
             const did = parseInt(d.id, 10);
             const c = parseInt(d.challenger_id, 10);
@@ -572,13 +653,21 @@ async function hydrateUserDuelMapFromLaravel() {
             if (c) {
                 userDuelMap.set(c, did);
                 n++;
+                if (!userSocketMap.has(c)) {
+                    scheduleDuelAfkTimeout(c);
+                    afkArmed++;
+                }
             }
             if (o) {
                 userDuelMap.set(o, did);
                 n++;
+                if (!userSocketMap.has(o)) {
+                    scheduleDuelAfkTimeout(o);
+                    afkArmed++;
+                }
             }
         }
-        console.log(`🗺️ userDuelMap hydrate: ${data.duels?.length || 0} maç, ${n} kullanıcı`);
+        console.log(`🗺️ userDuelMap hydrate: ${data.duels?.length || 0} maç, ${n} kullanıcı, ${afkArmed} offline AFK timer`);
     } catch (err) {
         console.warn('⚠️ Active duel hydrate hata:', err.message);
     }
@@ -607,7 +696,54 @@ async function fetchUserActiveDuel(userId) {
     }
 }
 
-/** Reconnect: odaya geri al + client'a kısa resume */
+/** Bitmiş düello sonucu (token/leave kaçınca UI kurtarma) */
+async function fetchDuelSnapshot(duelId, userId) {
+    const id = parseInt(duelId, 10);
+    if (!id) return null;
+    try {
+        const response = await axios.get(`${LARAVEL_API_URL}/api/duel/socket-duel-snapshot`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Socket-Secret': SOCKET_INTERNAL_SECRET,
+            },
+            params: {
+                secret: SOCKET_INTERNAL_SECRET,
+                duel_id: id,
+                user_id: userId ? parseInt(userId, 10) : undefined,
+            },
+            timeout: 5000,
+            validateStatus: () => true,
+        });
+        const data = response.data || {};
+        if (response.status >= 400 || !data.success) {
+            return null;
+        }
+        return data;
+    } catch (err) {
+        return null;
+    }
+}
+
+function emitDuelFinishedToSocket(socket, snapshot, userId = null) {
+    if (!socket || !snapshot || !snapshot.finished || !snapshot.result) return;
+    const result = snapshot.result || {};
+    const data = {
+        ...result,
+        duel_id: snapshot.duel_id || result.duel_id,
+        duelId: snapshot.duel_id || result.duel_id,
+        already_finished: true,
+        timestamp: new Date().toISOString(),
+    };
+    socket.emit('duel-finished', data);
+    socket.emit('duel_finished', data);
+    const uid = parseInt(userId || 0, 10);
+    if (uid) {
+        clearUserDuel(uid, data.duel_id);
+    }
+    console.log(`📣 duel-finished recovery → socket ${socket.id} duel #${data.duel_id}`);
+}
+
+/** Reconnect: odaya geri al + client'a kısa resume; bitmişse finished yayınla */
 async function resumeUserDuelRoom(socket, userId) {
     const uid = parseInt(userId, 10);
     if (!uid || !socket) return;
@@ -622,6 +758,15 @@ async function resumeUserDuelRoom(socket, userId) {
         }
     }
     if (!duelId) {
+        return;
+    }
+
+    const snap = await fetchDuelSnapshot(duelId, uid);
+    if (snap && snap.finished) {
+        socket.join(`user_${uid}`);
+        socket.join(`duel_${duelId}`);
+        emitDuelFinishedToSocket(socket, snap, uid);
+        clearUserDuel(uid, duelId);
         return;
     }
 
@@ -747,7 +892,7 @@ async function tryMatchDuelQueueLocked(multiplier) {
     }
 }
 
-function handleDuelReady(socket, data) {
+async function handleDuelReady(socket, data) {
     duelDebugLog('📥 duel-ready event alındı:', JSON.stringify(data));
 
     const userId = parseInt(data?.userId ?? data?.user_id, 10);
@@ -784,6 +929,25 @@ function handleDuelReady(socket, data) {
     socket.join(`user_${userId}`);
     clearMatchCancelled(userId);
     clearDuelDisconnectTimer(userId);
+
+    // Ghost waiting / bot maçlarını temizle; aktif insan–insan’a dokunma
+    const prep = await prepareRequeueFromLaravel(userId);
+    if (prep && prep.blocked) {
+        const duelId = prep.duel_id || null;
+        const err = {
+            success: false,
+            blocked: true,
+            duel_id: duelId,
+            message: prep.message || 'Zaten aktif bir düellodasınız.',
+        };
+        socket.emit('duel-ready-error', err);
+        socket.emit('duel_ready_error', err);
+        if (duelId) {
+            resumeUserDuelRoom(socket, userId).catch(() => {});
+        }
+        console.log(`⛔ duel-ready reddedildi: user ${userId} aktif insan–insan #${duelId || '?'}`);
+        return;
+    }
 
     // Önce diğer kuyruklardan çıkar, sonra bu çarpana ekle
     removeUserFromMatchQueues(userId);
@@ -938,7 +1102,7 @@ io.on('connection', (socket) => {
     socket.on('duel_cancel_ready', (data) => handleDuelCancelReady(socket, data));
 
     // Düello odasına katılma
-    socket.on('join_duel', (data) => {
+    socket.on('join_duel', async (data) => {
         duelDebugLog('📥 join_duel event alındı:', JSON.stringify(data, null, 2));
 
         if (!data || !data.duelId || !data.userId) {
@@ -963,7 +1127,43 @@ io.on('connection', (socket) => {
             duel_id: duelId,
             room: roomName
         });
+
+        // Maç zaten bitmişse finished event'i hemen gönder (kaçmış event / token sonrası)
+        try {
+            const snap = await fetchDuelSnapshot(duelId, userId);
+            if (snap && snap.finished) {
+                emitDuelFinishedToSocket(socket, snap, userId);
+                clearUserDuel(userId, duelId);
+            }
+        } catch (err) {
+            console.warn('join_duel snapshot hata:', err.message);
+        }
     });
+
+    // Client takılınca / token bitince: durum çek → bitmişse duel-finished bas
+    const handleDuelStatusRequest = async (data) => {
+        const duelId = data?.duelId ?? data?.duel_id;
+        const userId = data?.userId ?? data?.user_id;
+        if (!duelId) {
+            socket.emit('duel_status_error', { success: false, message: 'duelId gerekli' });
+            return;
+        }
+        const snap = await fetchDuelSnapshot(duelId, userId);
+        if (!snap) {
+            socket.emit('duel_status_error', { success: false, message: 'Düello durumu alınamadı' });
+            return;
+        }
+        if (snap.finished) {
+            emitDuelFinishedToSocket(socket, snap, userId);
+            if (userId) clearUserDuel(userId, duelId);
+            return;
+        }
+        socket.emit('duel-status', snap);
+        socket.emit('duel_status', snap);
+    };
+    socket.on('request_duel_status', handleDuelStatusRequest);
+    socket.on('duel_request_status', handleDuelStatusRequest);
+    socket.on('request-duel-status', handleDuelStatusRequest);
 
     // Turnuva odasına katılma
     socket.on('join_tournament', (data) => {
@@ -2061,6 +2261,51 @@ app.post('/socket-webhooks/webhook/duel-finished', (req, res) => {
 });
 
 // Health check endpoint
+/** Acil reset: kuyruk/map/timer belleğini temizle (DB kapatıldıktan sonra). */
+app.post('/socket-webhooks/emergency-purge', (req, res) => {
+    const secret = req.header('X-Socket-Secret') || req.body?.secret;
+    if (secret !== SOCKET_INTERNAL_SECRET) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    let queueEntries = 0;
+    for (const queue of duelMatchQueues.values()) {
+        queueEntries += queue?.length || 0;
+    }
+
+    const cleared = {
+        queue_entries: queueEntries,
+        user_duel_map: userDuelMap.size,
+        disconnect_timers: duelDisconnectTimers.size,
+        bot_fallback_timers: botFallbackTimers.size,
+        match_cancelled: duelMatchCancelled.size,
+        match_locks: duelMatchLocks.size,
+    };
+
+    for (const tid of duelDisconnectTimers.values()) {
+        clearTimeout(tid);
+    }
+    duelDisconnectTimers.clear();
+
+    for (const tid of botFallbackTimers.values()) {
+        clearTimeout(tid);
+    }
+    botFallbackTimers.clear();
+
+    duelMatchQueues.clear();
+    userDuelMap.clear();
+    duelMatchCancelled.clear();
+    duelMatchLocks.clear();
+
+    console.log('🧹 Emergency purge:', JSON.stringify(cleared));
+
+    return res.json({
+        success: true,
+        message: 'Socket belleği temizlendi.',
+        cleared,
+    });
+});
+
 app.get('/socket-webhooks/health', (req, res) => {
     res.json({
         status: 'OK',

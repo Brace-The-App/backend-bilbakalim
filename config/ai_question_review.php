@@ -11,7 +11,7 @@ return [
     'pending_timeout_minutes' => (int) env('AI_QUESTION_REVIEW_PENDING_TIMEOUT', 30),
 
     /** Gece job: günde en fazla kaç soru (Claude). */
-    'daily_limit' => (int) env('AI_QUESTION_REVIEW_DAILY_LIMIT', 250),
+    'daily_limit' => (int) env('AI_QUESTION_REVIEW_DAILY_LIMIT', 100),
 
     /** Fail sonrası max deneme. 1 = sadece ilk deneme; otomatik retry yok (manuel --force-retry). */
     'max_attempts' => (int) env('AI_QUESTION_REVIEW_MAX_ATTEMPTS', 1),

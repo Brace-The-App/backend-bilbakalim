@@ -13,13 +13,7 @@ class FinanceCoinController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware(function ($request, $next) {
-            if (!FinanceCoinService::canAccess($request->user())) {
-                abort(403, 'Bu sayfaya erişim yetkiniz yok.');
-            }
-
-            return $next($request);
-        });
+        $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class . ':admin|personel');
     }
 
     public function index(Request $request)
@@ -27,14 +21,8 @@ class FinanceCoinController extends Controller
         $range = (string) $request->query('range', '');
         $todayStart = Carbon::parse(tr_now()->toDateString())->startOfDay();
         $agreedFrom = Carbon::parse(FinanceService::rateFor($todayStart)->effective_from)->startOfDay();
-
-        $firstPaid = \App\Models\Payment::query()
-            ->completed()
-            ->selectRaw('MIN(COALESCE(paid_at, created_at)) as first_at')
-            ->value('first_at');
-        $allFrom = $firstPaid
-            ? Carbon::parse($firstPaid)->startOfDay()
-            : Carbon::parse('2020-01-01')->startOfDay();
+        $allFrom = FinanceService::allTimeFrom();
+        $reportingEpoch = FinanceService::reportingEpochFrom();
 
         if ($request->filled('from') && $request->filled('to') && $range === '') {
             $from = Carbon::parse($request->query('from'))->startOfDay();
@@ -45,7 +33,7 @@ class FinanceCoinController extends Controller
             $from = $agreedFrom->copy();
             $to = now()->endOfDay();
         } elseif ($range === 'all') {
-            $from = $allFrom;
+            $from = $allFrom->copy();
             $to = now()->endOfDay();
         } elseif ($range === 'month') {
             $from = now()->startOfMonth()->startOfDay();
@@ -73,7 +61,9 @@ class FinanceCoinController extends Controller
             'from',
             'to',
             'range',
-            'agreedFrom'
+            'agreedFrom',
+            'reportingEpoch',
+            'allFrom'
         ));
     }
 }

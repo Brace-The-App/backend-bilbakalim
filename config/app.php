@@ -282,9 +282,13 @@ return [
     'reward_high_accuracy_double_answer' => 3,
     'reward_high_accuracy_hint' => 3,
 
+    // Finans “tüm zamanlar” başlangıcı (paket/fiyat yenileme sonrası)
+    'finance_reporting_epoch' => env('FINANCE_REPORTING_EPOCH', '2026-08-08'),
+
     // Hediye / ödül talep şartları
-    'gift_claim_min_coins' => env('GIFT_CLAIM_MIN_COINS', 100),
+    'gift_claim_min_coins' => env('GIFT_CLAIM_MIN_COINS', 250),
     'gift_claim_min_games' => env('GIFT_CLAIM_MIN_GAMES', 3),
+    'gift_claim_daily_limit' => (int) env('GIFT_CLAIM_DAILY_LIMIT', 1),
 
     // Kayıt / davet coinleri
     'registration_bonus_coins' => (int) env('REGISTRATION_BONUS_COINS', 50),

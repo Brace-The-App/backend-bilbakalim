@@ -12,6 +12,8 @@ use App\Services\DuelTimeoutService;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
 class DuelBotCommand extends Command
 {
@@ -24,7 +26,8 @@ class DuelBotCommand extends Command
         {--delay=1.5 : Cevap / poll aralığı (sn)}
         {--correct : Zorluk yerine her zaman doğru}
         {--once : Tek cevap atıp çık}
-        {--timeout=7200 : Süre (sn) — PM2 recycle için ~2 saat}';
+        {--timeout=1800 : Süre (sn) — PM2 recycle (~30 dk; heap stall önler)}
+        {--max-memory=150 : Bu MB üstünde temiz çıkış (PM2 yeniden başlatır; 0=kapalı)}';
 
     protected $description = 'Düello bot worker: havuzdaki bot(lar) ile cevap verir';
 
@@ -125,12 +128,42 @@ class DuelBotCommand extends Command
 
         $deadline = time() + max(30, (int) $this->option('timeout'));
         $delay = max(0.5, (float) $this->option('delay'));
+        $maxMemoryMb = max(0, (int) $this->option('max-memory'));
         $tick = 0;
         $lastIdleLogAt = 0;
+        $lastStaleWaitingCloseAt = 0;
+        $startedAt = time();
 
         do {
             $tick++;
             $didWork = false;
+
+            // Bellek / heartbeat: zend_mm_heap öncesi temiz recycle
+            if ($tick % 5 === 1) {
+                $this->writeHeartbeat($botIds, $tick, $startedAt);
+                if ($maxMemoryMb > 0) {
+                    $usedMb = (int) round(memory_get_usage(true) / 1048576);
+                    if ($usedMb >= $maxMemoryMb) {
+                        $msg = "Worker bellek eşiği · {$usedMb}MB ≥ {$maxMemoryMb}MB · temiz recycle";
+                        $this->warn($msg);
+                        DuelBotSettings::log($msg);
+
+                        return self::SUCCESS;
+                    }
+                }
+            }
+
+            // Uzun ömürlü PDO: periyodik reconnect (heap bozulmasını azaltır)
+            if ($tick % 60 === 0) {
+                try {
+                    DB::reconnect();
+                } catch (\Throwable) {
+                    // sonraki tick yeniden dener
+                }
+                if (function_exists('gc_collect_cycles')) {
+                    gc_collect_cycles();
+                }
+            }
 
             // Yeni oluşturulan botlar worker restart beklemeden devreye girsin
             if ($auto && (int) $this->option('bot') <= 0) {
@@ -142,6 +175,18 @@ class DuelBotCommand extends Command
                 $timedOut = DuelTimeoutService::sweepAnswerTimeouts();
                 if ($timedOut > 0) {
                     $didWork = true;
+                }
+            }
+
+            // Waiting bot düellolarını periyodik temizle (isBotBusy kilidi)
+            if ($auto && (time() - $lastStaleWaitingCloseAt) >= 300) {
+                $lastStaleWaitingCloseAt = time();
+                foreach ($botIds as $botId) {
+                    $closed = $this->closeStaleBotDuels($botId);
+                    if ($closed > 0) {
+                        $didWork = true;
+                        DuelBotSettings::log("Bot #{$botId}: waiting düello temizlendi ×{$closed}");
+                    }
                 }
             }
 
@@ -236,13 +281,29 @@ class DuelBotCommand extends Command
                 }
 
                 $readyKey = $duel->id . ':' . $duel->current_question_id;
+                $questionAge = $this->currentQuestionAgeSeconds($duel);
+                $opponentAnswered = $this->opponentAlreadyAnswered($duel, $botId);
+
                 if (!isset($this->answerReadyAt[$readyKey])) {
                     $think = $engine->answerDelaySeconds();
+                    // Rakip zaten cevapladıysa düşünmeyi kısalt (sessizlik / timeout riski)
+                    if ($opponentAnswered) {
+                        $think = min($think, 1.2);
+                    }
                     $this->answerReadyAt[$readyKey] = microtime(true) + $think;
                     DuelBotSettings::log(
                         "DÜŞÜN · bot #{$botId}[{$cfg['difficulty']}] · düello #{$duel->id} Q{$duel->current_question_number} · {$think}s"
                     );
                 }
+
+                // Gecikmiş cevap: worker takılsa bile düşünme süresini zorla bitir
+                if ($questionAge >= 8.0 || ($opponentAnswered && $questionAge >= 4.0)) {
+                    $this->answerReadyAt[$readyKey] = min(
+                        $this->answerReadyAt[$readyKey],
+                        microtime(true)
+                    );
+                }
+
                 if (microtime(true) < $this->answerReadyAt[$readyKey]) {
                     continue;
                 }
@@ -636,6 +697,68 @@ class DuelBotCommand extends Command
         }
 
         return $q->first();
+    }
+
+    /** @param list<int> $botIds */
+    private function writeHeartbeat(array $botIds, int $tick, int $startedAt): void
+    {
+        try {
+            $path = storage_path('framework/cache/duel-bot-heartbeat.json');
+            $dir = dirname($path);
+            if (! File::isDirectory($dir)) {
+                File::makeDirectory($dir, 0775, true);
+            }
+            File::put($path, json_encode([
+                'pid' => getmypid(),
+                'at' => now()->toIso8601String(),
+                'unix' => time(),
+                'tick' => $tick,
+                'uptime_s' => max(0, time() - $startedAt),
+                'memory_mb' => (int) round(memory_get_usage(true) / 1048576),
+                'bot_ids' => array_values($botIds),
+            ], JSON_UNESCAPED_UNICODE));
+        } catch (\Throwable) {
+            // heartbeat opsiyonel
+        }
+    }
+
+    private function currentQuestionAgeSeconds(Duel $duel): float
+    {
+        $settings = $duel->settings ?? [];
+        $raw = $settings['current_question_started_at'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            try {
+                return max(0.0, now()->floatDiffInSeconds(\Carbon\Carbon::parse($raw)));
+            } catch (\Throwable) {
+                // fall through
+            }
+        }
+
+        if ($duel->updated_at) {
+            return max(0.0, now()->floatDiffInSeconds($duel->updated_at));
+        }
+
+        return 0.0;
+    }
+
+    private function opponentAlreadyAnswered(Duel $duel, int $botId): bool
+    {
+        if (! $duel->current_question_id) {
+            return false;
+        }
+
+        $opponentId = (int) $duel->challenger_id === $botId
+            ? (int) ($duel->opponent_id ?? 0)
+            : (int) $duel->challenger_id;
+
+        if ($opponentId <= 0) {
+            return false;
+        }
+
+        return DuelAnswer::where('duel_id', $duel->id)
+            ->where('user_id', $opponentId)
+            ->where('question_id', $duel->current_question_id)
+            ->exists();
     }
 
     private function botAlreadyAnswered(Duel $duel, int $botId): bool

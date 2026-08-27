@@ -180,16 +180,16 @@
             <a href="{{ route('admin.finance.export', ['type' => 'pnl', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">P&L CSV</a>
             <a href="{{ route('admin.finance.export', ['type' => 'ledger', 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}" class="fin-link">Ledger CSV</a>
             --}}
-            <a href="{{ route('admin.finance.coin.index') }}" class="fin-link">Coin finans</a>
+            <a href="{{ route('admin.finance.coin.index') }}" class="fin-link">Jeton finans</a>
             <a href="{{ route('admin.finance.settings') }}" class="fin-link">Oranlar &amp; kategoriler</a>
         </div>
     </div>
 
     <div class="fin-rates">
-        <span class="chip">Store <strong>%{{ number_format($storePct, 0) }}</strong> · her IAP satışında</span>
-        <span class="chip">GV <strong>%{{ number_format($taxPct, 1, ',', '.') }}</strong> · vergi tabanı {{ $fmt($s['tax_base'] ?? 0) }}</span>
+        <span class="chip">Mağaza kesintisi <strong>%{{ number_format($storePct, 0) }}</strong> · her uygulama içi satışta</span>
+        <span class="chip">Gelir vergisi <strong>%{{ number_format($taxPct, 1, ',', '.') }}</strong> · vergi tabanı {{ $fmt($s['tax_base'] ?? 0) }}</span>
         <span class="chip">KDV dönem <strong>%{{ number_format($kdvPct, 1, ',', '.') }}</strong>
-            · {{ !empty($s['rates']['kdv_to_pl']) ? 'P&L’ye yazılıyor' : 'sadece ref' }}
+            · {{ !empty($s['rates']['kdv_to_pl']) ? 'kâr/zarara yazılıyor' : 'sadece referans' }}
             @if($kdvPct > 0)
                 · {{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}
             @endif
@@ -204,7 +204,7 @@
             <button type="button" data-tab="kdv">KDV (fatura)</button>
         </div>
         <p class="fin-entry-hint" id="finEntryHint">
-            Sistematik: IAP (store düşülür), ödül onayı, GV otomatik. Buradan manuel gider / gelir / reklam / fatura KDV girin.
+            Sistematik: uygulama içi satış (mağaza kesintisi düşülür), ödül onayı, gelir vergisi otomatik. Buradan manuel gider / gelir / reklam / fatura KDV girin.
         </p>
         <form method="post" action="{{ route('admin.finance.entries.store') }}" id="finEntryForm">
             @csrf
@@ -260,7 +260,7 @@
                 <div id="finTaxWrap" style="display:none">
                     <label id="finTaxLabel">Vergi durumu</label>
                     <select name="counts_for_tax" id="finTaxMode" class="form-select form-select-sm">
-                        <option value="0" id="finTaxOpt0">Net — GV hesabına katma</option>
+                        <option value="0" id="finTaxOpt0">Net — gelir vergisine katma</option>
                         <option value="1" id="finTaxOpt1">Brüt — vergi tabanına dahil</option>
                     </select>
                 </div>
@@ -273,15 +273,15 @@
                 <input type="text" name="note" class="form-control form-control-sm" maxlength="2000" placeholder="Not (opsiyonel)">
             </div>
             <p class="fin-entry-hint mt-2 mb-0" id="finTaxHint" style="display:none">
-                GV satırdan kesilmez; dönem vergi tabanına göre hesaplanır. Net seçerseniz tutar gelire yazar ama GV’ye girmez.
+                Gelir vergisi satırdan kesilmez; dönem vergi tabanına göre hesaplanır. Net seçerseniz tutar gelire yazar ama vergiye girmez.
             </p>
         </form>
     </div>
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div class="fin-presets">
-            <a href="{{ route('admin.finance.index', ['range' => 'agreed']) }}" class="{{ $range === 'agreed' ? 'is-on' : '' }}" title="{{ tr_time($agreedFrom, 'd.m.Y') }} 00:00">Kararlaştırılan Tarihten itibaren</a>
-            <a href="{{ route('admin.finance.index', ['range' => 'all']) }}" class="{{ $range === 'all' ? 'is-on' : '' }}">Tüm zamanlar</a>
+            <a href="{{ route('admin.finance.index', ['range' => 'agreed']) }}" class="{{ $range === 'agreed' ? 'is-on' : '' }}" title="{{ tr_time($agreedFrom, 'd.m.Y') }} 00:00">Kararlaştırılan tarihten</a>
+            <a href="{{ route('admin.finance.index', ['range' => 'all']) }}" class="{{ $range === 'all' ? 'is-on' : '' }}" title="Paket/fiyat yenilemesinden itibaren ({{ tr_time($reportingEpoch ?? $allFrom ?? $from, 'd.m.Y') }})">Tüm zamanlar · {{ tr_time($reportingEpoch ?? $allFrom ?? $from, 'd.m.Y') }}’den</a>
             <a href="{{ route('admin.finance.index', ['range' => 'today']) }}" class="{{ $range === 'today' ? 'is-on' : '' }}">Sadece bugün</a>
             <a href="{{ route('admin.finance.index', ['range' => 'month']) }}" class="{{ $range === 'month' ? 'is-on' : '' }}">Bu ay</a>
             <a href="{{ route('admin.finance.index', ['range' => 'last_month']) }}" class="{{ $range === 'last_month' ? 'is-on' : '' }}">Geçen ay</a>
@@ -303,7 +303,7 @@
             <div>
                 <div class="k">Gelir (net)</div>
                 <div class="v fin-pos">{{ $fmt($s['income_total']) }}</div>
-                <div class="s">IAP net + reklam + diğer manuel gelir</div>
+                <div class="s">Uygulama içi satış (net) + reklam + diğer manuel gelir</div>
             </div>
             <div class="hint">Detay için tıkla</div>
         </button>
@@ -336,7 +336,7 @@
     <div id="finDetailIncome" class="fin-detail" data-panel="income">
         <h5>Gelir nasıl hesaplanır?</h5>
         <div class="fin-row">
-            <span>Uygulama içi satış (brüt)<span class="fin-sub">In-App Purchase · IAP</span></span>
+            <span>Uygulama içi satış (brüt)<span class="fin-sub">App Store / Google Play</span></span>
             <span class="amt">{{ $fmt($s['iap']['gross']) }}</span>
         </div>
         <div class="fin-row"><span>Mağaza kesintisi (%{{ number_format($storePct, 0) }})</span><span class="amt fin-neg">−{{ $fmt($s['iap']['fee']) }}</span></div>
@@ -345,16 +345,16 @@
             <span class="amt fin-pos">{{ $fmt($s['iap']['net']) }}</span>
         </div>
         @if(($s['iap']['refund_count'] ?? 0) > 0 || ($s['iap']['refund_net'] ?? 0) > 0)
-            <div class="fin-row"><span>IAP iade ({{ (int) $s['iap']['refund_count'] }}) brüt</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_gross']) }}</span></div>
-            <div class="fin-row"><span>IAP iade net</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_net']) }}</span></div>
-            <div class="fin-row"><span>IAP net (iade sonrası)</span><span class="amt fin-pos">{{ $fmt($s['iap']['net_after_refunds']) }}</span></div>
+            <div class="fin-row"><span>Uygulama içi iade ({{ (int) $s['iap']['refund_count'] }}) brüt</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_gross']) }}</span></div>
+            <div class="fin-row"><span>Uygulama içi iade (net)</span><span class="amt fin-neg">−{{ $fmt($s['iap']['refund_net']) }}</span></div>
+            <div class="fin-row"><span>Uygulama içi net (iade sonrası)</span><span class="amt fin-pos">{{ $fmt($s['iap']['net_after_refunds']) }}</span></div>
         @else
             <div class="fin-row"><span class="fin-muted">Uygulama içi iade</span><span class="amt fin-muted">0</span></div>
         @endif
         <div class="fin-row"><span>Reklam geliri (manuel)</span><span class="amt fin-pos">{{ $fmt($s['ad_revenue']) }}</span></div>
         <div class="fin-row"><span>Diğer gelir (manuel)</span><span class="amt fin-pos">{{ $fmt($s['other_income'] ?? 0) }}</span></div>
         <div class="fin-row"><strong>Toplam gelir</strong><strong class="amt fin-pos">{{ $fmt($s['income_total']) }}</strong></div>
-        <div class="formula">Formül: IAP net + reklam + diğer manuel gelir. Her IAP satışı kendi tarihindeki store oranıyla netlenir.</div>
+        <div class="formula">Formül: uygulama içi net + reklam + diğer manuel gelir. Her satış kendi tarihindeki mağaza oranı ile netlenir.</div>
     </div>
     <div id="finDetailExpense" class="fin-detail" data-panel="expense">
         <h5>Gider nasıl hesaplanır?</h5>
@@ -370,10 +370,10 @@
         @endforeach
         <div class="fin-row"><span>Fatura KDV — manuel</span><span class="amt fin-neg">−{{ $fmt($s['kdv_invoice'] ?? 0) }}</span></div>
         @if(($s['kdv_pl_expense'] ?? 0) > 0)
-            <div class="fin-row"><span>Dönem KDV (P&L)</span><span class="amt fin-neg">−{{ $fmt($s['kdv_pl_expense']) }}</span></div>
+            <div class="fin-row"><span>Dönem KDV (kâr/zarar)</span><span class="amt fin-neg">−{{ $fmt($s['kdv_pl_expense']) }}</span></div>
         @endif
         <div class="fin-row"><strong>Toplam gider</strong><strong class="amt fin-neg">−{{ $fmt($s['expense_total']) }}</strong></div>
-        <div class="formula">Ödül otomatik. Manuel giderde “vergiye dahil” seçilebilir. Dönem KDV% ayarda P&L’ye yaz seçiliyse giderleşir. İade: payments.status=refunded / refunded_at.</div>
+        <div class="formula">Ödül otomatik. Manuel giderde “vergiye dahil” seçilebilir. Dönem KDV% ayarda kâr/zarara yaz seçiliyse giderleşir. İade edilen satışlar düşülür.</div>
     </div>
     <div id="finDetailPretax" class="fin-detail" data-panel="pretax">
         <h5>Vergi öncesi</h5>
@@ -386,23 +386,23 @@
         <h5>Dip kar</h5>
         <div class="fin-row"><span>Nakit vergi öncesi (tüm gelir − gider)</span><span class="amt">{{ $fmt($s['pre_tax_profit']) }}</span></div>
         <div class="fin-row"><span>Vergiye dahil manuel gelir</span><span class="amt">{{ $fmt($s['taxable_manual_income'] ?? 0) }}</span></div>
-        <div class="fin-row"><span>Net / GV dışı manuel gelir</span><span class="amt fin-muted">{{ $fmt($s['nontaxable_manual_income'] ?? 0) }}</span></div>
+        <div class="fin-row"><span>Net / vergi dışı manuel gelir</span><span class="amt fin-muted">{{ $fmt($s['nontaxable_manual_income'] ?? 0) }}</span></div>
         <div class="fin-row"><span>Vergi tabanı</span><span class="amt">{{ $fmt($s['tax_base'] ?? 0) }}</span></div>
         <div class="fin-row"><span>Gelir vergisi (%{{ number_format($taxPct, 1, ',', '.') }})</span><span class="amt fin-neg">−{{ $fmt($s['income_tax']) }}</span></div>
         <div class="fin-row"><strong>Dip kar</strong><strong class="amt {{ $s['final_profit'] >= 0 ? 'fin-pos' : 'fin-neg' }}">{{ $fmt($s['final_profit']) }}</strong></div>
-        <div class="formula">GV satırdan düşülmez. Taban = IAP net + brüt işaretli manuel gelir − giderler. Net işaretli gelir nakit özetine girer, GV’ye girmez.</div>
+        <div class="formula">Gelir vergisi satırdan düşülmez. Taban = uygulama içi net + brüt işaretli manuel gelir − giderler. Net işaretli gelir nakit özetine girer, vergiye girmez.</div>
     </div>
 
     <div class="fin-track">
         <div class="box">
             <span class="tag tag-auto">Sistematik</span>
             <h5>Otomatik hesaplanan</h5>
-            <div class="fin-row"><span>IAP net (store %{{ number_format($storePct, 0) }} düşülmüş)</span><span class="amt fin-pos">{{ $fmt($tracks['auto_income'] ?? $s['iap']['net']) }}</span></div>
+            <div class="fin-row"><span>Uygulama içi net (mağaza %{{ number_format($storePct, 0) }} düşülmüş)</span><span class="amt fin-pos">{{ $fmt($tracks['auto_income'] ?? $s['iap']['net']) }}</span></div>
             <div class="fin-row"><span>Ödül talepleri ({{ $s['gift']['count'] }})</span><span class="amt fin-neg">−{{ $fmt($tracks['auto_expense'] ?? $s['gift']['total']) }}</span></div>
             <div class="fin-row"><span>Gelir vergisi (%{{ number_format($taxPct, 1, ',', '.') }} · taban {{ $fmt($s['tax_base'] ?? 0) }})</span><span class="amt fin-neg">−{{ $fmt($s['income_tax']) }}</span></div>
             <div class="fin-row"><span class="fin-muted">Mağaza kesintisi (bilgi)</span><span class="amt fin-muted">−{{ $fmt($s['iap']['fee']) }}</span></div>
             @if($kdvPct > 0)
-                <div class="fin-row"><span class="fin-muted">KDV ref. IAP × %{{ number_format($kdvPct, 1, ',', '.') }}</span><span class="amt fin-muted">{{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}</span></div>
+                <div class="fin-row"><span class="fin-muted">KDV referans · satış brüt × %{{ number_format($kdvPct, 1, ',', '.') }}</span><span class="amt fin-muted">{{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}</span></div>
             @endif
         </div>
         <div class="box">
@@ -516,7 +516,7 @@
                 </div>
                 <div class="bd">
                     <div class="fin-row">
-                        <span>Uygulama içi satış (brüt)<span class="fin-sub">In-App Purchase · IAP</span></span>
+                        <span>Uygulama içi satış (brüt)<span class="fin-sub">App Store / Google Play</span></span>
                         <span class="amt">{{ $fmt($s['iap']['gross']) }}</span>
                     </div>
                     <div class="fin-row"><span>Mağaza kesintisi (%{{ number_format($storePct, 0) }})</span><span class="amt fin-neg">−{{ $fmt($s['iap']['fee']) }}</span></div>
@@ -535,13 +535,13 @@
     </div>
 
     <div class="fin-info mb-3">
-        <strong>Store</strong> = mağaza komisyonu (IAP’de otomatik).
-        <strong>GV</strong> = dönem kârı üzerinden otomatik.
-        <strong>Dönem KDV%</strong> = referans (IAP brüt × %{{ number_format($kdvPct, 1, ',', '.') }}
+        <strong>Mağaza kesintisi</strong> = App Store / Google Play komisyonu (satışta otomatik).
+        <strong>Gelir vergisi</strong> = dönem kârı üzerinden otomatik.
+        <strong>Dönem KDV%</strong> = referans (satış brüt × %{{ number_format($kdvPct, 1, ',', '.') }}
         @if($kdvPct > 0) → {{ $fmt($s['rates']['kdv_ref_on_iap_gross'] ?? 0) }}@endif);
-        P&L’ye yazılmaz.
+        kâr/zarara yazılmaz.
         <strong>Fatura KDV</strong> = manuel tek kayıtlı gider.
-        Düello kesinti (bilgi): {{ number_format($s['duel_commission_info']['coins']) }} coin ≈ {{ $fmt($s['duel_commission_info']['try_equiv']) }}.
+        Düello kesinti (bilgi): {{ number_format($s['duel_commission_info']['coins']) }} jeton ≈ {{ $fmt($s['duel_commission_info']['try_equiv']) }}.
     </div>
 
     <div class="row g-3 fin-tables-row">
@@ -602,7 +602,7 @@
                                         <td class="text-end small text-nowrap fin-pos fw-semibold">{{ $fmt($sale['net']) }}</td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="6" class="text-center text-muted py-3">Bu dönemde paket satışı yok. “Tüm zamanlar”ı dene.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Bu dönemde paket satışı yok. “Tüm zamanlar” filtresini dene.</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -632,7 +632,7 @@
                                                     $meta = is_array($e->meta) ? $e->meta : [];
                                                     $taxOn = array_key_exists('counts_for_tax', $meta) ? (bool) $meta['counts_for_tax'] : true;
                                                 @endphp
-                                                <span class="badge {{ $taxOn ? 'bg-warning text-dark' : 'bg-light text-muted' }}" style="font-size:.65rem">{{ $taxOn ? 'brüt/GV' : 'net' }}</span>
+                                                <span class="badge {{ $taxOn ? 'bg-warning text-dark' : 'bg-light text-muted' }}" style="font-size:.65rem">{{ $taxOn ? 'brüt/vergi' : 'net' }}</span>
                                             @endif
                                         </td>
                                         <td class="text-end small text-nowrap {{ $e->direction === 'income' ? 'fin-pos' : 'fin-neg' }}">
@@ -794,15 +794,15 @@
     var taxOpt1 = document.getElementById('finTaxOpt1');
     var hints = {
         manual: 'Manuel gider. Varsayılan vergiye dahil (indirilebilir). Kilitli aya yazılamaz.',
-        other_income: 'Manuel gelir. Varsayılan Net = GV’ye katılmaz. Brüt = vergi tabanına dahil.',
+        other_income: 'Manuel gelir. Varsayılan Net = gelir vergisine katılmaz. Brüt = vergi tabanına dahil.',
         ad_revenue: 'Reklam geliri. Net/Brüt seçin.',
-        kdv: 'Fatura KDV. Vergiye dahil seçilebilir. Dönem KDV% ayarda ref veya P&L.'
+        kdv: 'Fatura KDV. Vergiye dahil seçilebilir. Dönem KDV% ayarda referans veya kâr/zarar.'
     };
     function setTaxOptions(kind) {
         if (!taxOpt0 || !taxOpt1) return;
         if (kind === 'income') {
             if (taxLabel) taxLabel.textContent = 'Vergi durumu';
-            taxOpt0.textContent = 'Net — GV hesabına katma';
+            taxOpt0.textContent = 'Net — gelir vergisine katma';
             taxOpt1.textContent = 'Brüt — vergi tabanına dahil';
             if (taxMode) taxMode.value = '0';
         } else {

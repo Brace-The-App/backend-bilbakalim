@@ -416,7 +416,21 @@ class DuelBotSettings
 
         /** @var \App\Http\Controllers\API\DuelController $duelApi */
         $duelApi = app(\App\Http\Controllers\API\DuelController::class);
-        $result = $duelApi->forfeitAsLeave($duel, $bot, 'admin_end');
+
+        try {
+            $result = $duelApi->forfeitAsLeave($duel, $bot, 'admin_end');
+        } catch (\Throwable $e) {
+            \Log::warning('DuelBotSettings::endActiveMatch forfeit failed, forcing close', [
+                'duel_id' => $duel->id,
+                'bot_user_id' => $botUserId,
+                'error' => $e->getMessage(),
+            ]);
+            $result = self::forceCloseBotDuel($duel, 'admin_end', $botUserId);
+        }
+
+        if (! ($result['success'] ?? false)) {
+            $result = self::forceCloseBotDuel($duel, 'admin_end', $botUserId);
+        }
 
         Cache::forget(self::CACHE_LIVE);
         Cache::forget(self::CACHE_ADMIN_MM);
@@ -437,6 +451,713 @@ class DuelBotSettings
             'message' => "Maç #{$duel->id} bitirildi; bot çekildi.",
             'duel_id' => (int) $duel->id,
         ];
+    }
+
+    /**
+     * Takılı bot maçlarını bul (active/waiting + bot dahil).
+     *
+     * @return list<array{duel_id:int,status:string,bot_ids:list<int>,age_minutes:int,answers:int,reason:string}>
+     */
+    public static function findStuckBotDuels(int $staleMinutes = 10): array
+    {
+        $botIds = self::allBotUserIds();
+        if ($botIds === []) {
+            return [];
+        }
+
+        $cutoff = now()->subMinutes(max(1, $staleMinutes));
+        $duels = Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->where(function ($q) use ($botIds) {
+                $q->whereIn('challenger_id', $botIds)
+                    ->orWhereIn('opponent_id', $botIds);
+            })
+            ->orderBy('id')
+            ->get([
+                'id',
+                'status',
+                'challenger_id',
+                'opponent_id',
+                'current_question_id',
+                'current_question_number',
+                'settings',
+                'created_at',
+                'updated_at',
+            ]);
+
+        $botSet = array_flip($botIds);
+        $out = [];
+
+        foreach ($duels as $duel) {
+            $duelBotIds = array_values(array_filter([
+                isset($botSet[$duel->challenger_id]) ? (int) $duel->challenger_id : null,
+                $duel->opponent_id && isset($botSet[$duel->opponent_id]) ? (int) $duel->opponent_id : null,
+            ]));
+            $answers = (int) \App\Models\DuelAnswer::query()->where('duel_id', $duel->id)->count();
+            $ageMinutes = (int) max(0, $duel->updated_at?->diffInMinutes(now()) ?? 0);
+            $reason = 'open_bot_duel';
+
+            $settings = $duel->settings ?? [];
+            $pendingBet = ($settings['current_bet']['status'] ?? null) === 'pending';
+            if ($pendingBet) {
+                $offeredAt = isset($settings['current_bet']['offered_at'])
+                    ? \Carbon\Carbon::parse($settings['current_bet']['offered_at'])
+                    : null;
+                if ($offeredAt && $offeredAt->lte(now()->subSeconds(\App\Services\DuelTimeoutService::PENDING_BET_WAIT_SECONDS))) {
+                    $reason = 'pending_bet_stale';
+                }
+            } elseif ($duel->status === 'waiting') {
+                $reason = 'waiting_bot_duel';
+            } elseif ($duel->status === 'active' && $duel->current_question_id) {
+                $qId = (int) $duel->current_question_id;
+                $humanAnswered = \App\Models\DuelAnswer::query()
+                    ->where('duel_id', $duel->id)
+                    ->where('question_id', $qId)
+                    ->whereNotIn('user_id', $botIds)
+                    ->exists();
+                $botAnswered = \App\Models\DuelAnswer::query()
+                    ->where('duel_id', $duel->id)
+                    ->where('question_id', $qId)
+                    ->whereIn('user_id', $botIds)
+                    ->exists();
+
+                if ($humanAnswered && ! $botAnswered) {
+                    $startedAt = null;
+                    if (! empty($settings['current_question_started_at'])) {
+                        try {
+                            $startedAt = \Carbon\Carbon::parse($settings['current_question_started_at']);
+                        } catch (\Throwable) {
+                            $startedAt = null;
+                        }
+                    }
+                    $startedAt = $startedAt ?? $duel->updated_at;
+                    // Worker ölüyse insan 45sn AFK beklemesin — 20sn sonra bot maçı takılı say
+                    if ($startedAt && $startedAt->lte(now()->subSeconds(20))) {
+                        $reason = 'bot_silent_after_human';
+                    } elseif ($ageMinutes >= $staleMinutes) {
+                        $reason = 'stale_active_duel';
+                    } elseif ($answers === 0 && $ageMinutes >= max(3, (int) floor($staleMinutes / 2))) {
+                        $reason = 'no_answers_yet';
+                    }
+                } elseif ($ageMinutes >= $staleMinutes) {
+                    $reason = 'stale_active_duel';
+                } elseif ($answers === 0 && $ageMinutes >= max(3, (int) floor($staleMinutes / 2))) {
+                    $reason = 'no_answers_yet';
+                }
+            } elseif ($ageMinutes >= $staleMinutes) {
+                $reason = 'stale_active_duel';
+            } elseif ($answers === 0 && $ageMinutes >= max(3, (int) floor($staleMinutes / 2))) {
+                $reason = 'no_answers_yet';
+            }
+
+            $out[] = [
+                'duel_id' => (int) $duel->id,
+                'status' => (string) $duel->status,
+                'bot_ids' => $duelBotIds,
+                'age_minutes' => $ageMinutes,
+                'answers' => $answers,
+                'reason' => $reason,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Açık düelloyu zorla kapat (bot/insan, silinmiş oyuncu / webhook hatası).
+     *
+     * @return array{success:bool,message:string,duel_id?:int,forced?:bool}
+     */
+    public static function forceCloseOpenDuel(Duel $duel, string $reason, ?int $forfeitingUserId = null): array
+    {
+        if (! in_array($duel->status, ['waiting', 'active'], true)) {
+            return [
+                'success' => true,
+                'message' => "Düello #{$duel->id} zaten kapalı.",
+                'duel_id' => (int) $duel->id,
+                'forced' => false,
+            ];
+        }
+
+        $botIds = array_flip(self::allBotUserIds());
+        $challengerIsBot = isset($botIds[(int) $duel->challenger_id]);
+        $opponentIsBot = $duel->opponent_id && isset($botIds[(int) $duel->opponent_id]);
+
+        $winnerId = null;
+        if ($forfeitingUserId !== null) {
+            if ((int) $forfeitingUserId === (int) $duel->challenger_id) {
+                $winnerId = $duel->opponent_id ? (int) $duel->opponent_id : null;
+            } elseif ($duel->opponent_id && (int) $forfeitingUserId === (int) $duel->opponent_id) {
+                $winnerId = (int) $duel->challenger_id;
+            }
+        }
+
+        if ($winnerId === null && $duel->status === 'active' && $duel->opponent_id) {
+            $challengerCoins = (int) (User::withTrashed()->find($duel->challenger_id)?->coins ?? $duel->challenger_coins_before ?? 0);
+            $opponentCoins = (int) (User::withTrashed()->find($duel->opponent_id)?->coins ?? $duel->opponent_coins_before ?? 0);
+
+            if ($challengerCoins !== $opponentCoins) {
+                $winnerId = $challengerCoins > $opponentCoins
+                    ? (int) $duel->challenger_id
+                    : (int) $duel->opponent_id;
+            } elseif (! $challengerIsBot && User::withTrashed()->find($duel->challenger_id)) {
+                $winnerId = (int) $duel->challenger_id;
+            } elseif (! $opponentIsBot && User::withTrashed()->find($duel->opponent_id)) {
+                $winnerId = (int) $duel->opponent_id;
+            } else {
+                $winnerId = (int) $duel->challenger_id;
+            }
+        }
+
+        $settings = $duel->settings ?? [];
+        $settings['forfeit_reason'] = $reason;
+        $settings['forfeit_at'] = now()->toIso8601String();
+        if ($forfeitingUserId) {
+            $settings['forfeit_by'] = $forfeitingUserId;
+        }
+
+        $challengerCoins = (int) (User::withTrashed()->find($duel->challenger_id)?->coins ?? $duel->challenger_coins_before ?? 0);
+        $opponentCoins = $duel->opponent_id
+            ? (int) (User::withTrashed()->find($duel->opponent_id)?->coins ?? $duel->opponent_coins_before ?? 0)
+            : (int) ($duel->opponent_coins_after ?? 0);
+
+        $duel->update([
+            'status' => 'finished',
+            'finished_at' => now(),
+            'winner_id' => $winnerId,
+            'settings' => $settings,
+            'challenger_coins_after' => $challengerCoins,
+            'opponent_coins_after' => $opponentCoins,
+        ]);
+
+        self::notifyDuelFinished($duel->fresh());
+        self::clearLiveCaches();
+
+        self::log('FORCE_CLOSE · düello #'.$duel->id.' · sebep='.$reason.' · forfeit='
+            .($forfeitingUserId ? "#{$forfeitingUserId}" : '—'));
+
+        return [
+            'success' => true,
+            'message' => "Düello #{$duel->id} zorla kapatıldı.",
+            'duel_id' => (int) $duel->id,
+            'forced' => true,
+        ];
+    }
+
+    /**
+     * Bot maçını zorla kapat (geriye uyumluluk).
+     *
+     * @return array{success:bool,message:string,duel_id?:int,forced?:bool}
+     */
+    public static function forceCloseBotDuel(Duel $duel, string $reason, ?int $forfeitingBotId = null): array
+    {
+        return self::forceCloseOpenDuel($duel, $reason, $forfeitingBotId);
+    }
+
+    /**
+     * Tam sistem reset: açık maçları kapat, socket belleğini temizle, PM2 yenile.
+     *
+     * Varsayılan: sadece bot dahil maçlar (+ rakipsiz waiting). İnsan–insan aktif maçlara dokunmaz.
+     *
+     * @return array<string, mixed>
+     */
+    public static function emergencyResetAll(string $trigger = 'admin', bool $includeHuman = false): array
+    {
+        $botIds = self::allBotUserIds();
+        $botIdSet = array_flip($botIds);
+
+        $openBefore = (int) Duel::query()->whereIn('status', ['waiting', 'active'])->count();
+        $humanOpenBefore = (int) Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->whereNotNull('opponent_id')
+            ->where(function ($q) use ($botIds) {
+                $q->whereNotIn('challenger_id', $botIds)
+                    ->whereNotIn('opponent_id', $botIds);
+            })
+            ->count();
+
+        $duelApi = app(\App\Http\Controllers\API\DuelController::class);
+
+        $duelsQuery = Duel::query()
+            ->whereIn('status', ['waiting', 'active']);
+
+        if (! $includeHuman) {
+            $duelsQuery->where(function ($q) use ($botIds) {
+                $q->whereNull('opponent_id')
+                    ->orWhereIn('challenger_id', $botIds)
+                    ->orWhereIn('opponent_id', $botIds);
+            });
+        }
+
+        $duels = $duelsQuery->orderBy('id')->get();
+
+        $closedIds = [];
+        foreach ($duels as $duel) {
+            $result = ['success' => false];
+            $forfeitUserId = null;
+
+            if (isset($botIdSet[(int) $duel->challenger_id])) {
+                $forfeitUserId = (int) $duel->challenger_id;
+            } elseif ($duel->opponent_id && isset($botIdSet[(int) $duel->opponent_id])) {
+                $forfeitUserId = (int) $duel->opponent_id;
+            } elseif ($includeHuman && $duel->status === 'active' && $duel->opponent_id) {
+                $cCoins = (int) (User::withTrashed()->find($duel->challenger_id)?->coins ?? $duel->challenger_coins_before ?? 0);
+                $oCoins = (int) (User::withTrashed()->find($duel->opponent_id)?->coins ?? $duel->opponent_coins_before ?? 0);
+                $forfeitUserId = $cCoins <= $oCoins ? (int) $duel->challenger_id : (int) $duel->opponent_id;
+            }
+
+            if ($forfeitUserId && $duel->status === 'active') {
+                $forfeitingUser = User::withTrashed()->find($forfeitUserId);
+                if ($forfeitingUser) {
+                    try {
+                        $result = $duelApi->forfeitAsLeave($duel->fresh(), $forfeitingUser, 'emergency_reset');
+                    } catch (\Throwable $e) {
+                        \Log::warning('DuelBotSettings::emergencyReset forfeit failed', [
+                            'duel_id' => $duel->id,
+                            'user_id' => $forfeitUserId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            if (! ($result['success'] ?? false)) {
+                $result = self::forceCloseOpenDuel($duel->fresh(), 'emergency_reset', $forfeitUserId);
+            }
+
+            if ($result['success'] ?? false) {
+                $closedIds[] = (int) $duel->id;
+            }
+        }
+
+        $sweep = \App\Services\DuelTimeoutService::sweepAll();
+        self::clearLiveCaches();
+
+        // İnsan–insan korunumu: varsayılan acil reset socket kuyruk/oda belleklerini
+        // temizlemez ve socket-server reload etmez (aktif insan maçlarını koparmaz).
+        // Sadece düello bot worker yenilenir. Tam purge+socket reload yalnızca includeHuman=true.
+        $socket = $includeHuman
+            ? self::purgeSocketState()
+            : [
+                'success' => true,
+                'skipped' => true,
+                'message' => 'İnsan–insan korunumu: socket purge atlandı',
+            ];
+        $pm2 = self::restartRealtimeProcesses($includeHuman);
+
+        $openAfter = (int) Duel::query()->whereIn('status', ['waiting', 'active'])->count();
+        $botOpenAfter = $botIds === [] ? 0 : (int) Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->where(function ($q) use ($botIds) {
+                $q->whereIn('challenger_id', $botIds)
+                    ->orWhereIn('opponent_id', $botIds);
+            })
+            ->count();
+        $humanOpenAfter = (int) Duel::query()
+            ->whereIn('status', ['waiting', 'active'])
+            ->whereNotNull('opponent_id')
+            ->where(function ($q) use ($botIds) {
+                $q->whereNotIn('challenger_id', $botIds)
+                    ->whereNotIn('opponent_id', $botIds);
+            })
+            ->count();
+
+        self::log('EMERGENCY_RESET · trigger='.$trigger
+            .' · include_human='.($includeHuman ? '1' : '0')
+            .' · open_before='.$openBefore
+            .' · kapatılan='.count($closedIds)
+            .' · bot_open_after='.$botOpenAfter
+            .' · human_open_after='.$humanOpenAfter
+            .' · ids='.implode(',', $closedIds));
+
+        $pm2Ok = collect($pm2)->every(fn (array $row) => (bool) ($row['success'] ?? false));
+        $botClean = $botOpenAfter === 0;
+
+        return [
+            'success' => $botClean,
+            'message' => $botClean
+                ? (
+                    count($closedIds) > 0
+                        ? count($closedIds).' bot maçı kapatıldı · sistem toparlandı.'
+                        : 'Sistem toparlandı.'
+                )
+                : count($closedIds).' maç kapatıldı · '.$botOpenAfter.' bot maçı hâlâ açık.',
+            'closed' => count($closedIds),
+            'duel_ids' => $closedIds,
+            'open_before' => $openBefore,
+            'open_after' => $openAfter,
+            'bot_open_after' => $botOpenAfter,
+            'human_open_before' => $humanOpenBefore,
+            'human_open_after' => $humanOpenAfter,
+            'human_skipped' => ! $includeHuman ? $humanOpenAfter : 0,
+            'include_human' => $includeHuman,
+            'sweep' => $sweep,
+            'socket' => $socket,
+            'pm2' => $pm2,
+            'pm2_ok' => $pm2Ok,
+            'trigger' => $trigger,
+        ];
+    }
+
+    /**
+     * Socket belleğindeki kuyruk/map/timer kayıtlarını temizle.
+     *
+     * @return array{success:bool,message?:string,cleared?:array<string,int>}
+     */
+    public static function purgeSocketState(): array
+    {
+        try {
+            $base = rtrim((string) config('app.socket_url'), '/');
+            $res = \Illuminate\Support\Facades\Http::timeout(12)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'X-Socket-Secret' => (string) config('app.socket_internal_secret'),
+                ])
+                ->post($base.'/socket-webhooks/emergency-purge');
+
+            if ($res->successful()) {
+                return array_merge(['success' => true], (array) $res->json());
+            }
+
+            return [
+                'success' => false,
+                'message' => (string) ($res->json('message') ?? 'Socket purge başarısız'),
+            ];
+        } catch (\Throwable $e) {
+            \Log::warning('DuelBotSettings::purgeSocketState failed', ['error' => $e->getMessage()]);
+
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * PM2 süreç yenileme.
+     * Varsayılan: yalnızca duel-bot (insan–insan socket odalarına dokunmaz).
+     * $includeSocket=true: socket-server reload da yapılır (aktif bağlantılar kopabilir).
+     *
+     * Not: PHP-FPM'de shell_exec/exec kapalı; PM2 root daemon'da.
+     * FPM'den doğrudan restart olmaz → dosya isteği bırakılır, root cron
+     * `duel:bot-health` ≤1 dk içinde uygular.
+     *
+     * @return array<string, array{success:bool,output:string,skipped?:bool,queued?:bool}>
+     */
+    public static function restartRealtimeProcesses(bool $includeSocket = false): array
+    {
+        $commands = [
+            'duel-bot' => 'pm2 restart duel-bot --update-env 2>&1',
+        ];
+        if ($includeSocket) {
+            $commands['socket-server'] = 'pm2 reload socket-server --update-env 2>&1';
+        }
+
+        $runner = self::processCommandRunner();
+        if ($runner === null) {
+            self::requestDuelBotRestart('emergency_reset_fpm');
+
+            $out = [
+                'duel-bot' => [
+                    'success' => true,
+                    'queued' => true,
+                    'output' => 'FPM shell kapalı · duel-bot restart kuyruğa alındı (cron ≤60sn)',
+                ],
+            ];
+            if ($includeSocket) {
+                $out['socket-server'] = [
+                    'success' => false,
+                    'queued' => false,
+                    'output' => 'socket-server restart FPM’den yapılamaz; SSH/pm2 gerekir',
+                ];
+            } else {
+                $out['socket-server'] = [
+                    'success' => true,
+                    'skipped' => true,
+                    'output' => 'İnsan–insan korunumu: socket-server atlandı',
+                ];
+            }
+
+            return $out;
+        }
+
+        $out = [];
+        foreach ($commands as $name => $cmd) {
+            $raw = trim((string) $runner($cmd));
+            $ok = $raw !== '' && (
+                str_contains($raw, '✓')
+                || str_contains(strtolower($raw), 'online')
+                || str_contains(strtolower($raw), 'applied')
+            );
+            $out[$name] = [
+                'success' => $ok,
+                'output' => mb_substr($raw !== '' ? $raw : 'pm2 çıktı boş', 0, 400),
+            ];
+            if ($name === 'duel-bot' && ! $ok) {
+                self::requestDuelBotRestart('emergency_reset_pm2_failed');
+                $out[$name]['queued'] = true;
+                $out[$name]['success'] = true;
+                $out[$name]['output'] = mb_substr(
+                    ($raw !== '' ? $raw.' · ' : '').'Restart kuyruğa alındı (cron ≤60sn)',
+                    0,
+                    400
+                );
+            }
+        }
+
+        if (! $includeSocket) {
+            $out['socket-server'] = [
+                'success' => true,
+                'skipped' => true,
+                'output' => 'İnsan–insan korunumu: socket-server atlandı',
+            ];
+        }
+
+        return $out;
+    }
+
+    /** @return null|callable(string):string */
+    private static function processCommandRunner(): ?callable
+    {
+        // disable_functions altında function_exists false döner
+        if (function_exists('shell_exec')) {
+            return static fn (string $cmd): string => (string) \shell_exec($cmd);
+        }
+        if (function_exists('exec')) {
+            return static function (string $cmd): string {
+                $lines = [];
+                $code = 0;
+                \exec($cmd, $lines, $code);
+
+                return implode("\n", $lines);
+            };
+        }
+
+        return null;
+    }
+
+    public static function duelBotRestartRequestPath(): string
+    {
+        return storage_path('framework/cache/duel-bot-restart.request');
+    }
+
+    public static function duelBotHeartbeatPath(): string
+    {
+        return storage_path('framework/cache/duel-bot-heartbeat.json');
+    }
+
+    /** Acil reset / FPM: root cron’un uygulayacağı restart isteği. */
+    public static function requestDuelBotRestart(string $reason = 'manual'): void
+    {
+        try {
+            $path = self::duelBotRestartRequestPath();
+            $dir = dirname($path);
+            if (! File::isDirectory($dir)) {
+                File::makeDirectory($dir, 0775, true);
+            }
+            File::put($path, json_encode([
+                'reason' => $reason,
+                'at' => now()->toIso8601String(),
+                'unix' => time(),
+            ], JSON_UNESCAPED_UNICODE));
+            self::log('RESTART_REQ · '.$reason);
+        } catch (\Throwable $e) {
+            \Log::warning('DuelBotSettings::requestDuelBotRestart failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Root CLI: istek veya donmuş heartbeat → pm2 restart duel-bot.
+     *
+     * @return array{success:bool,action:string,message:string,output?:string,heartbeat_age?:int|null}
+     */
+    public static function applyDuelBotRestartIfNeeded(int $staleSeconds = 90, bool $force = false): array
+    {
+        $requestPath = self::duelBotRestartRequestPath();
+        $hasRequest = File::exists($requestPath);
+        $hbAge = self::duelBotHeartbeatAgeSeconds();
+        $stale = $hbAge === null || $hbAge >= $staleSeconds;
+
+        if (! $force && ! $hasRequest && ! $stale) {
+            return [
+                'success' => true,
+                'action' => 'noop',
+                'message' => 'duel-bot sağlıklı (heartbeat '.$hbAge.'sn).',
+                'heartbeat_age' => $hbAge,
+            ];
+        }
+
+        $reason = $force
+            ? 'force'
+            : ($hasRequest ? 'request' : 'stale_heartbeat');
+
+        $runner = self::processCommandRunner();
+        if ($runner === null) {
+            return [
+                'success' => false,
+                'action' => 'blocked',
+                'message' => 'shell_exec yok — bu komut root CLI cron ile çalışmalı.',
+                'heartbeat_age' => $hbAge,
+            ];
+        }
+
+        // Donmuş worker SIGTERM yemeyebilir; pm2 restart kill kullanır
+        $raw = trim((string) $runner('pm2 restart duel-bot --update-env 2>&1'));
+        $ok = $raw !== '' && (
+            str_contains($raw, '✓')
+            || str_contains(strtolower($raw), 'online')
+            || str_contains(strtolower($raw), 'applied')
+        );
+
+        if ($hasRequest) {
+            try {
+                File::delete($requestPath);
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
+
+        self::log(
+            'RESTART_APPLY · reason='.$reason
+            .' · ok='.($ok ? '1' : '0')
+            .' · hb_age='.($hbAge === null ? 'null' : $hbAge)
+        );
+
+        return [
+            'success' => $ok,
+            'action' => 'restart',
+            'message' => $ok
+                ? 'duel-bot yeniden başlatıldı ('.$reason.').'
+                : 'duel-bot restart başarısız ('.$reason.').',
+            'output' => mb_substr($raw !== '' ? $raw : 'boş çıktı', 0, 400),
+            'heartbeat_age' => $hbAge,
+        ];
+    }
+
+    public static function duelBotHeartbeatAgeSeconds(): ?int
+    {
+        $path = self::duelBotHeartbeatPath();
+        if (! File::exists($path)) {
+            return null;
+        }
+        try {
+            $data = json_decode((string) File::get($path), true);
+            $unix = (int) ($data['unix'] ?? 0);
+            if ($unix <= 0) {
+                return null;
+            }
+
+            return max(0, time() - $unix);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Saatlik kontrol: belirli süredir takılı bot maçlarını otomatik kapat.
+     *
+     * @return array{success:bool,message:string,closed:int,duel_ids:list<int>,checked:int}
+     */
+    public static function resetStuckBotMatchesIfNeeded(int $staleMinutes = 10): array
+    {
+        $candidates = collect(self::findStuckBotDuels($staleMinutes))
+            ->filter(function (array $row) use ($staleMinutes) {
+                if ($row['status'] === 'waiting') {
+                    return true;
+                }
+                if ($row['reason'] === 'pending_bet_stale') {
+                    return true;
+                }
+                if ($row['reason'] === 'stale_active_duel') {
+                    return true;
+                }
+                if ($row['reason'] === 'bot_silent_after_human') {
+                    return true;
+                }
+                if ($row['reason'] === 'no_answers_yet' && $row['age_minutes'] >= max(3, (int) floor($staleMinutes / 2))) {
+                    return true;
+                }
+
+                return false;
+            })
+            ->values();
+
+        if ($candidates->isEmpty()) {
+            return [
+                'success' => true,
+                'message' => 'Takılı bot maçı yok.',
+                'closed' => 0,
+                'duel_ids' => [],
+                'checked' => 0,
+            ];
+        }
+
+        $closedIds = [];
+        $duelApi = app(\App\Http\Controllers\API\DuelController::class);
+        foreach ($candidates as $row) {
+            $duel = Duel::query()->find($row['duel_id']);
+            if (! $duel || ! in_array($duel->status, ['waiting', 'active'], true)) {
+                continue;
+            }
+            $botId = $row['bot_ids'][0] ?? null;
+            $result = ['success' => false];
+
+            if ($botId) {
+                $bot = User::query()->find((int) $botId);
+                if ($bot) {
+                    try {
+                        $result = $duelApi->forfeitAsLeave($duel->fresh(), $bot, 'auto_reset');
+                    } catch (\Throwable $e) {
+                        \Log::warning('DuelBotSettings::resetStuck auto forfeit failed', [
+                            'duel_id' => $duel->id,
+                            'bot_id' => $botId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            if (! ($result['success'] ?? false)) {
+                $result = self::forceCloseBotDuel($duel, 'auto_reset', $botId ? (int) $botId : null);
+            }
+
+            if ($result['success'] ?? false) {
+                $closedIds[] = (int) $duel->id;
+            }
+        }
+
+        if ($closedIds !== []) {
+            self::log('AUTO_RESET · kapatılan='.count($closedIds).' · ids='.implode(',', $closedIds));
+        }
+
+        return [
+            'success' => true,
+            'message' => count($closedIds) > 0
+                ? count($closedIds).' takılı bot maçı otomatik kapatıldı.'
+                : 'Takılı bot maçı yok.',
+            'closed' => count($closedIds),
+            'duel_ids' => $closedIds,
+            'checked' => $candidates->count(),
+        ];
+    }
+
+    private static function clearLiveCaches(): void
+    {
+        Cache::forget(self::CACHE_LIVE);
+        Cache::forget(self::CACHE_ADMIN_MM);
+    }
+
+    private static function notifyDuelFinished(?Duel $duel): void
+    {
+        if (! $duel || $duel->status !== 'finished') {
+            return;
+        }
+
+        try {
+            app(\App\Http\Controllers\API\DuelController::class)->sendDuelFinishedWebhook($duel);
+        } catch (\Throwable $e) {
+            \Log::warning('DuelBotSettings::notifyDuelFinished failed', [
+                'duel_id' => $duel->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /** Varsayılan isabet → bot zorluk bantları */

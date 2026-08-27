@@ -26,7 +26,7 @@
                     "Ads"
                 ],
                 "summary": "Rastgele reklam görseli al",
-                "description": "Kullanıcıya rastgele aktif bir reklam görseli döner. Kullanıcı başına en fazla 3 kez izin verilir; 3'ten sonra allowed=false döner. Coin/gösterim client tarafında yönetilir.",
+                "description": "Hak varsa rastgele aktif reklam döner. Hak düşmez; hak /api/ad-watch/reward ile düşer. 24 saatte max 3 izleme.",
                 "operationId": "088acec6787fb54a7c5337f74530eee4",
                 "responses": {
                     "200": {
@@ -51,6 +51,15 @@
                                             "type": "integer",
                                             "example": 3
                                         },
+                                        "remaining": {
+                                            "type": "integer",
+                                            "example": 2
+                                        },
+                                        "resets_at": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "nullable": true
+                                        },
                                         "message": {
                                             "type": "string",
                                             "example": "Reklam görseli hazır."
@@ -63,12 +72,22 @@
                                                 },
                                                 "title": {
                                                     "type": "string",
-                                                    "example": "Reklam Kırmızı",
+                                                    "example": "Yuden Games",
                                                     "nullable": true
                                                 },
                                                 "image_url": {
                                                     "type": "string",
-                                                    "example": "https://bil-bakalim.com/storage/ads/dummy-red.png"
+                                                    "example": "https://bil-bakalim.com/storage/ads/yuden-games.png"
+                                                },
+                                                "link": {
+                                                    "type": "string",
+                                                    "example": "https://yudengames.com/",
+                                                    "nullable": true
+                                                },
+                                                "video_url": {
+                                                    "type": "string",
+                                                    "example": "https://bil-bakalim.com/storage/ads/videos/promo.mp4",
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object",
@@ -76,18 +95,6 @@
                                         }
                                     },
                                     "type": "object"
-                                },
-                                "example": {
-                                    "success": true,
-                                    "allowed": true,
-                                    "count": 1,
-                                    "max": 3,
-                                    "message": "Reklam görseli hazır.",
-                                    "data": {
-                                        "id": 1,
-                                        "title": "Reklam Kırmızı",
-                                        "image_url": "https://bil-bakalim.com/storage/ads/dummy-red.png"
-                                    }
                                 }
                             }
                         }
@@ -106,7 +113,7 @@
                     "Ad Watch"
                 ],
                 "summary": "Reklam izleme ödülü",
-                "description": "Kullanıcı reklam izledikten sonra +50 coin kazanır",
+                "description": "Reklam izlendikten sonra +1 coin verir ve 24 saatlik 3 hak kotasından 1 düşer.",
                 "operationId": "fbfaf0c3888ef98f81ae7d4685a3e5cc",
                 "requestBody": {
                     "required": false,
@@ -141,27 +148,48 @@
                                             "type": "boolean",
                                             "example": true
                                         },
+                                        "allowed": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
                                         "message": {
                                             "type": "string",
                                             "example": "Reklam izleme ödülü başarıyla verildi."
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "max": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "remaining": {
+                                            "type": "integer",
+                                            "example": 2
+                                        },
+                                        "resets_at": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "nullable": true
                                         },
                                         "data": {
                                             "properties": {
                                                 "coins_earned": {
                                                     "type": "integer",
-                                                    "example": 50
+                                                    "example": 1
                                                 },
                                                 "balance_before": {
                                                     "type": "integer",
-                                                    "example": 100
+                                                    "example": 10
                                                 },
                                                 "balance_after": {
                                                     "type": "integer",
-                                                    "example": 150
+                                                    "example": 11
                                                 },
                                                 "user_coins": {
                                                     "type": "integer",
-                                                    "example": 150
+                                                    "example": 11
                                                 }
                                             },
                                             "type": "object"
@@ -173,7 +201,7 @@
                         }
                     },
                     "400": {
-                        "description": "Hata - Zaten bugün reklam izlenmiş olabilir veya başka bir hata",
+                        "description": "Hak yok veya hata",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -184,27 +212,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Reklam izleme ödülü verilemedi."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Unauthenticated."
+                                            "example": "Reklam hakkınız doldu."
                                         }
                                     },
                                     "type": "object"
@@ -377,6 +385,15 @@
                                         "description": "FCM Device ID (opsiyonel)",
                                         "type": "string",
                                         "example": "fcm-device-token-12345"
+                                    },
+                                    "platform": {
+                                        "description": "Client platform (zorunlu önerilir). Flutter: ios|android, Node web: web",
+                                        "type": "string",
+                                        "enum": [
+                                            "ios",
+                                            "android",
+                                            "web"
+                                        ]
                                     },
                                     "referral_code": {
                                         "description": "Referans kodu (opsiyonel, 8 karakter)",
@@ -1044,6 +1061,61 @@
                 ]
             }
         },
+        "/api/users/socket-presence": {
+            "post": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Son aktiflik güncelle",
+                "description": "Socket bağlantısı / presence için last_active_at.",
+                "operationId": "52943a275629c4d5ef4df7015da3409e",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "user_id"
+                                ],
+                                "properties": {
+                                    "user_id": {
+                                        "type": "integer",
+                                        "example": 15
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
         "/api/avatars": {
             "get": {
                 "tags": [
@@ -1106,7 +1178,7 @@
                     "Coin History"
                 ],
                 "summary": "Jeton geçmişi",
-                "description": "Kullanıcının kazandığı ve kaybettiği jetonları listeler. Son 5, 15, 30 gün filtreleme yapılabilir.",
+                "description": "Kullanıcının kazandığı ve kaybettiği jetonları listeler. Son 30 işlem döner. Son 5, 15, 30 gün filtreleme yapılabilir.",
                 "operationId": "4a462d447492eeb57f9a35fb8150f80d",
                 "parameters": [
                     {
@@ -2251,13 +2323,93 @@
                 ]
             }
         },
+        "/api/duel/socket-requeue-prep": {
+            "post": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Kuyruğa girmeden önce ghost temizliği",
+                "description": "Waiting ve bot’lu ghost maçları kapatır. Aktif insan–insan maç varsa blocked=true döner (forfeit yok).",
+                "operationId": "8958f57be97050181578d388851c7570",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "user_id"
+                                ],
+                                "properties": {
+                                    "user_id": {
+                                        "type": "integer",
+                                        "example": 15
+                                    },
+                                    "secret": {
+                                        "description": "Opsiyonel; header X-Socket-Secret tercih edilir",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "closed": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "user_id": {
+                                            "type": "integer",
+                                            "example": 15
+                                        },
+                                        "blocked": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "duel_id": {
+                                            "type": "integer",
+                                            "example": null,
+                                            "nullable": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
         "/api/duel/create": {
             "post": {
                 "tags": [
                     "Duel"
                 ],
-                "summary": "Düello Oluştur",
-                "description": "Yeni bir düello oluşturur. X1 otomatik başlar, X2/X4/X8 karşı tarafa istek gönderir.",
+                "summary": "Düello Oluştur (legacy)",
+                "description": "Match ekranı artık düello oluşturmaz. Mobil sadece socket `duel-ready` emit eder; eşleşme socket + /api/duel/socket-match ile yapılır. Bu endpoint 400 döner.",
                 "operationId": "8e3a9f5f4f99513827dd1260d0bddec2",
                 "requestBody": {
                     "required": true,
@@ -2355,6 +2507,240 @@
                 "security": [
                     {
                         "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/bot-matchmaking-config": {
+            "get": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Bot eşleşme config",
+                "description": "Havuz aktif mi, idle bot var mı, wait_seconds (cache ~2sn).",
+                "operationId": "7801436cae968b7153bcd520f5d3d322",
+                "parameters": [
+                    {
+                        "name": "secret",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "active": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "pool_active": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "bot_user_id": {
+                                            "type": "integer",
+                                            "example": 128
+                                        },
+                                        "wait_seconds": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "difficulty": {
+                                            "type": "string",
+                                            "example": "medium",
+                                            "nullable": true
+                                        },
+                                        "idle_available": {
+                                            "type": "boolean",
+                                            "example": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/bot-matchmaking-pick": {
+            "post": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] İnsan için bot seç",
+                "description": "Skill band + soft-cap + cooldown ile boş bot seçer. wait_bump soft-cap ekstra bekleme sn.",
+                "operationId": "f45ba7599506259e354e72ddae1dea37",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "challenger_id"
+                                ],
+                                "properties": {
+                                    "challenger_id": {
+                                        "type": "integer",
+                                        "example": 15
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "bot_user_id": {
+                                            "type": "integer",
+                                            "example": 145
+                                        },
+                                        "bot_name": {
+                                            "type": "string",
+                                            "example": "Ali Tekin"
+                                        },
+                                        "difficulty": {
+                                            "type": "string",
+                                            "example": "easy"
+                                        },
+                                        "wait_bump": {
+                                            "type": "integer",
+                                            "example": 0
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/socket-match": {
+            "post": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] İki oyuncuyu eşleştir",
+                "description": "İnsan–insan veya insan–bot. Active düello + ilk soru oluşturur; webhook duel-started yayınlanır.",
+                "operationId": "55bd6aa7f3dd2eca2f6a8361367c9276",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "challenger_id",
+                                    "opponent_id",
+                                    "multiplier"
+                                ],
+                                "properties": {
+                                    "challenger_id": {
+                                        "type": "integer",
+                                        "example": 15
+                                    },
+                                    "opponent_id": {
+                                        "type": "integer",
+                                        "example": 145
+                                    },
+                                    "multiplier": {
+                                        "type": "string",
+                                        "enum": [
+                                            "x1",
+                                            "x2",
+                                            "x4",
+                                            "x8"
+                                        ],
+                                        "example": "x1"
+                                    },
+                                    "secret": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Eşleşme OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "duel": {
+                                            "type": "object"
+                                        },
+                                        "question": {
+                                            "type": "object",
+                                            "nullable": true
+                                        },
+                                        "challenger": {
+                                            "type": "object",
+                                            "nullable": true
+                                        },
+                                        "opponent": {
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Eşleşme oluşturulamadı"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
                     }
                 ]
             }
@@ -2769,6 +3155,194 @@
                 ]
             }
         },
+        "/api/duel/socket-afk-timeout": {
+            "post": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] AFK / disconnect forfeit",
+                "description": "Socket kopunca 45sn sonra leave ile aynı ekonomi.",
+                "operationId": "37fb5116ff773a4231aea0c00c4ad0e0",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "duel_id",
+                                    "user_id"
+                                ],
+                                "properties": {
+                                    "duel_id": {
+                                        "type": "integer",
+                                        "example": 1495
+                                    },
+                                    "user_id": {
+                                        "type": "integer",
+                                        "example": 15
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "disconnect"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Forfeit sonucu"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Düello veya kullanıcı yok"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/socket-active-map": {
+            "get": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Aktif düello haritası",
+                "description": "Socket boot hydrate: userDuelMap için active düellolar.",
+                "operationId": "6ad963f64b3a29cfeb1d54e27bc08f6a",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "duels": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/socket-user-active": {
+            "get": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Kullanıcının aktif düellosu",
+                "description": "user_join / reconnect: map boşsa DB’den aktif maç.",
+                "operationId": "35597cf18c11ac2707328076bddd76aa",
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "duel": {
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
+        "/api/duel/socket-duel-snapshot": {
+            "get": {
+                "tags": [
+                    "Duel Socket Internal"
+                ],
+                "summary": "[Internal] Düello snapshot",
+                "description": "Bitmişse result; token bitince / event kaçınca UI kurtarma.",
+                "operationId": "212ff4fe8ac0d7a8f0a50e033254f113",
+                "parameters": [
+                    {
+                        "name": "duel_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "user_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "socket_secret": []
+                    }
+                ]
+            }
+        },
         "/api/duel/answer/{duel_id}": {
             "post": {
                 "tags": [
@@ -2964,7 +3538,7 @@
                                                 },
                                                 "reward_coins": {
                                                     "type": "integer",
-                                                    "example": 100
+                                                    "example": 5
                                                 }
                                             },
                                             "type": "object"
@@ -3016,6 +3590,26 @@
                                         "success": {
                                             "type": "boolean",
                                             "example": true
+                                        },
+                                        "duel_earned_coins": {
+                                            "description": "Meydan okumadan net jeton (kazanç − kayıp)",
+                                            "type": "integer",
+                                            "example": 120
+                                        },
+                                        "gift_claim_min_coins": {
+                                            "description": "Hediye çeki talep eşiği (düello jetonu). Finans oran dönemindeki Ödül ₺ alanından gelir.",
+                                            "type": "integer",
+                                            "example": 250
+                                        },
+                                        "gift_claim_min_games": {
+                                            "description": "Hediye talep için min tamamlanmış oyun. Config: GIFT_CLAIM_MIN_GAMES",
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "gift_claim_daily_limit": {
+                                            "description": "Günde en fazla kaç talep. Config: GIFT_CLAIM_DAILY_LIMIT",
+                                            "type": "integer",
+                                            "example": 1
                                         },
                                         "data": {
                                             "type": "array",
@@ -6066,7 +6660,7 @@
                     "Reward"
                 ],
                 "summary": "Ödül talebinde bulunabilir mi kontrolü",
-                "description": "Kullanıcının günlük, haftalık veya turnuva kazananı olup olmadığını ve daha önce ödül talebinde bulunup bulunmadığını kontrol eder",
+                "description": "Günlük/haftalık/turnuva 1. sıra uygunluğu + hediye şartları (duel_earned_coins, min oyun, günlük limit).",
                 "operationId": "60705ab4d8e63e3188a2aed85fffae1d",
                 "parameters": [
                     {
@@ -6110,11 +6704,50 @@
                                         },
                                         "rank": {
                                             "type": "integer",
-                                            "example": 1
+                                            "example": 1,
+                                            "nullable": true
                                         },
                                         "coins_earned": {
                                             "type": "integer",
                                             "example": 1645
+                                        },
+                                        "current_coins": {
+                                            "type": "integer",
+                                            "example": 320
+                                        },
+                                        "duel_earned_coins": {
+                                            "description": "Meydan okumadan net jeton",
+                                            "type": "integer",
+                                            "example": 120
+                                        },
+                                        "games_played": {
+                                            "type": "integer",
+                                            "example": 8
+                                        },
+                                        "gift_claim_min_coins": {
+                                            "type": "integer",
+                                            "example": 100
+                                        },
+                                        "gift_claim_min_games": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "gift_claim_daily_limit": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "claims_today": {
+                                            "type": "integer",
+                                            "example": 0
+                                        },
+                                        "can_claim_today": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "error_code": {
+                                            "type": "string",
+                                            "example": null,
+                                            "nullable": true
                                         },
                                         "message": {
                                             "type": "string",
@@ -6140,7 +6773,7 @@
                     "Reward"
                 ],
                 "summary": "Ödül talep et",
-                "description": "Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 100) + min oyun. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
+                "description": "Meydan okuma ile jeton biriktiren kullanıcı hediye talep eder. Zorunlu alan yalnızca gift_card_store_id. Şart: min jeton (varsayılan 250) + min oyun + günde en fazla 1 talep. type opsiyoneldir; gönderilmezse duel kaydedilir. Turnuva zorunlu değildir.",
                 "operationId": "0c49263fea17942bb357a8e36577d2aa",
                 "requestBody": {
                     "required": true,
@@ -8074,6 +8707,12 @@
                 "description": "Enter token in format: Bearer {token}",
                 "bearerFormat": "JWT",
                 "scheme": "bearer"
+            },
+            "socket_secret": {
+                "type": "apiKey",
+                "description": "Laravel ↔ Socket.IO dahili API anahtarı. Mobil client kullanmaz; sadece socket-server / internal çağrılar.",
+                "name": "X-Socket-Secret",
+                "in": "header"
             }
         }
     },
@@ -8105,6 +8744,10 @@
         {
             "name": "Store Packages",
             "description": "Mağaza paketleri (premium, joker, elmas)"
+        },
+        {
+            "name": "Duel Socket Internal",
+            "description": "Socket.IO sunucusunun çağırdığı dahili düello/bot API'leri (X-Socket-Secret). Mobil eşleşme: client sadece duel-ready emit eder."
         },
         {
             "name": "Ads",

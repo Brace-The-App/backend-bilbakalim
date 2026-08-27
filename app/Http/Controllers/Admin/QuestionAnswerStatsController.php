@@ -21,7 +21,7 @@ class QuestionAnswerStatsController extends Controller
         $this->middleware('auth');
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class . ':admin|personel');
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class . ':view answer statistics')->only(['index', 'showLogs', 'showDetail', 'optionAnswers']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class . ':edit answer statistics')->only(['updateLevel', 'updateStatus', 'refresh']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class . ':edit answer statistics')->only(['updateLevel', 'updateStatus', 'refresh', 'updateAutoFixMismatch']);
     }
 
     public function index(Request $request)
@@ -126,6 +126,12 @@ class QuestionAnswerStatsController extends Controller
             });
         }
 
+        // Resimli sorular
+        if ($request->filled('has_image') && $request->has_image === '1') {
+            $query->whereNotNull('questions.image')
+                ->where('questions.image', '!=', '');
+        }
+
         if ($request->filled('success_min')) {
             $query->where('qas.correct_percentage', '>=', (float) $request->success_min)
                 ->where('qas.data_sufficient', true);
@@ -166,13 +172,15 @@ class QuestionAnswerStatsController extends Controller
         $chartData = Cache::remember('qas.chart_data.v1', 60, function () {
             return $this->buildChartData();
         });
+        $autoFixMismatch = QuestionAnswerStatsService::isAutoFixMismatchEnabled();
 
         return view('admin.question-answer-stats.index', compact(
             'questions',
             'categories',
             'minAnswers',
             'lastCalculated',
-            'chartData'
+            'chartData',
+            'autoFixMismatch'
         ));
     }
 
@@ -393,6 +401,30 @@ class QuestionAnswerStatsController extends Controller
         }
 
         return back()->withFragment('qas-list')->with('success', "Soru #{$question->id} zorluk seviyesi güncellendi.");
+    }
+
+    public function updateAutoFixMismatch(Request $request)
+    {
+        $validated = $request->validate([
+            'enabled' => 'required|boolean',
+        ]);
+
+        $enabled = (bool) $validated['enabled'];
+        QuestionAnswerStatsService::setAutoFixMismatchEnabled($enabled, Auth::id());
+
+        $message = $enabled
+            ? 'Otomatik düzenleme açıldı. Dakikada bir güvenilir uyumsuz soru gözlenen zorluğa çekilir.'
+            : 'Otomatik düzenleme kapatıldı.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'enabled' => $enabled,
+                'message' => $message,
+            ]);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function updateStatus(Request $request, Question $question)

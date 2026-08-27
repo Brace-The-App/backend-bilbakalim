@@ -26,6 +26,9 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->runInBackground();
 
+        // Not: asıl schedule bootstrap/app.php withSchedule içinde.
+        // questions:auto-fix-mismatch orada everyMinute kayıtlı.
+
         // Gece Claude soru kalite kontrolü — günde max daily_limit (varsayılan 250)
         // Fail otomatik yeniden denenmez (max_attempts=1); manuel: question:ai-review --retry-failed --force-retry
         $at = (string) config('ai_question_review.schedule_at', '02:00');
