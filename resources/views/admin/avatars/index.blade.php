@@ -37,8 +37,15 @@
                             <tr>
                                 <td>{{ $avatar->id }}</td>
                                 <td>
-                                    <img src="{{ $avatar->image_url }}" alt="Avatar {{ $avatar->id }}"
-                                         style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%;">
+                                    @if($avatar->image_exists)
+                                        <img src="{{ $avatar->image_url }}" alt="Avatar {{ $avatar->id }}"
+                                             style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%;">
+                                    @else
+                                        <div class="d-inline-flex flex-column align-items-center">
+                                            <div style="width:60px;height:60px;border-radius:50%;background:#fee2e2;border:2px dashed #ef4444;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#991b1b;text-align:center;padding:.25rem;">Dosya yok</div>
+                                            <span class="badge bg-danger mt-1" style="font-size:.65rem;">Eksik dosya</span>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>{{ $avatar->sort_order }}</td>
                                 <td>

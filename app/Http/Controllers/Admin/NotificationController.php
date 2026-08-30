@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Services\NotificationService;
 use App\Models\Notification;
+use App\Models\NotificationTemplate;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +19,7 @@ class NotificationController extends Controller
     {
         $this->notificationService = $notificationService;
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view notifications')->only(['index', 'show']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store', 'send', 'searchUsers']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications')->only(['create', 'store', 'send', 'searchUsers', 'templatePicker']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit notifications')->only(['edit', 'update']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete notifications')->only(['destroy']);
     }
@@ -49,7 +50,24 @@ class NotificationController extends Controller
         $notifications = $query->latest()->paginate(10);
         $stats = $this->notificationStats();
 
-        return view('admin.notifications.index', compact('notifications', 'stats'));
+        $targetIds = $notifications->getCollection()
+            ->pluck('target_users')
+            ->filter(fn ($ids) => is_array($ids) && count($ids) > 0)
+            ->flatten()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $targetUsersById = $targetIds === []
+            ? collect()
+            : User::query()
+                ->whereIn('id', $targetIds)
+                ->get(['id', 'name', 'email'])
+                ->keyBy('id');
+
+        return view('admin.notifications.index', compact('notifications', 'stats', 'targetUsersById'))
+            ->with('canLiveFlow', \App\Services\NotificationFlowHelper::canAccessLiveFlow(auth()->user()));
     }
 
     private function notificationStats(): array
@@ -113,9 +131,25 @@ class NotificationController extends Controller
     {
         $notification->load('creator');
 
+        $targetIds = is_array($notification->target_users) ? $notification->target_users : [];
+        $targetUsers = [];
+        if ($targetIds !== []) {
+            $targetUsers = User::query()
+                ->whereIn('id', array_map('intval', $targetIds))
+                ->get(['id', 'name', 'email'])
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'email' => $u->email,
+                ])
+                ->values()
+                ->all();
+        }
+
         return response()->json([
             'success' => true,
             'notification' => $notification,
+            'target_users_detail' => $targetUsers,
         ]);
     }
 
@@ -241,6 +275,31 @@ class NotificationController extends Controller
         return response()->json(['users' => $users]);
     }
 
+    public function templatePicker(Request $request)
+    {
+        $validated = $request->validate([
+            'channel' => 'required|in:email,sms,fcm',
+        ]);
+
+        $templates = NotificationTemplate::query()
+            ->where('is_active', true)
+            ->where('channel', $validated['channel'])
+            ->latest()
+            ->limit(100)
+            ->get(['id', 'name', 'title', 'content', 'channel']);
+
+        return response()->json([
+            'success' => true,
+            'templates' => $templates->map(fn (NotificationTemplate $t) => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'title' => $t->title,
+                'content' => $t->content,
+                'channel' => $t->channel,
+            ])->values(),
+        ]);
+    }
+
     /**
      * Send notification to users
      */
@@ -252,6 +311,7 @@ class NotificationController extends Controller
                 'content' => 'required|string',
                 'type' => 'required|in:email,sms,fcm',
                 'target_users' => 'nullable|string', // comma-separated user IDs
+                'template_id' => 'nullable|exists:notification_templates,id',
             ]);
 
             $targetUsers = null;
@@ -259,13 +319,15 @@ class NotificationController extends Controller
                 $targetUsers = array_map('intval', explode(',', $validated['target_users']));
             }
 
+            $templateId = isset($validated['template_id']) ? (int) $validated['template_id'] : null;
 
             $result = $this->notificationService->sendNotification(
                 $validated['title'],
                 $validated['content'],
                 $validated['type'],
                 $targetUsers,
-                auth()->id()
+                auth()->id(),
+                $templateId
             );
             return response()->json($result, $result['success'] ? 200 : 500);
 

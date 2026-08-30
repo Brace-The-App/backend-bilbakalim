@@ -17,6 +17,7 @@ class Notification extends Model
         'is_active',
         'sent_count',
         'created_by',
+        'notification_template_id',
     ];
 
     protected $casts = [
@@ -30,6 +31,25 @@ class Notification extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(NotificationTemplate::class, 'notification_template_id');
+    }
+
+    public function getDeliveryStatusAttribute(): string
+    {
+        if (($this->sent_count ?? 0) > 0) {
+            return 'success';
+        }
+
+        return 'failed';
+    }
+
+    public function getDeliveryStatusLabelAttribute(): string
+    {
+        return ($this->sent_count ?? 0) > 0 ? 'Başarılı' : 'Gönderilemedi';
     }
 
     // Bildirimi alan kullanıcılar

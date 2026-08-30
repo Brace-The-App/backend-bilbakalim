@@ -63,6 +63,13 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping(55)
             ->runInBackground()
             ->appendOutputTo(storage_path('logs/duel-sweep-timeouts.log'));
+
+        $schedule->command('notifications:process-schedules')
+            ->everyMinute()
+            ->timezone('Europe/Istanbul')
+            ->withoutOverlapping(55)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/notifications-schedules.log'));
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', [

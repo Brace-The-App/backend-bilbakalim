@@ -80,6 +80,13 @@
 .notif-send-btn {
     background: #2563eb; border-color: #2563eb; color: #fff !important; font-weight: 600;
 }
+.notif-live-btn {
+    background: #16a34a; border-color: #16a34a; color: #fff !important; font-weight: 600;
+}
+.notif-live-btn:hover, .notif-live-btn:focus {
+    background: #15803d; border-color: #15803d; color: #fff !important;
+}
+.notif-hero-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
 .notif-send-btn:hover, .notif-send-btn:focus {
     background: #1d4ed8; border-color: #1d4ed8; color: #fff !important;
 }
@@ -175,6 +182,7 @@
 .notif-audience-card.is-selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
 .notif-audience-card .title { font-weight: 650; color: #0f172a; }
 .notif-audience-card .desc { font-size: .82rem; color: #64748b; margin-top: .15rem; }
+.notif-template-pick-hint { font-size: .78rem; color: #64748b; margin-top: .35rem; }
 .notif-user-search-wrap { position: relative; }
 .notif-user-search-results {
     margin-top: .5rem;
@@ -270,9 +278,16 @@
             </div>
             <div class="col-md-4 text-md-end">
             @can('create notifications')
+                <div class="notif-hero-actions">
+                    @if(!empty($canLiveFlow))
+                        <a href="{{ route('admin.notifications.live-flow') }}" class="btn notif-live-btn">
+                            <i data-feather="zap" class="me-1"></i> Canlı Bildirim Akışı
+                        </a>
+                    @endif
                     <button type="button" class="btn notif-send-btn" data-bs-toggle="modal" data-bs-target="#notificationSendModal">
                         <i data-feather="send" class="me-1"></i> Bildirim Gönder
-                </button>
+                    </button>
+                </div>
             @endcan
         </div>
     </div>
@@ -379,6 +394,14 @@
                     </div>
 
                     <div class="notif-wizard-panel d-none" data-step="2">
+                    <div class="mb-3">
+                        <label for="send-template-pick" class="form-label">Kayıtlı şablon <span class="text-muted fw-normal">(isteğe bağlı)</span></label>
+                        <select class="form-select" id="send-template-pick">
+                            <option value="">— Manuel yaz veya şablon seç —</option>
+                        </select>
+                        <div class="notif-template-pick-hint">Önce kanal seçin; şablon sadece başlık ve içeriği doldurur. Anlık gönderilir, zamanlama yok.</div>
+                        <input type="hidden" id="send-template-id" name="template_id" value="">
+                    </div>
                     <div class="mb-3">
                         <label for="send-title" class="form-label">Başlık <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="send-title" name="title" maxlength="255">
@@ -608,6 +631,8 @@
     var audienceMode = 'all';
     var selectedUsers = {};
     var userSearchUrl = @json(route('admin.notifications.users.search'));
+    var templatePickerUrl = @json(route('admin.notifications.templates.picker'));
+    var sendTemplatesCache = {};
 
     var typeLabels = { email: 'E-posta', sms: 'SMS', fcm: 'Push (FCM)' };
     var typeHelp = {
@@ -913,7 +938,9 @@
         selectedUsers = {};
         $('#send-type').val('');
         $('#send-title, #send-content, #send-user-search').val('');
-        $('#send-target-users').val('');
+        $('#send-target-users, #send-template-id').val('');
+        $('#send-template-pick').html('<option value="">— Manuel yaz veya şablon seç —</option>');
+        sendTemplatesCache = {};
         $('#send-user-search-results').addClass('d-none').empty();
         renderSelectedUsers();
         setAudienceMode('all');
@@ -944,7 +971,61 @@
         $('#sendWizardNext').toggleClass('d-none', step === 3);
         $('#sendWizardSubmit').toggleClass('d-none', step !== 3);
         if (step === 3) updateSendPreview();
+        if (step === 2) {
+            var channel = $('#send-type').val();
+            if (channel) loadSendTemplates(channel);
+        }
         syncSendModalLayout();
+    }
+
+    function loadSendTemplates(channel, selectedId) {
+        if (!channel) return;
+        var $select = $('#send-template-pick');
+        var current = selectedId || $('#send-template-id').val() || $select.val();
+
+        if (sendTemplatesCache[channel]) {
+            renderSendTemplateOptions(sendTemplatesCache[channel], current);
+            return;
+        }
+
+        $select.prop('disabled', true).html('<option value="">Şablonlar yükleniyor…</option>');
+
+        $.get(templatePickerUrl, { channel: channel }, function (res) {
+            var list = (res.success && res.templates) ? res.templates : [];
+            sendTemplatesCache[channel] = list;
+            renderSendTemplateOptions(list, current);
+        }).fail(function () {
+            $select.html('<option value="">Şablon listesi alınamadı</option>');
+        }).always(function () {
+            $select.prop('disabled', false);
+        });
+    }
+
+    function renderSendTemplateOptions(templates, selectedId) {
+        var $select = $('#send-template-pick');
+        $select.empty().append('<option value="">— Manuel yaz veya şablon seç —</option>');
+        templates.forEach(function (t) {
+            $select.append(
+                $('<option></option>').val(t.id).text(t.name + ' · ' + (t.title || '').substring(0, 40))
+            );
+        });
+        if (selectedId) {
+            $select.val(String(selectedId));
+        }
+    }
+
+    function applySendTemplate(templateId) {
+        var channel = $('#send-type').val();
+        var list = sendTemplatesCache[channel] || [];
+        var tpl = list.find(function (t) { return String(t.id) === String(templateId); });
+        if (!tpl) {
+            $('#send-template-id').val('');
+            return;
+        }
+        $('#send-template-id').val(tpl.id);
+        $('#send-title').val(tpl.title || '');
+        $('#send-content').val(tpl.content || '');
+        if (sendWizardStep === 3) updateSendPreview();
     }
 
     function updateSendPreview() {
@@ -1024,6 +1105,7 @@
             var channel = $(this).data('channel');
             $('#send-type').val(channel);
             updateAudienceHelp();
+            loadSendTemplates(channel);
             if ($('#send-user-search').val().trim().length >= 2) {
                 searchTargetUsers($('#send-user-search').val().trim());
             }
@@ -1032,6 +1114,15 @@
         $(document).on('click', '.notif-audience-card', function () {
             setAudienceMode($(this).data('audience'));
             if (sendWizardStep === 3) updateSendPreview();
+        });
+
+        $('#send-template-pick').on('change', function () {
+            var id = $(this).val();
+            if (!id) {
+                $('#send-template-id').val('');
+                return;
+            }
+            applySendTemplate(id);
         });
 
         $('#send-user-search').on('keyup', function () {
@@ -1157,12 +1248,20 @@
                     var sentCount = Number(n.sent_count || 0);
                     var isSent = sentCount > 0 || !!n.send_at;
                     var targetUsers = Array.isArray(n.target_users) ? n.target_users : [];
+                    var targetDetail = Array.isArray(response.target_users_detail) ? response.target_users_detail : [];
                     var creatorName = (n.creator && n.creator.name) ? n.creator.name : '—';
 
                     $('#show-creator').text(creatorName);
                     $('#show-sent-count').text(sentCount.toLocaleString('tr-TR') + ' kişi');
 
-                    if (targetUsers.length) {
+                    if (targetDetail.length === 1) {
+                        var u = targetDetail[0];
+                        $('#show-target').text((u.name || 'Kullanıcı') + ' (#' + u.id + ')');
+                    } else if (targetDetail.length > 1) {
+                        $('#show-target').text(targetDetail.map(function (u) {
+                            return (u.name || 'Kullanıcı') + ' (#' + u.id + ')';
+                        }).join(', '));
+                    } else if (targetUsers.length) {
                         $('#show-target').text(targetUsers.length + ' belirli kullanıcı');
                     } else {
                         $('#show-target').text('Tüm uygulama kullanıcıları');

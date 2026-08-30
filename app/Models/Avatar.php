@@ -43,4 +43,17 @@ class Avatar extends Model
         }
         return asset('storage/' . $this->image_path);
     }
+
+    public function getImageExistsAttribute(): bool
+    {
+        if (filter_var($this->image_path, FILTER_VALIDATE_URL)) {
+            return true;
+        }
+
+        if (! filled($this->image_path)) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->exists($this->image_path);
+    }
 }

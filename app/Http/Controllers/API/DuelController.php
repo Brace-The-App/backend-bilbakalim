@@ -2099,14 +2099,10 @@ class DuelController extends Controller
         $challengerCorrect = $challengerAnswer->is_correct;
         $opponentCorrect = $opponentAnswer->is_correct;
 
-        // Senaryo 1: Her ikisi de doğru (berabere)
-        // x1 → soru değeri aynı (tam); x2+ → değer / 2 (x2→1, x4→2, x6→3, x8→4 …)
+        // Senaryo 1: Her ikisi de doğru (berabere) — çarpandan bağımsız sabit 1 jeton
+        // Eski (geri almak için): x1 → questionValue; x2+ → max(1, intdiv(questionValue, 2))
         if ($challengerCorrect && $opponentCorrect) {
-            $settings = is_array($duel->settings) ? $duel->settings : [];
-            $currentMultiplier = max(1, (int) ($settings['current_question_multiplier'] ?? 1));
-            $tieAward = $currentMultiplier <= 1
-                ? $questionValue
-                : max(1, intdiv($questionValue, 2));
+            $tieAward = 1;
 
             $this->addCoins($challenger, $tieAward, $duel, 'Düello: berabere (iki taraf da doğru)');
             $this->addCoins($opponent, $tieAward, $duel, 'Düello: berabere (iki taraf da doğru)');

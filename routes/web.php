@@ -98,8 +98,24 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
 
     // Notifications management
     Route::get('notifications/users/search', [NotificationController::class, 'searchUsers'])->name('notifications.users.search');
-    Route::resource('notifications', NotificationController::class);
+    Route::get('notifications/templates/picker', [NotificationController::class, 'templatePicker'])->name('notifications.templates.picker');
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
+
+    // Canlı Bildirim Akışı (yalnızca #15 — controller içinde)
+    Route::get('notifications/live-flow', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'index'])->name('notifications.live-flow');
+    Route::get('notifications/live-flow/feed', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'feed'])->name('notifications.live-flow.feed');
+    Route::get('notifications/live-flow/templates', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'templates'])->name('notifications.live-flow.templates');
+    Route::get('notifications/live-flow/schedules', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'schedules'])->name('notifications.live-flow.schedules');
+    Route::post('notifications/live-flow/random-preset', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'randomPreset'])->name('notifications.live-flow.random-preset');
+    Route::get('notifications/live-flow/templates/{template}', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'showTemplate'])->name('notifications.live-flow.templates.show');
+    Route::post('notifications/live-flow/save', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'saveFlow'])->name('notifications.live-flow.save');
+    Route::delete('notifications/live-flow/templates/{template}', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'destroyTemplate'])->name('notifications.live-flow.templates.destroy');
+    Route::post('notifications/live-flow/send-now', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'sendNow'])->name('notifications.live-flow.send-now');
+    Route::post('notifications/live-flow/schedules', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'storeSchedule'])->name('notifications.live-flow.schedules.store');
+    Route::patch('notifications/live-flow/schedules/{schedule}/toggle', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'toggleSchedule'])->name('notifications.live-flow.schedules.toggle');
+    Route::delete('notifications/live-flow/schedules/{schedule}', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'destroySchedule'])->name('notifications.live-flow.schedules.destroy');
+
+    Route::resource('notifications', NotificationController::class);
 
     // Avatars management
     Route::resource('avatars', \App\Http\Controllers\Admin\AvatarController::class);

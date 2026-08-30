@@ -20,7 +20,7 @@ class NotificationController extends Controller
 
     /**
      * Send notification to users
-     * 
+     *
      * @OA\Post(
      *     path="/api/notifications/send",
      *     summary="Send notification to users",
@@ -110,7 +110,7 @@ class NotificationController extends Controller
 
     /**
      * Get notification statistics
-     * 
+     *
      * @OA\Get(
      *     path="/api/notifications/stats",
      *     summary="Get notification statistics",
@@ -136,7 +136,7 @@ class NotificationController extends Controller
     {
         try {
             $stats = $this->notificationService->getNotificationStats();
-            
+
             return response()->json([
                 'success' => true,
                 'stats' => $stats
@@ -153,7 +153,7 @@ class NotificationController extends Controller
 
     /**
      * Get recent notifications
-     * 
+     *
      * @OA\Get(
      *     path="/api/notifications/recent",
      *     summary="Get recent notifications",
@@ -188,7 +188,7 @@ class NotificationController extends Controller
         try {
             $limit = $request->get('limit', 10);
             $notifications = $this->notificationService->getRecentNotifications($limit);
-            
+
             return response()->json([
                 'success' => true,
                 'notifications' => $notifications

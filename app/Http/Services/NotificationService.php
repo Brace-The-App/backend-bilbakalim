@@ -5,6 +5,8 @@ namespace App\Http\Services;
 use App\Models\User;
 use App\Models\Notification as NotificationModel;
 use App\Notifications\FCMNotification;
+use App\Support\EmailBranding;
+use App\Support\MailHeaders;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -15,7 +17,7 @@ class NotificationService
     /**
      * Send notification to users based on type
      */
-    public function sendNotification($title, $content, $type, $targetUsers = null, ?int $createdBy = null)
+    public function sendNotification($title, $content, $type, $targetUsers = null, ?int $createdBy = null, ?int $templateId = null)
     {
         try {
             $notification = NotificationModel::create([
@@ -25,6 +27,7 @@ class NotificationService
                 'target_users' => is_array($targetUsers) && count($targetUsers) > 0 ? $targetUsers : null,
                 'send_at' => now(),
                 'created_by' => $createdBy,
+                'notification_template_id' => $templateId,
             ]);
 
             $sentCount = 0;
@@ -77,16 +80,23 @@ class NotificationService
         foreach ($users as $user) {
             if ($user->email) {
                 try {
-                    Mail::send('emails.notification', [
-                        'title' => $title,
-                        'content' => $content,
-                        'type' => 'email',
-                        'sentAt' => now()->format('d.m.Y H:i'),
-                        'user' => $user
-                    ], function ($message) use ($user, $title) {
-                        $message->to($user->email)
-                            ->subject($title);
-                    });
+                    Mail::send(
+                        ['html' => 'emails.notification', 'text' => 'emails.notification-text'],
+                        [
+                            'title' => $title,
+                            'content' => $content,
+                            'type' => 'email',
+                            'sentAt' => now()->format('d.m.Y H:i'),
+                            'user' => $user,
+                            'brand' => EmailBranding::data(),
+                        ],
+                        function ($message) use ($user, $title) {
+                            $message->to($user->email)
+                                ->subject($title);
+
+                            MailHeaders::applyBulkNotification($message);
+                        }
+                    );
                     $sentCount++;
                 } catch (\Exception $e) {
                     Log::error("Email sending failed for user {$user->id}: " . $e->getMessage());
