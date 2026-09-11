@@ -1008,7 +1008,7 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
-            var QUESTION_COIN_BY_LEVEL = @json(config('app.coin_values_by_level', ['easy' => 1, 'medium' => 2, 'hard' => 3]));
+            var QUESTION_COIN_BY_LEVEL = @json(config('app.coin_values_by_level'));
 
             function syncQuestionCoinFromLevel($levelSelect) {
                 var level = $levelSelect.val();
