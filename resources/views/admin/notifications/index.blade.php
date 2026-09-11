@@ -1177,7 +1177,7 @@
 
             var formData = new FormData(this);
             $('#sendWizardSubmit').prop('disabled', true);
-        
+
         $.ajax({
                 url: '/admin/notifications/send',
                 type: 'POST',
@@ -1215,7 +1215,7 @@
             var type = btn.data('type');
             var title = btn.data('title') || '';
             var content = btn.data('content') || '';
-        
+
         $('#show-title').text(title);
         $('#show-content').text(content);
             $('#show-type').html(getTypePill(type, btn.data('type-label')));
@@ -1233,7 +1233,7 @@
             if (!id) {
                 return;
             }
-    
+
     $.ajax({
                 url: '/admin/notifications/' + id,
         type: 'GET',
