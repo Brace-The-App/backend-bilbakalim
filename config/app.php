@@ -291,7 +291,7 @@ return [
     'gift_claim_daily_limit' => (int) env('GIFT_CLAIM_DAILY_LIMIT', 1),
 
     // Kayıt / davet coinleri
-    'registration_bonus_coins' => (int) env('REGISTRATION_BONUS_COINS', 50),
+    'registration_bonus_coins' => (int) env('REGISTRATION_BONUS_COINS', 5),
     'referral_reward_coins' => (int) env('REFERRAL_REWARD_COINS', 25),
     'friend_invite_reward_coins' => (int) env('FRIEND_INVITE_REWARD_COINS', 25),
 

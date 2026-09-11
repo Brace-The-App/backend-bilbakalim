@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ad;
+use App\Services\AdWatchStatsService;
 use App\Support\AdVideoDuration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,14 @@ class AdController extends Controller
         $ads = Ad::ordered()->paginate(20);
 
         return view('admin.ads.index', compact('ads'));
+    }
+
+    public function watchStats(AdWatchStatsService $statsService)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $statsService->summary(),
+        ]);
     }
 
     public function store(Request $request)

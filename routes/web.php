@@ -69,6 +69,9 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     // Questions management
     Route::post('questions/{question}/toggle-check', [QuestionController::class, 'toggleCheck'])->name('questions.toggle-check');
     Route::post('questions/{question}/toggle-active', [QuestionController::class, 'toggleActive'])->name('questions.toggle-active');
+    Route::post('questions/bulk-update-active', [QuestionController::class, 'bulkUpdateActive'])->name('questions.bulk-update-active');
+    Route::post('questions/bulk-update-by-level', [QuestionController::class, 'bulkUpdateActiveByLevel'])->name('questions.bulk-update-by-level');
+    Route::post('questions/bulk-fix-observed-level', [QuestionController::class, 'bulkFixObservedLevel'])->name('questions.bulk-fix-observed-level');
     Route::resource('questions', QuestionController::class);
 
     // Kullanıcı cevap istatistikleri
@@ -101,7 +104,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::get('notifications/templates/picker', [NotificationController::class, 'templatePicker'])->name('notifications.templates.picker');
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send');
 
-    // Canlı Bildirim Akışı (yalnızca #15 — controller içinde)
+    // Canlı Bildirim Akışı (create notifications yetkisi gerekir)
     Route::get('notifications/live-flow', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'index'])->name('notifications.live-flow');
     Route::get('notifications/live-flow/feed', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'feed'])->name('notifications.live-flow.feed');
     Route::get('notifications/live-flow/templates', [\App\Http\Controllers\Admin\NotificationFlowController::class, 'templates'])->name('notifications.live-flow.templates');
@@ -124,6 +127,7 @@ Route::prefix('/admin')->name('admin.')->middleware(['auth'])->group(function ()
     Route::resource('gift-card-stores', \App\Http\Controllers\Admin\GiftCardStoreController::class);
 
     // Ads (reklam görselleri)
+    Route::get('ads/watch-stats', [\App\Http\Controllers\Admin\AdController::class, 'watchStats'])->name('ads.watch-stats');
     Route::resource('ads', \App\Http\Controllers\Admin\AdController::class)->only(['index', 'store', 'update', 'destroy']);
 
     // Düello bot ayarları (şimdilik kısıtlı erişim — controller içinde)

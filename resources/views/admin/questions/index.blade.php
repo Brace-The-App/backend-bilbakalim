@@ -10,9 +10,9 @@
         || request()->filled('category_id')
         || request()->filled('check')
         || request()->filled('languages')
-        || (request()->filled('per_page') && (int) request('per_page') !== 10);
+        || (request()->filled('per_page') && (int) request('per_page') !== 25);
     $summary = $summary ?? ['total'=>0,'active'=>0,'passive'=>0,'easy'=>0,'medium'=>0,'hard'=>0,'unchecked'=>0];
-    $perPage = $perPage ?? 10;
+    $perPage = $perPage ?? 25;
 @endphp
 
 <div class="page-title questions-page-title">
@@ -31,7 +31,7 @@
 
 {{-- 1) Özet şerit --}}
 @php
-    $kpiBase = ((int) $perPage !== 10) ? ['per_page' => (int) $perPage] : [];
+    $kpiBase = ((int) $perPage !== 25) ? ['per_page' => (int) $perPage] : [];
 @endphp
 <div id="questionsKpi" class="questions-summary mb-3">
     <a href="{{ route('admin.questions.index', $kpiBase) }}" class="questions-summary__card {{ !request()->hasAny(['status','level','check']) ? 'is-active' : '' }}">
@@ -140,6 +140,18 @@
                     </div>
                 </form>
 
+                @can('edit questions')
+                <div class="questions-level-bulk mb-3">
+                    <button type="button"
+                            class="btn btn-outline-warning btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#questionsLevelBulkModal">
+                        <i data-feather="layers" class="me-1"></i> Tüm sorular için işlem
+                    </button>
+                    <span class="text-muted small ms-2">Zorluk seviyesine göre toplu aktif / pasif</span>
+                </div>
+                @endcan
+
                 <div id="questionsSummary" class="mb-3">
                     <span class="badge bg-primary me-2 mb-1">Filtreye göre: {{ $filteredTotalCount ?? 0 }}</span>
                     @foreach(($languageCounts ?? []) as $locale => $count)
@@ -156,17 +168,43 @@
                     @endif
                 </div>
 
+                @can('edit questions')
+                <div id="questionsTableToolbar" class="questions-table-toolbar d-none mb-2">
+                    <span class="questions-table-toolbar__count">
+                        <strong id="questionsMultiBulkCount">0</strong> soru seçili
+                    </span>
+                    <div class="questions-table-toolbar__actions">
+                        <button type="button"
+                                class="btn btn-warning btn-sm"
+                                id="questionsMultiBulkBtn"
+                                data-bs-toggle="modal"
+                                data-bs-target="#questionsMultiEditModal">
+                            <i data-feather="edit-2" class="me-1"></i> Seçilenleri düzenle
+                        </button>
+                        <button type="button" class="btn btn-link btn-sm text-muted" id="questionsClearSelectionBtn">
+                            Seçimi temizle
+                        </button>
+                    </div>
+                </div>
+                @endcan
+
                 <div class="table-responsive">
                     <table class="table questions-table align-middle">
                         <thead>
                         <tr>
+                            @can('edit questions')
+                                <th class="text-center" style="width: 42px;">
+                                    <input type="checkbox" class="form-check-input" id="questionsSelectAllPage" title="Bu sayfadakileri seç">
+                                </th>
+                            @endcan
                             <th style="width: 72px;">ID</th>
                             <th>Soru</th>
                             <th style="width: 64px;">Görsel</th>
                             <th>Kategori / Seviye</th>
-                            <th style="width: 70px;">Coin</th>
+                            <th style="width: 70px;">Jeton</th>
                             <th style="width: 100px;">Durum</th>
                             <th class="text-center" style="width: 110px;">Kontrol</th>
+                            <th class="text-center" style="width: 130px;">AI kabul</th>
                             <th class="text-end">İşlemler</th>
                         </tr>
                         </thead>
@@ -195,6 +233,15 @@
                                 $hasA4En = isset($fourChoiceData['en']) && $fourChoiceData['en'] !== null && $fourChoiceData['en'] !== '';
                             @endphp
                             <tr>
+                                @can('edit questions')
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="form-check-input question-row-select"
+                                               value="{{ $question->id }}"
+                                               data-active="{{ $question->is_active ? '1' : '0' }}"
+                                               data-level="{{ $question->question_level }}">
+                                    </td>
+                                @endcan
                                 <td class="text-muted small">#{{ $question->id }}</td>
                                 <td>
                                     <div class="questions-qtext" title="{{ $qText }}">{{ $qText }}</div>
@@ -256,6 +303,27 @@
                                             <span class="text-muted">—</span>
                                         @endif
                                     @endcan
+                                </td>
+                                <td class="text-center small">
+                                    @if($question->ai_accepted && $question->ai_quality_review_id)
+                                        <div>
+                                            <span class="badge bg-primary">Kabul</span>
+                                        </div>
+                                        <a href="{{ route('admin.question-quality-reviews.show', $question->ai_quality_review_id) }}"
+                                           class="d-inline-block mt-1"
+                                           title="AI inceleme detayı">
+                                            #{{ $question->ai_quality_review_id }}
+                                        </a>
+                                    @elseif($question->ai_quality_review_id)
+                                        <div class="text-muted">İnceleme</div>
+                                        <a href="{{ route('admin.question-quality-reviews.show', $question->ai_quality_review_id) }}"
+                                           class="d-inline-block mt-1"
+                                           title="AI inceleme detayı">
+                                            #{{ $question->ai_quality_review_id }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
                                 </td>
                                 <td>
                                     <div class="questions-actions">
@@ -563,7 +631,7 @@
                         </div>
                         <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="form-label fw-bold">Coin</label>
+                                <label class="form-label fw-bold">Jeton</label>
                                 <p id="show-coin" class="form-control-plaintext"></p>
                             </div>
                         </div>
@@ -733,6 +801,78 @@
             </div>
         </div>
     </div>
+
+    @can('edit questions')
+    <div class="modal fade" id="questionsMultiEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Seçili soruları düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        <strong id="questionsMultiEditCountLabel">0</strong> soru seçili — yalnızca durum (aktif/pasif) değiştirilir.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Seçilenlerin zorluğu</label>
+                        <div id="questionsMultiEditLevelSummary" class="d-flex flex-wrap gap-2"></div>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="questionsMultiEditStatus">Durum</label>
+                        <select class="form-select" id="questionsMultiEditStatus">
+                            <option value="1">Aktif</option>
+                            <option value="0" selected>Pasif</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-warning" id="questionsMultiEditApplyBtn">Uygula</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="questionsLevelBulkModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tüm sorular için işlem</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Seçilen zorluk seviyesindeki <strong>tüm</strong> sorular güncellenir (liste filtresinden bağımsız).
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label" for="questionsLevelBulkLevel">Zorluk</label>
+                        <select class="form-select" id="questionsLevelBulkLevel">
+                            <option value="easy">Kolay</option>
+                            <option value="medium">Orta</option>
+                            <option value="hard">Zor</option>
+                            <option value="medium_hard" selected>Orta + Zor</option>
+                            <option value="all">Tüm zorluklar</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="questionsLevelBulkStatus">Durum</label>
+                        <select class="form-select" id="questionsLevelBulkStatus">
+                            <option value="1">Aktif</option>
+                            <option value="0" selected>Pasif</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-light border mb-0 py-2 px-3 small" id="questionsLevelBulkPreview">
+                        Etkilenecek soru sayısı hesaplanıyor…
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-warning" id="questionsLevelBulkApplyBtn">Uygula</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endcan
 @endsection
 
 @push('styles')
@@ -827,6 +967,39 @@
         .question-check-btn {
             display: inline-flex; align-items: center; gap: .25rem;
         }
+        .questions-level-bulk {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .35rem;
+            padding: .75rem 1rem;
+            border-radius: 10px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+        }
+        #questionsMultiBulkBtn { font-weight: 600; }
+        .questions-table-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            padding: .65rem .85rem;
+            border-radius: 10px;
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+        }
+        .questions-table-toolbar__count {
+            font-size: .875rem;
+            color: #9a3412;
+        }
+        .questions-table-toolbar__actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .35rem;
+            margin-left: auto;
+        }
     </style>
 @endpush
 
@@ -842,6 +1015,230 @@
 
             // Mevcut sayfa numarasını sakla
             var currentPage = getCurrentPageFromUrl() || 1;
+
+            var questionsLevelBulkUrl = @json(route('admin.questions.bulk-update-by-level'));
+            var questionsMultiActiveUrl = @json(route('admin.questions.bulk-update-active'));
+
+            function getSelectedQuestionRows() {
+                return $('.question-row-select:checked');
+            }
+
+            function clearQuestionMultiSelection() {
+                $('.question-row-select').prop('checked', false);
+                $('#questionsSelectAllPage').prop('checked', false).prop('indeterminate', false);
+                updateQuestionsMultiBulkBar();
+            }
+
+            function suggestBulkStatusValue($rows) {
+                var activeCount = 0;
+                var passiveCount = 0;
+                $rows.each(function () {
+                    if (String($(this).data('active')) === '1') {
+                        activeCount++;
+                    } else {
+                        passiveCount++;
+                    }
+                });
+                if (activeCount > 0 && passiveCount === 0) {
+                    return '0';
+                }
+                if (passiveCount > 0 && activeCount === 0) {
+                    return '1';
+                }
+                return '0';
+            }
+
+            function updateQuestionsMultiBulkBar() {
+                var count = getSelectedQuestionRows().length;
+                $('#questionsMultiBulkCount').text(count);
+                $('#questionsTableToolbar').toggleClass('d-none', count === 0);
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+            }
+
+            $('#questionsClearSelectionBtn').on('click', function () {
+                clearQuestionMultiSelection();
+            });
+
+            function syncQuestionsSelectAllState() {
+                var $rows = $('.question-row-select');
+                var $all = $('#questionsSelectAllPage');
+                if (!$all.length || !$rows.length) {
+                    if ($all.length) {
+                        $all.prop('checked', false).prop('indeterminate', false);
+                    }
+                    return;
+                }
+                var checked = $rows.filter(':checked').length;
+                $all.prop('checked', checked > 0 && checked === $rows.length);
+                $all.prop('indeterminate', checked > 0 && checked < $rows.length);
+            }
+
+            $(document).on('change', '.question-row-select', function () {
+                syncQuestionsSelectAllState();
+                updateQuestionsMultiBulkBar();
+            });
+
+            $(document).on('change', '#questionsSelectAllPage', function () {
+                var checked = $(this).is(':checked');
+                $('.question-row-select').prop('checked', checked);
+                $(this).prop('indeterminate', false);
+                updateQuestionsMultiBulkBar();
+            });
+
+            function refreshQuestionsMultiEditLevelSummary() {
+                var counts = { easy: 0, medium: 0, hard: 0 };
+                getSelectedQuestionRows().each(function () {
+                    var level = String($(this).data('level') || '');
+                    if (Object.prototype.hasOwnProperty.call(counts, level)) {
+                        counts[level]++;
+                    }
+                });
+                var parts = [];
+                if (counts.easy > 0) {
+                    parts.push('<span class="badge bg-success">Kolay: ' + counts.easy + '</span>');
+                }
+                if (counts.medium > 0) {
+                    parts.push('<span class="badge bg-warning text-dark">Orta: ' + counts.medium + '</span>');
+                }
+                if (counts.hard > 0) {
+                    parts.push('<span class="badge bg-danger">Zor: ' + counts.hard + '</span>');
+                }
+                $('#questionsMultiEditLevelSummary').html(
+                    parts.length ? parts.join(' ') : '<span class="text-muted small">—</span>'
+                );
+            }
+
+            $('#questionsMultiEditModal').on('show.bs.modal', function () {
+                var $selected = getSelectedQuestionRows();
+                $('#questionsMultiEditCountLabel').text($selected.length);
+                $('#questionsMultiEditStatus').val(suggestBulkStatusValue($selected));
+                refreshQuestionsMultiEditLevelSummary();
+            });
+
+            $('#questionsMultiEditApplyBtn').on('click', function () {
+                var ids = getSelectedQuestionRows().map(function () {
+                    return parseInt($(this).val(), 10);
+                }).get();
+                if (!ids.length) {
+                    toastr.warning('Lütfen en az bir soru seçin.');
+                    return;
+                }
+
+                var isActive = $('#questionsMultiEditStatus').val() === '1';
+                var label = isActive ? 'aktif' : 'pasif';
+                if (!confirm(ids.length + ' soru ' + label + ' yapılacak. Devam edilsin mi?')) {
+                    return;
+                }
+
+                var $btn = $(this).prop('disabled', true);
+                $.ajax({
+                    url: questionsMultiActiveUrl,
+                    type: 'POST',
+                    data: { _token: '{{ csrf_token() }}', ids: ids, is_active: isActive ? 1 : 0 },
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                    success: function (response) {
+                        if (response.success) {
+                            toastr.success(response.message || 'Güncellendi.');
+                            $('#questionsMultiEditModal').modal('hide');
+                            clearQuestionMultiSelection();
+                            loadQuestions(currentPage);
+                        } else {
+                            toastr.error(response.message || 'İşlem yapılamadı.');
+                        }
+                    },
+                    error: function (xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.message) || 'Toplu güncelleme başarısız.');
+                    },
+                    complete: function () { $btn.prop('disabled', false); }
+                });
+            });
+
+            function refreshQuestionsLevelBulkPreview() {
+                var $preview = $('#questionsLevelBulkPreview');
+                if (!$preview.length) {
+                    return;
+                }
+
+                $preview.text('Etkilenecek soru sayısı hesaplanıyor…');
+
+                $.ajax({
+                    url: questionsLevelBulkUrl,
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        question_level: $('#questionsLevelBulkLevel').val(),
+                        is_active: $('#questionsLevelBulkStatus').val() === '1' ? 1 : 0,
+                        dry_run: 1
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    success: function (response) {
+                        if (!response.success) {
+                            $preview.text('Önizleme alınamadı.');
+                            return;
+                        }
+                        var count = response.count || 0;
+                        var levelLabel = response.level_label || 'Seçili';
+                        var statusLabel = response.is_active ? 'aktif' : 'pasif';
+                        $preview.html('<strong>' + count + '</strong> ' + levelLabel + ' soru <strong>' + statusLabel + '</strong> yapılacak.');
+                    },
+                    error: function () {
+                        $preview.text('Önizleme alınamadı.');
+                    }
+                });
+            }
+
+            $('#questionsLevelBulkModal').on('show.bs.modal', refreshQuestionsLevelBulkPreview);
+            $(document).on('change', '#questionsLevelBulkLevel, #questionsLevelBulkStatus', refreshQuestionsLevelBulkPreview);
+
+            $('#questionsLevelBulkApplyBtn').on('click', function () {
+                var level = $('#questionsLevelBulkLevel').val();
+                var isActive = $('#questionsLevelBulkStatus').val() === '1';
+                var levelText = $('#questionsLevelBulkLevel option:selected').text();
+                var statusText = isActive ? 'aktif' : 'pasif';
+                var previewText = $('#questionsLevelBulkPreview').text();
+
+                if (!confirm(levelText + ' — ' + previewText + '\n\nDevam edilsin mi?')) {
+                    return;
+                }
+
+                var $btn = $(this).prop('disabled', true);
+                $.ajax({
+                    url: questionsLevelBulkUrl,
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        question_level: level,
+                        is_active: isActive ? 1 : 0
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            toastr.success(response.message || 'Güncellendi.');
+                            $('#questionsLevelBulkModal').modal('hide');
+                            loadQuestions(currentPage);
+                        } else {
+                            toastr.error(response.message || 'İşlem yapılamadı.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = xhr.responseJSON && xhr.responseJSON.message
+                            ? xhr.responseJSON.message
+                            : 'Toplu güncelleme başarısız.';
+                        toastr.error(msg);
+                    },
+                    complete: function () {
+                        $btn.prop('disabled', false);
+                    }
+                });
+            });
 
             // Toastr configuration
             toastr.options = {
@@ -998,6 +1395,7 @@
                         bindQuestionEditModalEvents();
                         // Re-bind show modal events
                         bindQuestionShowModalEvents();
+                        clearQuestionMultiSelection();
                         if (typeof feather !== 'undefined') feather.replace();
                     },
                     error: function() {

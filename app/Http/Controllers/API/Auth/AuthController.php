@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 use App\Http\Services\AuthServices;
+use App\Support\ClientPlatform;
 use Illuminate\Support\Arr;
 
 /**
@@ -146,10 +147,21 @@ class AuthController extends Controller
         Auth::login($user);
         $token = $user->createToken('bilbakalim');
 
-        $user->forceFill([
+        $clientMeta = ClientPlatform::resolve($request);
+        $fill = [
             'last_login_at' => now(),
             'last_active_at' => now(),
-        ])->save();
+        ];
+        if (!empty($clientMeta['platform'])) {
+            $fill['platform'] = $clientMeta['platform'];
+        }
+        if (!empty($clientMeta['user_agent'])) {
+            $fill['user_agent'] = $clientMeta['user_agent'];
+        }
+        if ($request->filled('device_id')) {
+            $fill['device_id'] = (string) $request->input('device_id');
+        }
+        $user->forceFill($fill)->save();
 
         $responseData = [];
         $responseData['user'] = UserResource::make($user->fresh());
@@ -177,6 +189,7 @@ class AuthController extends Controller
      *                 @OA\Property(property="password", type="string", format="password", description="Şifre (opsiyonel)", example="password123"),
      *                 @OA\Property(property="password_confirmation", type="string", format="password", description="Şifre tekrar (opsiyonel, password varsa zorunlu)", example="password123"),
      *                 @OA\Property(property="device_id", type="string", description="FCM Device ID (opsiyonel)", example="fcm-device-token-12345"),
+     *                 @OA\Property(property="platform", type="string", enum={"ios","android","web"}, description="Client platform (zorunlu önerilir). Flutter: ios|android, Node web: web"),
      *                 @OA\Property(property="referral_code", type="string", description="Referans kodu (opsiyonel, 8 karakter)", example="ABC12345")
      *             )
      *         ),
@@ -220,7 +233,7 @@ class AuthController extends Controller
         $user->phone = $request->phone;
         $user->role_id = 3;
         $user->account_status = 'active';
-        $registrationBonus = (int) config('app.registration_bonus_coins', 50);
+        $registrationBonus = (int) config('app.registration_bonus_coins', 5);
         $user->coins = $registrationBonus;
 
         // Unique referral kodu oluştur
@@ -242,6 +255,14 @@ class AuthController extends Controller
 
         if ($request->has('device_id') && $request->device_id) {
             $user->device_id = $request->device_id;
+        }
+
+        $clientMeta = ClientPlatform::resolve($request);
+        if (!empty($clientMeta['platform'])) {
+            $user->platform = $clientMeta['platform'];
+        }
+        if (!empty($clientMeta['user_agent'])) {
+            $user->user_agent = $clientMeta['user_agent'];
         }
 
         $user->save();
@@ -751,7 +772,26 @@ class AuthController extends Controller
     }
 
     /**
-     * Socket sunucusundan son aktiflik güncellemesi (internal).
+     * @OA\Post(
+     *     path="/api/users/socket-presence",
+     *     summary="[Internal] Son aktiflik güncelle",
+     *     description="Socket bağlantısı / presence için last_active_at.",
+     *     tags={"Duel Socket Internal"},
+     *     security={{"socket_secret":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"user_id"},
+     *             @OA\Property(property="user_id", type="integer", example=15)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="OK",
+     *         @OA\JsonContent(@OA\Property(property="success", type="boolean", example=true))
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized")
+     * )
      */
     public function socketPresence(Request $request): JsonResponse
     {

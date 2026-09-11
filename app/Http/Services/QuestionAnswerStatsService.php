@@ -97,23 +97,41 @@ class QuestionAnswerStatsService
             return null;
         }
 
-        $old = (string) $question->question_level;
-        $new = (string) $row->observed_difficulty;
+        return $this->fixQuestionToObservedLevel($question, $adminId, 'auto_fix_level');
+    }
 
-        if ($old === $new || !in_array($new, ['easy', 'medium', 'hard'], true)) {
+    /**
+     * Tanımlı seviyeyi güvenilir gözlenen zorluğa çeker (manuel / toplu).
+     *
+     * @return array{question_id:int,old:string,new:string}|null
+     */
+    public function fixQuestionToObservedLevel(Question $question, int $adminId, string $logAction = 'update_level'): ?array
+    {
+        $stat = $question->answerStat;
+        if (!$stat || !$stat->data_sufficient || (int) $stat->total_answers < 5) {
             return null;
         }
 
-        DB::transaction(function () use ($question, $old, $new, $adminId) {
-            $question->update(['question_level' => $new]);
+        $observed = (string) $stat->observed_difficulty;
+        if (!in_array($observed, ['easy', 'medium', 'hard'], true)) {
+            return null;
+        }
+
+        $old = (string) $question->question_level;
+        if ($old === $observed) {
+            return null;
+        }
+
+        DB::transaction(function () use ($question, $old, $observed, $adminId, $logAction) {
+            $question->update(['question_level' => $observed]);
 
             QuestionAdminLog::create([
                 'question_id' => $question->id,
                 'admin_id' => $adminId,
-                'action' => 'auto_fix_level',
+                'action' => $logAction,
                 'field' => 'question_level',
                 'old_value' => $old,
-                'new_value' => $new,
+                'new_value' => $observed,
             ]);
         });
 
@@ -122,7 +140,7 @@ class QuestionAnswerStatsService
         return [
             'question_id' => (int) $question->id,
             'old' => $old,
-            'new' => $new,
+            'new' => $observed,
         ];
     }
 

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Question;
 use App\Models\Category;
 use App\Http\Controllers\WebhookController;
+use App\Http\Services\QuestionAnswerStatsService;
 use Illuminate\Validation\Rule;
 
 class QuestionController extends Controller
@@ -17,13 +18,13 @@ class QuestionController extends Controller
         $this->middleware(\Spatie\Permission\Middleware\RoleMiddleware::class.':admin|personel');
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':view questions')->only(['index', 'show']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create questions')->only(['create', 'store']);
-        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update', 'toggleCheck', 'toggleActive']);
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':edit questions')->only(['edit', 'update', 'toggleCheck', 'toggleActive', 'bulkUpdateActive', 'bulkUpdateActiveByLevel', 'bulkFixObservedLevel']);
         $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':delete questions')->only(['destroy']);
     }
 
     public function index(Request $request)
     {
-        $query = Question::with(['category', 'answerStat']);
+        $query = Question::with(['category', 'answerStat', 'aiQualityReview:id,question_id,status,recommended_action,quality_score']);
 
         // Filtering - Status
         if ($request->filled('status')) {
@@ -56,6 +57,17 @@ class QuestionController extends Controller
             }
         }
 
+        // Filtering - AI kabul
+        if ($request->filled('ai_accepted')) {
+            if ($request->ai_accepted === '1' || $request->ai_accepted === 1 || $request->ai_accepted === 'true') {
+                $query->where('ai_accepted', true);
+            } elseif ($request->ai_accepted === '0' || $request->ai_accepted === 0 || $request->ai_accepted === 'false') {
+                $query->where(function ($q) {
+                    $q->where('ai_accepted', false)->orWhereNull('ai_accepted');
+                });
+            }
+        }
+
         // Filtering - Search (ID veya soru metni)
         if ($request->filled('search')) {
             $search = trim((string) $request->search);
@@ -83,9 +95,9 @@ class QuestionController extends Controller
             });
         }
 
-        $perPage = (int) $request->input('per_page', 10);
+        $perPage = (int) $request->input('per_page', 25);
         if (!in_array($perPage, [10, 25, 50], true)) {
-            $perPage = 10;
+            $perPage = 25;
         }
 
         $page = max(1, (int) $request->input('page', 1));
@@ -396,6 +408,180 @@ class QuestionController extends Controller
             'success' => true,
             'check' => (int) $question->check,
             'message' => $question->check ? 'Soru kontrol edildi olarak işaretlendi.' : 'Soru kontrol edilmedi olarak işaretlendi.'
+        ]);
+    }
+
+    /**
+     * Seçili soruların aktif/pasif durumunu toplu güncelle (AJAX).
+     */
+    public function bulkUpdateActive(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'integer|exists:questions,id',
+            'is_active' => 'required|boolean',
+        ]);
+
+        $isActive = (bool) $validated['is_active'];
+        $updated = Question::query()
+            ->whereIn('id', $validated['ids'])
+            ->where('is_active', '!=', $isActive)
+            ->update([
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'updated' => $updated,
+            'total' => count($validated['ids']),
+            'is_active' => $isActive,
+            'message' => $updated > 0
+                ? ($isActive ? "{$updated} soru aktif edildi." : "{$updated} soru pasif edildi.")
+                : 'Seçili sorular zaten istenen durumda.',
+        ]);
+    }
+
+    /**
+     * Zorluk seviyesine göre tüm soruların aktif/pasif durumunu toplu güncelle (AJAX).
+     */
+    public function bulkUpdateActiveByLevel(Request $request)
+    {
+        $validated = $request->validate([
+            'question_level' => 'required|in:easy,medium,hard,medium_hard,all',
+            'is_active' => 'required|boolean',
+            'dry_run' => 'nullable|boolean',
+        ]);
+
+        $isActive = (bool) $validated['is_active'];
+        $dryRun = $request->boolean('dry_run');
+
+        $query = Question::query();
+        $this->applyBulkLevelScope($query, $validated['question_level']);
+
+        $affectedQuery = (clone $query)->where('is_active', '!=', $isActive);
+        $count = (clone $affectedQuery)->count();
+
+        $levelLabel = $this->bulkLevelLabel($validated['question_level']);
+
+        if ($dryRun) {
+            return response()->json([
+                'success' => true,
+                'count' => $count,
+                'question_level' => $validated['question_level'],
+                'is_active' => $isActive,
+                'level_label' => $levelLabel,
+            ]);
+        }
+
+        if ($count === 0) {
+            return response()->json([
+                'success' => true,
+                'updated' => 0,
+                'message' => "{$levelLabel} sorular zaten " . ($isActive ? 'aktif' : 'pasif') . '.',
+            ]);
+        }
+
+        $updated = $affectedQuery->update([
+            'is_active' => $isActive,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'updated' => $updated,
+            'question_level' => $validated['question_level'],
+            'is_active' => $isActive,
+            'message' => $updated . ' ' . mb_strtolower($levelLabel) . ' soru ' . ($isActive ? 'aktif' : 'pasif') . ' edildi.',
+        ]);
+    }
+
+    private function applyBulkLevelScope($query, string $level): void
+    {
+        match ($level) {
+            'easy' => $query->where('question_level', 'easy'),
+            'medium' => $query->where('question_level', 'medium'),
+            'hard' => $query->where('question_level', 'hard'),
+            'medium_hard' => $query->whereIn('question_level', ['medium', 'hard']),
+            'all' => null,
+        };
+    }
+
+    private function bulkLevelLabel(string $level): string
+    {
+        return match ($level) {
+            'easy' => 'Kolay',
+            'medium' => 'Orta',
+            'hard' => 'Zor',
+            'medium_hard' => 'Orta + Zor',
+            'all' => 'Tüm',
+            default => $level,
+        };
+    }
+
+    /**
+     * Seçili sorularda tanımlı zorluğu gözlenen zorluğa çeker (güvenilir istatistik).
+     */
+    public function bulkFixObservedLevel(Request $request, QuestionAnswerStatsService $statsService)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'integer|exists:questions,id',
+            'dry_run' => 'nullable|boolean',
+        ]);
+
+        $adminId = (int) auth()->id();
+        $dryRun = $request->boolean('dry_run');
+        $questions = Question::query()
+            ->with('answerStat')
+            ->whereIn('id', $validated['ids'])
+            ->get();
+
+        $fixable = 0;
+        $skipped = 0;
+        $samples = [];
+
+        foreach ($questions as $question) {
+            $canFix = $question->hasLevelMismatch();
+            if ($canFix) {
+                $fixable++;
+                if (count($samples) < 5) {
+                    $samples[] = [
+                        'id' => $question->id,
+                        'from' => $question->question_level,
+                        'to' => $question->answerStat?->observed_difficulty,
+                    ];
+                }
+            } else {
+                $skipped++;
+            }
+        }
+
+        if ($dryRun) {
+            return response()->json([
+                'success' => true,
+                'fixable' => $fixable,
+                'skipped' => $skipped,
+                'total' => $questions->count(),
+                'samples' => $samples,
+            ]);
+        }
+
+        $fixed = 0;
+        foreach ($questions as $question) {
+            $result = $statsService->fixQuestionToObservedLevel($question, $adminId, 'bulk_fix_level');
+            if ($result) {
+                $fixed++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'fixed' => $fixed,
+            'skipped' => $questions->count() - $fixed,
+            'message' => $fixed > 0
+                ? "{$fixed} sorunun zorluğu gözlenen seviyeye düzeltildi."
+                : 'Düzeltilebilecek uyumsuz soru bulunamadı (yeterli istatistik gerekir).',
         ]);
     }
 

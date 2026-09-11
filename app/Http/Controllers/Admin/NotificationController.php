@@ -66,8 +66,7 @@ class NotificationController extends Controller
                 ->get(['id', 'name', 'email'])
                 ->keyBy('id');
 
-        return view('admin.notifications.index', compact('notifications', 'stats', 'targetUsersById'))
-            ->with('canLiveFlow', \App\Services\NotificationFlowHelper::canAccessLiveFlow(auth()->user()));
+        return view('admin.notifications.index', compact('notifications', 'stats', 'targetUsersById'));
     }
 
     private function notificationStats(): array

@@ -279,11 +279,9 @@
             <div class="col-md-4 text-md-end">
             @can('create notifications')
                 <div class="notif-hero-actions">
-                    @if(!empty($canLiveFlow))
-                        <a href="{{ route('admin.notifications.live-flow') }}" class="btn notif-live-btn">
-                            <i data-feather="zap" class="me-1"></i> Canlı Bildirim Akışı
-                        </a>
-                    @endif
+                    <a href="{{ route('admin.notifications.live-flow') }}" class="btn notif-live-btn">
+                        <i data-feather="zap" class="me-1"></i> Canlı Bildirim Akışı
+                    </a>
                     <button type="button" class="btn notif-send-btn" data-bs-toggle="modal" data-bs-target="#notificationSendModal">
                         <i data-feather="send" class="me-1"></i> Bildirim Gönder
                     </button>
@@ -1179,7 +1177,7 @@
 
             var formData = new FormData(this);
             $('#sendWizardSubmit').prop('disabled', true);
-
+        
         $.ajax({
                 url: '/admin/notifications/send',
                 type: 'POST',
@@ -1217,7 +1215,7 @@
             var type = btn.data('type');
             var title = btn.data('title') || '';
             var content = btn.data('content') || '';
-
+        
         $('#show-title').text(title);
         $('#show-content').text(content);
             $('#show-type').html(getTypePill(type, btn.data('type-label')));
@@ -1235,7 +1233,7 @@
             if (!id) {
                 return;
             }
-
+    
     $.ajax({
                 url: '/admin/notifications/' + id,
         type: 'GET',

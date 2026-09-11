@@ -21,13 +21,7 @@ class NotificationFlowController extends Controller
         protected NotificationService $notificationService,
         protected NotificationPresetService $presetService,
     ) {
-        $this->middleware(function ($request, $next) {
-            if (! NotificationFlowHelper::canAccessLiveFlow($request->user())) {
-                abort(403, 'Bu sayfaya erişim yetkiniz yok.');
-            }
-
-            return $next($request);
-        });
+        $this->middleware(\Spatie\Permission\Middleware\PermissionMiddleware::class.':create notifications');
     }
 
     public function index()
