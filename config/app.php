@@ -241,20 +241,19 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    // Coin değerleri
+    // Seviye → jeton (quiz/premium/turnuva + düello tabanı).
+    // Düello stake: questions.coin_value × masa çarpanı (x1/x2/x4/x8) × opsiyonel maç içi teklif.
+    'coin_values_by_level' => [
+        'easy' => 1,
+        'medium' => 2,
+        'hard' => 3,
+    ],
+
+    // Geriye uyumluluk (eski min/max aralıkları kullanılmıyor)
     'coin_values' => [
-        'easy' => [
-            'min' => 20,
-            'max' => 50
-        ],
-        'medium' => [
-            'min' => 50,
-            'max' => 300
-        ],
-        'hard' => [
-            'min' => 300,
-            'max' => 10000
-        ]
+        'easy' => ['min' => 1, 'max' => 1],
+        'medium' => ['min' => 2, 'max' => 2],
+        'hard' => ['min' => 3, 'max' => 3],
     ],
 
     // Joker fiyatları

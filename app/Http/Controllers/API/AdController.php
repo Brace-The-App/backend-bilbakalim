@@ -14,31 +14,53 @@ class AdController extends Controller
     /**
      * @OA\Get(
      *     path="/api/ads/next",
-     *     summary="Rastgele reklam görseli al",
-     *     description="Hak varsa rastgele aktif reklam döner. Hak düşmez; hak /api/ad-watch/reward ile düşer. 24 saatte max 3 izleme.",
+     *     summary="Rastgele reklam al (görsel VEYA video)",
+     *     description="Hak varsa rastgele aktif reklam döner. media_type=image ise yalnızca image_url; media_type=video ise video_url (max 10 sn) kullanılır — ikisi birden seçilmez. CTA: cta_text + link. Ödül: reward_coins — izleme bitince POST /api/ad-watch/reward (body: ad_id). Hak burada düşmez.",
      *     tags={"Ads"},
      *     security={{"sanctum":{}}},
      *     @OA\Response(
      *         response=200,
-     *         description="Başarılı",
+     *         description="Reklam hazır veya hak dolu",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="allowed", type="boolean", example=true),
-     *             @OA\Property(property="count", type="integer", example=1),
+     *             @OA\Property(property="count", type="integer", example=1, description="Penceredeki kullanılan hak"),
      *             @OA\Property(property="max", type="integer", example=3),
      *             @OA\Property(property="remaining", type="integer", example=2),
      *             @OA\Property(property="resets_at", type="string", format="date-time", nullable=true),
-     *             @OA\Property(property="message", type="string", example="Reklam görseli hazır."),
+     *             @OA\Property(property="message", type="string", example="Reklam hazır."),
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
      *                 nullable=true,
-     *                 @OA\Property(property="id", type="integer", example=1),
-     *                 @OA\Property(property="title", type="string", nullable=true, example="Yuden Games"),
-     *                 @OA\Property(property="image_url", type="string", example="https://bil-bakalim.com/storage/ads/yuden-games.png"),
+     *                 @OA\Property(property="id", type="integer", example=5),
+     *                 @OA\Property(property="title", type="string", nullable=true, example="Test Video Reklam"),
+     *                 @OA\Property(property="media_type", type="string", enum={"image","video"}, example="video"),
+     *                 @OA\Property(property="has_video", type="boolean", example=true),
+     *                 @OA\Property(property="image_url", type="string", nullable=true, example="https://bilbakalim.online/storage/ads/poster.jpg", description="Görsel reklamda dolu; video reklamda genelde null"),
+     *                 @OA\Property(property="video_url", type="string", nullable=true, example="https://bilbakalim.online/storage/ads/videos/promo.mp4"),
+     *                 @OA\Property(property="max_video_seconds", type="integer", example=10),
      *                 @OA\Property(property="link", type="string", nullable=true, example="https://yudengames.com/"),
-     *                 @OA\Property(property="video_url", type="string", nullable=true, example="https://bil-bakalim.com/storage/ads/videos/promo.mp4")
+     *                 @OA\Property(property="cta_text", type="string", example="Daha fazla bilgi al"),
+     *                 @OA\Property(property="reward_coins", type="integer", example=5, description="İzleme tamamlanınca verilecek jeton")
      *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Kimlik doğrulama gerekli",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Unauthenticated.")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Aktif reklam yok",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="allowed", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Aktif reklam bulunamadı."),
+     *             @OA\Property(property="data", nullable=true, example=null)
      *         )
      *     )
      * )
@@ -74,17 +96,28 @@ class AdController extends Controller
                 ], $status), 404);
             }
 
+            $hasVideo = $ad->isVideoAd();
+            $imageUrl = $ad->image_url;
+            if ($hasVideo && ($ad->image_path === Ad::VIDEO_PLACEHOLDER_PATH || !$ad->image_path)) {
+                $imageUrl = null;
+            }
+
             // Hak burada düşmez; izleme tamamlanıp reward alındığında düşer.
             return response()->json(array_merge([
                 'success' => true,
                 'allowed' => true,
-                'message' => 'Reklam görseli hazır.',
+                'message' => 'Reklam hazır.',
                 'data' => [
                     'id' => $ad->id,
                     'title' => $ad->title,
-                    'image_url' => $ad->image_url,
+                    'media_type' => $ad->mediaType(),
+                    'has_video' => $hasVideo,
+                    'image_url' => $hasVideo ? $imageUrl : $ad->image_url,
+                    'video_url' => $hasVideo ? $ad->video_url : null,
+                    'max_video_seconds' => Ad::MAX_VIDEO_SECONDS,
                     'link' => $ad->link,
-                    'video_url' => $ad->video_url,
+                    'cta_text' => $ad->resolvedCtaText(),
+                    'reward_coins' => $ad->resolvedRewardCoins(),
                 ],
             ], $status));
         });

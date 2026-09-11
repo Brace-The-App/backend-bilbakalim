@@ -17,9 +17,11 @@ class AdWatchStatsService
 
         $todayWatches = (clone $base)->where('created_at', '>=', $today)->count();
         $todayUsers = (clone $base)->where('created_at', '>=', $today)->distinct('user_id')->count('user_id');
+        $todayCoins = (int) (clone $base)->where('created_at', '>=', $today)->sum('coin_amount');
 
         $allWatches = (clone $base)->count();
         $allUsers = (clone $base)->distinct('user_id')->count('user_id');
+        $allCoins = (int) (clone $base)->sum('coin_amount');
 
         return [
             'generated_at' => now()->toIso8601String(),
@@ -33,12 +35,12 @@ class AdWatchStatsService
                 'date' => $today->toDateString(),
                 'total_watches' => $todayWatches,
                 'unique_users' => $todayUsers,
-                'coins_given' => $todayWatches,
+                'coins_given' => $todayCoins,
             ],
             'all_time' => [
                 'total_watches' => $allWatches,
                 'unique_users' => $allUsers,
-                'coins_given' => $allWatches,
+                'coins_given' => $allCoins,
                 'first_watch_at' => (clone $base)->min('created_at'),
                 'last_watch_at' => (clone $base)->max('created_at'),
             ],

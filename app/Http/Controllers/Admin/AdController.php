@@ -7,11 +7,19 @@ use App\Models\Ad;
 use App\Services\AdWatchStatsService;
 use App\Support\AdVideoDuration;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class AdController extends Controller
 {
+    /** Yaygın video uzantıları (mime tarayıcı/OS'a göre değişebilir). */
+    private const VIDEO_EXTENSIONS = [
+        'mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v', '3gp', '3g2',
+        'ogv', 'ogg', 'mpeg', 'mpg', 'mpe', 'wmv', 'flv', 'f4v',
+        'ts', 'mts', 'm2ts', 'vob', 'asf', 'rm', 'rmvb', 'divx',
+    ];
+
     public function __construct()
     {
         $this->middleware('auth');
@@ -37,31 +45,55 @@ class AdController extends Controller
     {
         $request->validate([
             'title' => 'nullable|string|max:255',
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            // link: panel UI yorumda; API/DB hazır
-            'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/webm|mimes:mp4,mov,webm|max:20480',
+            'media_type' => 'required|in:image,video',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'video' => 'nullable|file|max:20480',
+            'link' => 'nullable|url|max:500',
+            'cta_text' => 'nullable|string|max:120',
+            'reward_coins' => 'nullable|integer|min:1|max:1000',
             'is_active' => 'nullable|in:on,1,true',
             'sort_order' => 'nullable|integer|min:0',
         ]);
 
-        $imagePath = $request->file('image')->store('ads', 'public');
+        $mediaType = $request->input('media_type');
+        $imagePath = null;
+        $videoPath = null;
 
-        if (!$imagePath) {
-            return $this->fail($request, 'Görsel yüklenemedi. Storage yazma iznini kontrol edin.', 500);
+        if ($mediaType === 'image') {
+            if (!$request->hasFile('image')) {
+                return $this->fail($request, 'Görsel reklam için görsel zorunlu.', 422);
+            }
+            $imagePath = $request->file('image')->store('ads', 'public');
+            if (!$imagePath) {
+                return $this->fail($request, 'Görsel yüklenemedi. Storage yazma iznini kontrol edin.', 500);
+            }
+        } else {
+            if (!$request->hasFile('video')) {
+                return $this->fail($request, 'Video reklam için video zorunlu.', 422);
+            }
+            $videoPath = $this->storeValidatedVideo($request);
+            $imagePath = $this->ensureVideoPlaceholder();
         }
 
-        $videoPath = null;
-        if ($request->hasFile('video')) {
-            $videoPath = $this->storeValidatedVideo($request);
+        $link = trim((string) $request->input('link', ''));
+        if ($link === '') {
+            $link = 'https://yudengames.com/';
+        }
+
+        $ctaText = trim((string) $request->input('cta_text', ''));
+        if ($ctaText === '') {
+            $ctaText = Ad::DEFAULT_CTA_TEXT;
         }
 
         Ad::create([
             'title' => $request->input('title'),
             'image_path' => $imagePath,
-            'link' => 'https://yudengames.com/',
+            'link' => $link,
+            'cta_text' => $ctaText,
             'video_path' => $videoPath,
             'is_active' => $request->has('is_active'),
             'sort_order' => $request->integer('sort_order', 0),
+            'reward_coins' => max(1, min(1000, (int) $request->input('reward_coins', Ad::DEFAULT_REWARD_COINS))),
         ]);
 
         if ($request->expectsJson() || $request->ajax()) {
@@ -75,43 +107,71 @@ class AdController extends Controller
     {
         $request->validate([
             'title' => 'nullable|string|max:255',
+            'media_type' => 'required|in:image,video',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            // link: panel UI yorumda; mevcut değer korunur
-            'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/webm|mimes:mp4,mov,webm|max:20480',
-            'remove_video' => 'nullable|in:on,1,true',
+            'video' => 'nullable|file|max:20480',
+            'link' => 'nullable|url|max:500',
+            'cta_text' => 'nullable|string|max:120',
+            'reward_coins' => 'nullable|integer|min:1|max:1000',
             'is_active' => 'nullable|in:on,1,true',
             'sort_order' => 'nullable|integer|min:0',
         ]);
 
+        $mediaType = $request->input('media_type');
         $ad->title = $request->input('title');
         $ad->sort_order = $request->integer('sort_order', $ad->sort_order);
         $ad->is_active = $request->has('is_active');
-        // link + video_path panelde gizli; mevcut değerler korunur
+        $ad->reward_coins = max(1, min(1000, (int) $request->input('reward_coins', $ad->reward_coins ?: Ad::DEFAULT_REWARD_COINS)));
 
-        if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('ads', 'public');
+        if ($request->filled('link')) {
+            $ad->link = trim((string) $request->input('link'));
+        }
 
-            if (!$imagePath) {
-                return $this->fail($request, 'Görsel yüklenemedi. Storage yazma iznini kontrol edin.', 500);
+        if ($request->has('cta_text')) {
+            $ctaText = trim((string) $request->input('cta_text', ''));
+            $ad->cta_text = $ctaText !== '' ? $ctaText : Ad::DEFAULT_CTA_TEXT;
+        }
+
+        if ($mediaType === 'image') {
+            if ($request->hasFile('image')) {
+                $imagePath = $request->file('image')->store('ads', 'public');
+                if (!$imagePath) {
+                    return $this->fail($request, 'Görsel yüklenemedi. Storage yazma iznini kontrol edin.', 500);
+                }
+                $this->deletePublicFile($ad->image_path, true);
+                $ad->image_path = $imagePath;
             }
 
-            $this->deletePublicFile($ad->image_path);
-            $ad->image_path = $imagePath;
-        }
+            if (!$ad->image_path || $ad->image_path === '0' || $ad->image_path === Ad::VIDEO_PLACEHOLDER_PATH) {
+                return $this->fail($request, 'Görsel reklam için geçerli bir görsel gerekli.', 422);
+            }
 
-        if (!$ad->image_path || $ad->image_path === '0') {
-            return $this->fail($request, 'Geçerli bir görsel gerekli.', 422);
-        }
+            if ($ad->video_path) {
+                $this->deletePublicFile($ad->video_path);
+                $ad->video_path = null;
+            }
+        } else {
+            if ($request->hasFile('video')) {
+                $videoPath = $this->storeValidatedVideo($request);
+                $this->deletePublicFile($ad->video_path);
+                $ad->video_path = $videoPath;
+            }
 
-        if ($request->boolean('remove_video') && !$request->hasFile('video')) {
-            $this->deletePublicFile($ad->video_path);
-            $ad->video_path = null;
-        }
+            if (!$ad->video_path) {
+                return $this->fail($request, 'Video reklam için video zorunlu.', 422);
+            }
 
-        if ($request->hasFile('video')) {
-            $videoPath = $this->storeValidatedVideo($request);
-            $this->deletePublicFile($ad->video_path);
-            $ad->video_path = $videoPath;
+            // Görsel yüklenirse gerçek poster; yoksa placeholder (liste için)
+            if ($request->hasFile('image')) {
+                $imagePath = $request->file('image')->store('ads', 'public');
+                if (!$imagePath) {
+                    return $this->fail($request, 'Görsel yüklenemedi. Storage yazma iznini kontrol edin.', 500);
+                }
+                $this->deletePublicFile($ad->image_path, true);
+                $ad->image_path = $imagePath;
+            } elseif (!$ad->image_path || $ad->image_path === '0') {
+                $ad->image_path = $this->ensureVideoPlaceholder();
+            }
         }
 
         $ad->save();
@@ -125,7 +185,7 @@ class AdController extends Controller
 
     public function destroy(Ad $ad)
     {
-        $this->deletePublicFile($ad->image_path);
+        $this->deletePublicFile($ad->image_path, true);
         $this->deletePublicFile($ad->video_path);
 
         $ad->delete();
@@ -140,6 +200,8 @@ class AdController extends Controller
     private function storeValidatedVideo(Request $request): string
     {
         $file = $request->file('video');
+        $this->assertAcceptedVideo($file);
+
         $tmp = $file->getRealPath();
 
         $tooLong = AdVideoDuration::exceedsLimit($tmp, AdVideoDuration::MAX_SECONDS);
@@ -153,11 +215,6 @@ class AdController extends Controller
             throw ValidationException::withMessages(['video' => $msg]);
         }
 
-        if ($tooLong === null) {
-            // Süre okunamadıysa (webm vb.) yine de yükle; istemci tarafı 10 sn kontrolü yorumda hazır.
-            // İleride ffprobe kurulursa sunucu tarafı kesinleşir.
-        }
-
         $path = $file->store('ads/videos', 'public');
         if (!$path) {
             throw ValidationException::withMessages([
@@ -168,9 +225,59 @@ class AdController extends Controller
         return $path;
     }
 
-    private function deletePublicFile(?string $path): void
+    private function assertAcceptedVideo(UploadedFile $file): void
+    {
+        $ext = strtolower((string) $file->getClientOriginalExtension());
+        $mime = strtolower((string) ($file->getMimeType() ?: ''));
+
+        $extOk = $ext !== '' && in_array($ext, self::VIDEO_EXTENSIONS, true);
+        $mimeOk = $mime !== '' && (
+            str_starts_with($mime, 'video/')
+            || in_array($mime, [
+                'application/octet-stream',
+                'application/mp4',
+                'application/ogg',
+            ], true)
+        );
+
+        if (!$extOk && !$mimeOk) {
+            throw ValidationException::withMessages([
+                'video' => 'Desteklenmeyen dosya. Video formatı yükleyin (MP4, MOV, WebM, MKV, AVI vb., max 20 MB).',
+            ]);
+        }
+
+        if ($file->getSize() > 20 * 1024 * 1024) {
+            throw ValidationException::withMessages([
+                'video' => 'Video en fazla 20 MB olabilir.',
+            ]);
+        }
+    }
+
+    private function ensureVideoPlaceholder(): string
+    {
+        $path = Ad::VIDEO_PLACEHOLDER_PATH;
+        if (!Storage::disk('public')->exists($path)) {
+            $dir = dirname($path);
+            if (!Storage::disk('public')->exists($dir)) {
+                Storage::disk('public')->makeDirectory($dir);
+            }
+            // Minimal 1x1 PNG
+            $png = base64_decode(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+            );
+            Storage::disk('public')->put($path, $png);
+        }
+
+        return $path;
+    }
+
+    private function deletePublicFile(?string $path, bool $protectPlaceholder = false): void
     {
         if (!$path || $path === '0' || filter_var($path, FILTER_VALIDATE_URL)) {
+            return;
+        }
+
+        if ($protectPlaceholder && $path === Ad::VIDEO_PLACEHOLDER_PATH) {
             return;
         }
 

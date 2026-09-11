@@ -7,7 +7,7 @@
     <div class="row align-items-center">
         <div class="col-12 col-md-6">
             <h3 class="mb-1">Reklamlar</h3>
-            <p class="text-muted mb-0 small">Liste ve içerik yönetimi</p>
+            <p class="text-muted mb-0 small">Ya görsel ya video (ikisi birden değil) · max 10 sn · yönlendirme linki · izleme jetonu</p>
         </div>
         <div class="col-12 col-md-6 mt-2 mt-md-0 text-md-end">
             <button type="button" class="btn btn-outline-secondary me-2" id="btnAdWatchStats" data-bs-toggle="modal" data-bs-target="#adWatchStatsModal">
@@ -28,7 +28,10 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Başlık</th>
-                                <th>Görsel</th>
+                                <th>Önizleme</th>
+                                <th>Medya</th>
+                                <th>Jeton</th>
+                                <th>Link</th>
                                 <th>Sıra</th>
                                 <th>Durum</th>
                                 <th>İşlemler</th>
@@ -40,8 +43,30 @@
                                 <td>{{ $ad->id }}</td>
                                 <td>{{ $ad->title ?: '—' }}</td>
                                 <td>
-                                    <img src="{{ $ad->image_url }}" alt="Ad {{ $ad->id }}" class="ad-thumb"
-                                         style="width:120px;height:70px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px;padding:4px;">
+                                    @if($ad->isVideoAd())
+                                        <div class="ad-thumb-video" title="Video reklam">
+                                            <i class="fa fa-play-circle"></i>
+                                            <span>Video</span>
+                                        </div>
+                                    @else
+                                        <img src="{{ $ad->image_url }}" alt="Ad {{ $ad->id }}" class="ad-thumb"
+                                             style="width:120px;height:70px;object-fit:contain;background:#fff;border:1px solid #eee;border-radius:4px;padding:4px;">
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($ad->isVideoAd())
+                                        <span class="badge bg-info text-dark">Video ≤10sn</span>
+                                    @else
+                                        <span class="badge bg-secondary">Görsel</span>
+                                    @endif
+                                </td>
+                                <td><strong>+{{ (int) ($ad->reward_coins ?? 1) }}</strong></td>
+                                <td class="small" style="max-width:180px;">
+                                    @if($ad->link)
+                                        <a href="{{ $ad->link }}" target="_blank" rel="noopener" class="text-break">{{ $ad->resolvedCtaText() }}</a>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
                                 <td>{{ $ad->sort_order }}</td>
                                 <td>
@@ -55,7 +80,13 @@
                                     <button type="button" class="btn btn-sm btn-warning btn-edit-ad"
                                             data-id="{{ $ad->id }}"
                                             data-title="{{ $ad->title }}"
-                                            data-image-url="{{ $ad->image_url }}"
+                                            data-image-url="{{ $ad->image_path === \App\Models\Ad::VIDEO_PLACEHOLDER_PATH ? '' : $ad->image_url }}"
+                                            data-video-url="{{ $ad->video_url }}"
+                                            data-link="{{ $ad->link }}"
+                                            data-cta-text="{{ $ad->cta_text }}"
+                                            data-reward-coins="{{ (int) ($ad->reward_coins ?? 1) }}"
+                                            data-media-type="{{ $ad->mediaType() }}"
+                                            data-has-video="{{ $ad->isVideoAd() ? 1 : 0 }}"
                                             data-sort="{{ $ad->sort_order }}"
                                             data-active="{{ $ad->is_active ? 1 : 0 }}">Düzenle</button>
                                     <button type="button" class="btn btn-sm btn-danger btn-delete-ad" data-id="{{ $ad->id }}">Sil</button>
@@ -63,7 +94,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="6" class="text-center text-muted">Henüz reklam yok.</td>
+                                <td colspan="9" class="text-center text-muted">Henüz reklam yok.</td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -117,26 +148,42 @@
                         <input type="text" name="title" class="form-control" placeholder="Opsiyonel">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label d-block">Medya tipi <span class="text-danger">*</span></label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check create-media-type" name="media_type" id="create_media_image" value="image" checked autocomplete="off">
+                            <label class="btn btn-outline-primary" for="create_media_image">Görsel</label>
+                            <input type="radio" class="btn-check create-media-type" name="media_type" id="create_media_video" value="video" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="create_media_video">Video</label>
+                        </div>
+                        <div class="form-text">Ya görsel ya video — ikisi birden seçilemez.</div>
+                    </div>
+                    <div class="mb-3 create-image-block">
                         <label class="form-label">Görsel <span class="text-danger">*</span></label>
-                        <input type="file" name="image" class="form-control" accept="image/*" required>
+                        <input type="file" name="image" id="create-image" class="form-control" accept="image/*">
+                        <div class="form-text">JPEG / PNG / GIF / WebP · max 4 MB</div>
                     </div>
-                    {{--
-                    VIDEO (şimdilik gizli — ileride yorumu kaldır):
-                    Görsel yerine / yanında kısa video yüklenebilir. Max 10 sn.
+                    <div class="mb-3 create-video-block d-none">
+                        <label class="form-label">Video <span class="text-danger">*</span></label>
+                        <input type="file" name="video" id="create-video" class="form-control ad-video-input" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.3gp,.mpeg,.mpg,.wmv,.flv,.ogv">
+                        <div class="form-text text-warning">
+                            <strong>Max 10 saniye.</strong> Yeni video yüklersen eski değişir.
+                            Format: yaygın video türleri (MP4, MOV, WebM, MKV, AVI vb.) · max 20 MB.
+                        </div>
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Video <span class="text-muted small">(opsiyonel, max 10 sn)</span></label>
-                        <input type="file" name="video" class="form-control ad-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm">
-                        <div class="form-text text-warning">Uyarı: Video en fazla 10 saniye olmalıdır. Daha uzun videolar reddedilir. Önerilen format: MP4.</div>
+                        <label class="form-label">Yönlendirme linki</label>
+                        <input type="url" name="link" class="form-control" placeholder="https://yudengames.com/" value="https://yudengames.com/">
+                        <div class="form-text">Site, Play Store, App Store vb. CTA tıklanınca açılır.</div>
                     </div>
-                    --}}
-                    {{--
-                    LINK (şimdilik gizli — ileride yorumu kaldır):
-                    API'de link dönmeye devam eder; mevcut kayıtlar korunur.
                     <div class="mb-3">
-                        <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
-                        <input type="url" name="link" class="form-control" placeholder="https://yudengames.com/">
+                        <label class="form-label">CTA metni</label>
+                        <input type="text" name="cta_text" class="form-control" value="Daha fazla bilgi al" maxlength="120">
                     </div>
-                    --}}
+                    <div class="mb-3">
+                        <label class="form-label">İzleme jeton ödülü <span class="text-danger">*</span></label>
+                        <input type="number" name="reward_coins" class="form-control" value="1" min="1" max="1000" required>
+                        <div class="form-text">Kullanıcı bu reklamı izleyince kaç jeton alacak.</div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
                         <input type="number" name="sort_order" class="form-control" value="0" min="0">
@@ -168,36 +215,51 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3 text-center">
-                        <img id="edit-preview" src="" alt="Önizleme" style="max-width:100%;max-height:120px;object-fit:contain;border:1px solid #eee;border-radius:4px;padding:4px;">
+                        <img id="edit-preview" src="" alt="Önizleme" class="d-none" style="max-width:100%;max-height:120px;object-fit:contain;border:1px solid #eee;border-radius:4px;padding:4px;">
+                        <div id="edit-video-wrap" class="mt-2 d-none">
+                            <video id="edit-video-preview" controls playsinline muted style="max-width:100%;max-height:160px;background:#000;border-radius:4px;"></video>
+                            <div class="small text-muted mt-1">Mevcut video</div>
+                        </div>
+                        <div id="edit-media-empty" class="text-muted small d-none">Önizleme yok</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Başlık</label>
                         <input type="text" name="title" id="edit-title" class="form-control">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Yeni Görsel (opsiyonel)</label>
-                        <input type="file" name="image" class="form-control" accept="image/*">
+                        <label class="form-label d-block">Medya tipi <span class="text-danger">*</span></label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check edit-media-type" name="media_type" id="edit_media_image" value="image" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="edit_media_image">Görsel</label>
+                            <input type="radio" class="btn-check edit-media-type" name="media_type" id="edit_media_video" value="video" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="edit_media_video">Video</label>
+                        </div>
+                        <div class="form-text">Tip değişince diğer medya kaldırılır. Ya görsel ya video.</div>
                     </div>
-                    {{--
-                    VIDEO (şimdilik gizli — ileride yorumu kaldır):
-                    <div class="mb-3">
-                        <label class="form-label">Video <span class="text-muted small">(opsiyonel, max 10 sn)</span></label>
-                        <input type="file" name="video" class="form-control ad-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm">
-                        <div class="form-text text-warning">Uyarı: Video en fazla 10 saniye olmalıdır. Daha uzun videolar reddedilir.</div>
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" name="remove_video" id="edit_remove_video" value="1">
-                            <label class="form-check-label" for="edit_remove_video">Mevcut videoyu kaldır</label>
+                    <div class="mb-3 edit-image-block">
+                        <label class="form-label">Görsel</label>
+                        <input type="file" name="image" id="edit-image" class="form-control" accept="image/*">
+                        <div class="form-text edit-image-hint">Görsel tipinde yeni dosya seçmezsen mevcut kalır.</div>
+                    </div>
+                    <div class="mb-3 edit-video-block d-none">
+                        <label class="form-label">Video</label>
+                        <input type="file" name="video" id="edit-video" class="form-control ad-video-input" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.3gp,.mpeg,.mpg,.wmv,.flv,.ogv">
+                        <div class="form-text text-warning">
+                            <strong>Max 10 saniye.</strong> Yeni video yüklersen eski değişir. Yaygın video formatları · max 20 MB.
                         </div>
                     </div>
-                    --}}
-                    {{--
-                    LINK (şimdilik gizli — ileride yorumu kaldır):
                     <div class="mb-3">
-                        <label class="form-label">Link <span class="text-muted small">(mobilde tıklanınca açılır)</span></label>
+                        <label class="form-label">Yönlendirme linki</label>
                         <input type="url" name="link" id="edit-link" class="form-control" placeholder="https://yudengames.com/">
                     </div>
-                    --}}
-                    {{-- link + video_path alt yapı hazır; panel UI yorumda --}}
+                    <div class="mb-3">
+                        <label class="form-label">CTA metni</label>
+                        <input type="text" name="cta_text" id="edit-cta-text" class="form-control" maxlength="120" placeholder="Daha fazla bilgi al">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">İzleme jeton ödülü <span class="text-danger">*</span></label>
+                        <input type="number" name="reward_coins" id="edit-reward-coins" class="form-control" value="1" min="1" max="1000" required>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Sıra</label>
                         <input type="number" name="sort_order" id="edit-sort" class="form-control" min="0">
@@ -222,6 +284,11 @@
 .page-title { margin-top: 2rem !important; padding-top: 1rem !important; }
 .ad-thumb { transition: transform .15s ease; }
 .ad-thumb:hover { transform: scale(1.15); position: relative; z-index: 2; }
+.ad-thumb-video {
+    width: 120px; height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .15rem; background: #111; color: #fff; border-radius: 4px; font-size: .75rem;
+}
+.ad-thumb-video i { font-size: 1.4rem; }
 .ad-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 @media (min-width: 768px) { .ad-stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .ad-stat-card { border: 1px solid #e9ecef; border-radius: .5rem; padding: .75rem 1rem; background: #fafafa; }
@@ -243,6 +310,8 @@ $(function () {
     toastr.options = { closeButton: true, progressBar: true, positionClass: 'toast-top-right', timeOut: 4000 };
 
     var adStatsLoaded = false;
+    var editHasVideo = false;
+    var editHasImage = false;
 
     function fmt(n) {
         return Number(n || 0).toLocaleString('tr-TR');
@@ -251,6 +320,55 @@ $(function () {
     function esc(s) {
         return $('<div/>').text(s == null ? '' : String(s)).html();
     }
+
+    function syncCreateMedia() {
+        var type = $('input[name="media_type"]:checked', '#adCreateForm').val();
+        if (type === 'video') {
+            $('.create-image-block').addClass('d-none');
+            $('.create-video-block').removeClass('d-none');
+            $('#create-image').prop('required', false).val('');
+            $('#create-video').prop('required', true);
+        } else {
+            $('.create-video-block').addClass('d-none');
+            $('.create-image-block').removeClass('d-none');
+            $('#create-video').prop('required', false).val('');
+            $('#create-image').prop('required', true);
+        }
+    }
+
+    function syncEditMedia() {
+        var type = $('input[name="media_type"]:checked', '#adEditForm').val();
+        if (type === 'video') {
+            $('.edit-image-block').addClass('d-none');
+            $('.edit-video-block').removeClass('d-none');
+            $('#edit-image').val('');
+            $('#edit-video').prop('required', !editHasVideo);
+            if (editHasVideo) {
+                $('#edit-video-wrap').removeClass('d-none');
+            }
+            if (editHasImage) {
+                $('#edit-preview').removeClass('d-none');
+            } else {
+                $('#edit-preview').addClass('d-none');
+            }
+        } else {
+            $('.edit-video-block').addClass('d-none');
+            $('.edit-image-block').removeClass('d-none');
+            $('#edit-video').prop('required', false).val('');
+            $('#edit-video-wrap').addClass('d-none');
+            $('#edit-image').prop('required', !editHasImage);
+            if (editHasImage) {
+                $('#edit-preview').removeClass('d-none');
+            } else {
+                $('#edit-preview').addClass('d-none');
+            }
+        }
+        $('#edit-media-empty').toggleClass('d-none', editHasImage || (type === 'video' && editHasVideo));
+    }
+
+    $(document).on('change', '.create-media-type', syncCreateMedia);
+    $(document).on('change', '.edit-media-type', syncEditMedia);
+    syncCreateMedia();
 
     function renderUserTable(rows, emptyMsg) {
         if (!rows || !rows.length) {
@@ -285,18 +403,18 @@ $(function () {
         var maxDaily = Math.max.apply(null, daily.map(function (d) { return d.watch_count; }).concat([1]));
 
         var html = '';
-        html += '<p class="text-muted small mb-3">24 saatte en fazla <strong>' + fmt(q.max_per_window) + '</strong> izleme hakkı · her izleme <strong>+1 jeton</strong></p>';
+        html += '<p class="text-muted small mb-3">24 saatte en fazla <strong>' + fmt(q.max_per_window) + '</strong> izleme hakkı · jeton ödülü <strong>reklama göre</strong> (reward_coins) değişir · medya: görsel <em>veya</em> video</p>';
 
         html += '<div class="ad-stats-grid mb-2">';
         html += '<div class="ad-stat-card"><div class="label">Bugün izleme</div><div class="value">' + fmt(today.total_watches) + '</div><div class="sub">' + fmt(today.unique_users) + ' kullanıcı</div></div>';
-        html += '<div class="ad-stat-card"><div class="label">Bugün jeton</div><div class="value">' + fmt(today.coins_given) + '</div><div class="sub">verilen ödül</div></div>';
+        html += '<div class="ad-stat-card"><div class="label">Bugün jeton</div><div class="value">' + fmt(today.coins_given) + '</div><div class="sub">verilen ödül (toplam)</div></div>';
         html += '<div class="ad-stat-card"><div class="label">Toplam izleme</div><div class="value">' + fmt(all.total_watches) + '</div><div class="sub">' + fmt(all.unique_users) + ' kullanıcı</div></div>';
         html += '<div class="ad-stat-card"><div class="label">Toplam jeton</div><div class="value">' + fmt(all.coins_given) + '</div><div class="sub">bugüne kadar</div></div>';
         html += '</div>';
 
         html += '<div class="ad-stats-grid mb-1" style="grid-template-columns:repeat(2,minmax(0,1fr))">';
         html += '<div class="ad-stat-card"><div class="label">Aktif pencere</div><div class="value">' + fmt(q.active_windows) + '</div><div class="sub">son ' + fmt(q.window_hours) + ' saat içinde izleyen</div></div>';
-        html += '<div class="ad-stat-card"><div class="label">Hakkı dolmuş</div><div class="value">' + fmt(q.exhausted_now) + '</div><div class="sub">şu an 3/3 kullanan</div></div>';
+        html += '<div class="ad-stat-card"><div class="label">Hakkı dolmuş</div><div class="value">' + fmt(q.exhausted_now) + '</div><div class="sub">şu an ' + fmt(q.max_per_window) + '/' + fmt(q.max_per_window) + ' kullanan</div></div>';
         html += '</div>';
 
         html += '<div class="ad-stats-section-title">Son 7 gün <span class="text-muted fw-normal">(çubuk: izleme · sağ: benzersiz kullanıcı)</span></div>';
@@ -345,18 +463,77 @@ $(function () {
 
     $('.btn-edit-ad').on('click', function () {
         var id = $(this).data('id');
+        var videoUrl = $(this).data('video-url') || '';
+        var imageUrl = $(this).data('image-url') || '';
+        var mediaType = $(this).data('media-type') || 'image';
+        editHasVideo = String($(this).data('has-video')) === '1' && !!videoUrl;
+        editHasImage = !!imageUrl;
+
         $('#adEditForm').attr('action', '/admin/ads/' + id);
         $('#edit-title').val($(this).data('title') || '');
         $('#edit-sort').val($(this).data('sort'));
-        $('#edit-preview').attr('src', $(this).data('image-url'));
+        $('#edit-link').val($(this).data('link') || '');
+        $('#edit-cta-text').val($(this).data('cta-text') || 'Daha fazla bilgi al');
+        $('#edit-reward-coins').val($(this).data('reward-coins') || 1);
         $('#edit_is_active').prop('checked', String($(this).data('active')) === '1');
+        $('#edit-image').val('');
+        $('#edit-video').val('');
+
+        if (editHasImage) {
+            $('#edit-preview').attr('src', imageUrl).removeClass('d-none');
+        } else {
+            $('#edit-preview').removeAttr('src').addClass('d-none');
+        }
+
+        if (editHasVideo) {
+            $('#edit-video-preview').attr('src', videoUrl);
+            $('#edit-video-wrap').removeClass('d-none');
+        } else {
+            $('#edit-video-preview').removeAttr('src');
+            $('#edit-video-wrap').addClass('d-none');
+        }
+
+        if (mediaType === 'video') {
+            $('#edit_media_video').prop('checked', true);
+        } else {
+            $('#edit_media_image').prop('checked', true);
+        }
+        syncEditMedia();
         $('#adEditModal').modal('show');
     });
 
     $('#adCreateForm, #adEditForm').on('submit', function (e) {
         e.preventDefault();
         var $form = $(this);
+        var type = $('input[name="media_type"]:checked', $form).val();
+        if ($form.attr('id') === 'adCreateForm') {
+            if (type === 'image' && !$('#create-image')[0].files.length) {
+                toastr.error('Görsel reklam için görsel seçin.');
+                return;
+            }
+            if (type === 'video' && !$('#create-video')[0].files.length) {
+                toastr.error('Video reklam için video seçin.');
+                return;
+            }
+        } else {
+            if (type === 'image' && !editHasImage && !$('#edit-image')[0].files.length) {
+                toastr.error('Görsel reklam için görsel seçin.');
+                return;
+            }
+            if (type === 'video' && !editHasVideo && !$('#edit-video')[0].files.length) {
+                toastr.error('Video reklam için video seçin.');
+                return;
+            }
+        }
+
         var formData = new FormData(this);
+        // XOR: seçilmeyen medya alanını gönderme
+        if (type === 'image') {
+            formData.delete('video');
+        } else {
+            formData.delete('image');
+        }
+
         $.ajax({
             url: $form.attr('action'),
             type: 'POST',
@@ -394,8 +571,6 @@ $(function () {
         });
     });
 
-    /*
-    // VIDEO max 10 sn istemci kontrolü — panel video alanı açılınca yorumu kaldır
     var AD_VIDEO_MAX_SEC = 10;
     $(document).on('change', '.ad-video-input', function () {
         var input = this;
@@ -424,7 +599,6 @@ $(function () {
         };
         video.src = url;
     });
-    */
 });
 </script>
 @endpush

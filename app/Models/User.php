@@ -50,6 +50,8 @@ class User extends Authenticatable
         'last_active_at',
         'device_token',
         'device_id',
+        'platform',
+        'user_agent',
         'account_status',
         'is_bot',
         'is_premium',
@@ -205,6 +207,91 @@ class User extends Authenticatable
         $base = rtrim($baseUrl ?: (string) config('app.url', 'https://bil-bakalim.com'), '/');
 
         return $base . '/storage/' . $path;
+    }
+
+    /** Premium üye jeton tabanı — 0'a düşmez (reklam izlemiş gibi min 1). */
+    public const PREMIUM_COINS_FLOOR = 1;
+
+    /**
+     * Premium üyelik aktif mi?
+     * is_premium true ve (expires yok veya gelecekte).
+     */
+    public function hasActivePremium(): bool
+    {
+        if (!(bool) $this->is_premium) {
+            return false;
+        }
+
+        if ($this->premium_expires_at === null) {
+            return true;
+        }
+
+        return $this->premium_expires_at->isFuture();
+    }
+
+    public function coinsFloor(): int
+    {
+        return $this->hasActivePremium() ? self::PREMIUM_COINS_FLOOR : 0;
+    }
+
+    /** Önerilen bakiyeyi tabana göre sınırla. */
+    public function clampCoinsBalance(int $balance): int
+    {
+        return max($this->coinsFloor(), $balance);
+    }
+
+    /** Harcama sonrası tabanın altında kalınır mı? */
+    public function canAffordSpend(int $amount): bool
+    {
+        $amount = max(0, (int) $amount);
+
+        return ((int) $this->coins - $this->coinsFloor()) >= $amount;
+    }
+
+    /**
+     * Jeton düş; premiumda PREMIUM_COINS_FLOOR altına inmez.
+     * @return int Gerçekten düşülen miktar
+     */
+    public function deductCoinsRespectingFloor(int $amount): int
+    {
+        $amount = max(0, (int) $amount);
+        $floor = $this->coinsFloor();
+        $current = (int) $this->coins;
+
+        if ($current < $floor) {
+            $this->forceFill(['coins' => $floor])->save();
+            $current = $floor;
+        }
+
+        $actual = min($amount, max(0, $current - $floor));
+        if ($actual <= 0) {
+            return 0;
+        }
+
+        $this->decrement('coins', $actual);
+        $this->refresh();
+
+        return $actual;
+    }
+
+    /**
+     * Premium aktifken coins < floor ise floor'a tamamla.
+     * @return bool Bakiye yükseltildi mi
+     */
+    public function ensurePremiumCoinsFloor(): bool
+    {
+        $floor = $this->coinsFloor();
+        if ($floor <= 0) {
+            return false;
+        }
+
+        if ((int) $this->coins >= $floor) {
+            return false;
+        }
+
+        $this->forceFill(['coins' => $floor])->save();
+
+        return true;
     }
 
     // Scopes

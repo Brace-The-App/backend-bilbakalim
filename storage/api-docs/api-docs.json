@@ -25,12 +25,12 @@
                 "tags": [
                     "Ads"
                 ],
-                "summary": "Rastgele reklam görseli al",
-                "description": "Hak varsa rastgele aktif reklam döner. Hak düşmez; hak /api/ad-watch/reward ile düşer. 24 saatte max 3 izleme.",
+                "summary": "Rastgele reklam al (görsel VEYA video)",
+                "description": "Hak varsa rastgele aktif reklam döner. media_type=image ise yalnızca image_url; media_type=video ise video_url (max 10 sn) kullanılır — ikisi birden seçilmez. CTA: cta_text + link. Ödül: reward_coins — izleme bitince POST /api/ad-watch/reward (body: ad_id). Hak burada düşmez.",
                 "operationId": "088acec6787fb54a7c5337f74530eee4",
                 "responses": {
                     "200": {
-                        "description": "Başarılı",
+                        "description": "Reklam hazır veya hak dolu",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -44,6 +44,7 @@
                                             "example": true
                                         },
                                         "count": {
+                                            "description": "Penceredeki kullanılan hak",
                                             "type": "integer",
                                             "example": 1
                                         },
@@ -62,35 +63,106 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Reklam görseli hazır."
+                                            "example": "Reklam hazır."
                                         },
                                         "data": {
                                             "properties": {
                                                 "id": {
                                                     "type": "integer",
-                                                    "example": 1
+                                                    "example": 5
                                                 },
                                                 "title": {
                                                     "type": "string",
-                                                    "example": "Yuden Games",
+                                                    "example": "Test Video Reklam",
                                                     "nullable": true
                                                 },
-                                                "image_url": {
+                                                "media_type": {
                                                     "type": "string",
-                                                    "example": "https://bil-bakalim.com/storage/ads/yuden-games.png"
+                                                    "enum": [
+                                                        "image",
+                                                        "video"
+                                                    ],
+                                                    "example": "video"
+                                                },
+                                                "has_video": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "image_url": {
+                                                    "description": "Görsel reklamda dolu; video reklamda genelde null",
+                                                    "type": "string",
+                                                    "example": "https://bilbakalim.online/storage/ads/poster.jpg",
+                                                    "nullable": true
+                                                },
+                                                "video_url": {
+                                                    "type": "string",
+                                                    "example": "https://bilbakalim.online/storage/ads/videos/promo.mp4",
+                                                    "nullable": true
+                                                },
+                                                "max_video_seconds": {
+                                                    "type": "integer",
+                                                    "example": 10
                                                 },
                                                 "link": {
                                                     "type": "string",
                                                     "example": "https://yudengames.com/",
                                                     "nullable": true
                                                 },
-                                                "video_url": {
+                                                "cta_text": {
                                                     "type": "string",
-                                                    "example": "https://bil-bakalim.com/storage/ads/videos/promo.mp4",
-                                                    "nullable": true
+                                                    "example": "Daha fazla bilgi al"
+                                                },
+                                                "reward_coins": {
+                                                    "description": "İzleme tamamlanınca verilecek jeton",
+                                                    "type": "integer",
+                                                    "example": 5
                                                 }
                                             },
                                             "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Kimlik doğrulama gerekli",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Aktif reklam yok",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "allowed": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Aktif reklam bulunamadı."
+                                        },
+                                        "data": {
+                                            "example": null,
                                             "nullable": true
                                         }
                                     },
@@ -110,10 +182,10 @@
         "/api/ad-watch/reward": {
             "post": {
                 "tags": [
-                    "Ad Watch"
+                    "Ads"
                 ],
                 "summary": "Reklam izleme ödülü",
-                "description": "Reklam izlendikten sonra +1 coin verir ve 24 saatlik 3 hak kotasından 1 düşer.",
+                "description": "Görsel veya video reklam izlendikten sonra reklamın reward_coins kadar jeton verir (ad_id sayısal ve kayıtlıysa) ve 24 saatlik 3 hak kotasından 1 düşer. ad_id yoksa varsayılan 1 jeton.",
                 "operationId": "fbfaf0c3888ef98f81ae7d4685a3e5cc",
                 "requestBody": {
                     "required": false,
@@ -122,14 +194,14 @@
                             "schema": {
                                 "properties": {
                                     "ad_id": {
-                                        "description": "Reklam ID (opsiyonel)",
-                                        "type": "string",
-                                        "example": "ad_12345"
+                                        "description": "GET /api/ads/next içindeki data.id (sayısal)",
+                                        "type": "integer",
+                                        "example": 5
                                     },
                                     "ad_type": {
-                                        "description": "Reklam tipi (opsiyonel)",
+                                        "description": "İstemci tipi: image | video | interstitial",
                                         "type": "string",
-                                        "example": "interstitial"
+                                        "example": "video"
                                     }
                                 },
                                 "type": "object"
@@ -139,7 +211,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Başarılı - Coin eklendi",
+                        "description": "Başarılı - jeton eklendi",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -177,7 +249,16 @@
                                             "properties": {
                                                 "coins_earned": {
                                                     "type": "integer",
-                                                    "example": 1
+                                                    "example": 5
+                                                },
+                                                "reward_coins": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "ad_id": {
+                                                    "type": "integer",
+                                                    "example": 5,
+                                                    "nullable": true
                                                 },
                                                 "balance_before": {
                                                     "type": "integer",
@@ -185,11 +266,11 @@
                                                 },
                                                 "balance_after": {
                                                     "type": "integer",
-                                                    "example": 11
+                                                    "example": 15
                                                 },
                                                 "user_coins": {
                                                     "type": "integer",
-                                                    "example": 11
+                                                    "example": 15
                                                 }
                                             },
                                             "type": "object"
@@ -210,9 +291,41 @@
                                             "type": "boolean",
                                             "example": false
                                         },
+                                        "allowed": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
                                         "message": {
                                             "type": "string",
-                                            "example": "Reklam hakkınız doldu."
+                                            "example": "Reklam hakkınız doldu. İlk izlemeden 24 saat sonra yenilenir."
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "max": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "remaining": {
+                                            "type": "integer",
+                                            "example": 0
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Kimlik doğrulama gerekli",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
                                         }
                                     },
                                     "type": "object"
@@ -746,7 +859,7 @@
                     "Auth"
                 ],
                 "summary": "User Detail",
-                "description": "Get user detail",
+                "description": "Kullanıcı detayı. Aktif premium ise coins 0 ise otomatik min 1'e tamamlanır (premium jeton tabanı). is_premium RevenueCat ile override edilebilir.",
                 "operationId": "detail",
                 "responses": {
                     "200": {
@@ -774,8 +887,9 @@
                                                     "example": "Test User"
                                                 },
                                                 "coins": {
+                                                    "description": "Premium aktifken asla 0 olmaz (min 1)",
                                                     "type": "integer",
-                                                    "example": 1200
+                                                    "example": 1
                                                 },
                                                 "diamonds": {
                                                     "type": "integer",
@@ -2751,7 +2865,7 @@
                     "Duel"
                 ],
                 "summary": "Düello Durumu",
-                "description": "Düello durumunu, mevcut soruyu ve oyuncu bilgilerini getirir.",
+                "description": "Düello durumu, mevcut soru ve oyuncular. question_value = mevcut_soru.coin_value × masa_çarpanı (kolay=1, orta=2, zor=3; x1/x2/x4/x8). Maç içi ekstra teklif çarpanı bu alana dahil değildir (cevap anında uygulanır). Oyuncu is_premium bilgisi döner. Premium üyede coins tabanı min 1.",
                 "operationId": "9cf9f389cbae5663df48ca6293c3a25e",
                 "parameters": [
                     {
@@ -2776,6 +2890,59 @@
                                             "example": true
                                         },
                                         "duel": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 101
+                                                },
+                                                "multiplier": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "x1",
+                                                        "x2",
+                                                        "x4",
+                                                        "x8"
+                                                    ],
+                                                    "example": "x2"
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "active"
+                                                },
+                                                "current_question_number": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "question_value": {
+                                                    "description": "coin_value × masa çarpanı; örn. zor(3)×x2=6",
+                                                    "type": "integer",
+                                                    "example": 6
+                                                },
+                                                "current_question": {
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "integer",
+                                                            "example": 1768
+                                                        },
+                                                        "question_level": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "easy",
+                                                                "medium",
+                                                                "hard"
+                                                            ],
+                                                            "example": "hard"
+                                                        },
+                                                        "coin_value": {
+                                                            "description": "Kolay=1 Orta=2 Zor=3",
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        }
+                                                    },
+                                                    "type": "object",
+                                                    "nullable": true
+                                                }
+                                            },
                                             "type": "object"
                                         }
                                     },
@@ -3349,7 +3516,7 @@
                     "Duel"
                 ],
                 "summary": "Cevap Gönder",
-                "description": "Düello sorusuna cevap gönderir. Her iki oyuncu da cevap verdiğinde coin transferi yapılır.",
+                "description": "Düello sorusuna cevap. Stake = soru.coin_value (kolay=1/orta=2/zor=3) × masa çarpanı (x1/x2/x4/x8) × opsiyonel maç içi teklif (2/4/6/8). İkisi doğru: transfer yok. Biri doğru biri yanlış: kaybedenden kazanana aktarım (bakiyede ne varsa; premium min 1 kalır). selected_answer=0 süre bitimi/yanlış sayılır.",
                 "operationId": "a9f0ac239ac8af12e6dc0c6cedc5eb47",
                 "parameters": [
                     {
@@ -3369,9 +3536,10 @@
                             "schema": {
                                 "properties": {
                                     "selected_answer": {
-                                        "description": "Seçilen cevap",
+                                        "description": "0=süre bitti/cevap yok (yanlış)",
                                         "type": "string",
                                         "enum": [
+                                            "0",
                                             "1",
                                             "2",
                                             "3",
@@ -3389,6 +3557,7 @@
                                     "selected_answer": {
                                         "type": "string",
                                         "enum": [
+                                            "0",
                                             "1",
                                             "2",
                                             "3",
@@ -3428,6 +3597,11 @@
                                         "waiting_for_opponent": {
                                             "type": "boolean",
                                             "example": true
+                                        },
+                                        "question_value": {
+                                            "description": "Bu sorunun nihai stake değeri (coin_value × masa × teklif)",
+                                            "type": "integer",
+                                            "example": 6
                                         }
                                     },
                                     "type": "object"
@@ -5026,7 +5200,7 @@
                     "Payments"
                 ],
                 "summary": "Ödeme işle",
-                "description": "RevenueCat onayı sonrası çağrılır. type değerine göre coin/elmas/premium/joker kullanıcı hesabına tanımlanır.",
+                "description": "RevenueCat onayı sonrası çağrılır. type=premium: is_premium + süre; coins 0 ise min 1 yapılır (premium jeton tabanı). type=coin/diamond/joker ilgili grant.",
                 "operationId": "f8e9cfbc3af173fa75cac87ebeee6962",
                 "requestBody": {
                     "required": true,
@@ -5043,7 +5217,7 @@
                                             "premium",
                                             "joker"
                                         ],
-                                        "example": "coin"
+                                        "example": "premium"
                                     },
                                     "package_id": {
                                         "description": "Paket ID",
@@ -5083,7 +5257,7 @@
                                             "premium",
                                             "joker"
                                         ],
-                                        "example": "coin"
+                                        "example": "premium"
                                     },
                                     "package_id": {
                                         "type": "integer",
@@ -5132,15 +5306,16 @@
                                                 },
                                                 "grant_type": {
                                                     "type": "string",
-                                                    "example": "coin"
+                                                    "example": "premium"
                                                 },
                                                 "amount": {
                                                     "type": "string",
                                                     "example": "39.99 TRY"
                                                 },
                                                 "user_coins": {
+                                                    "description": "Premium sonrası min 1 olabilir",
                                                     "type": "integer",
-                                                    "example": 1600
+                                                    "example": 1
                                                 },
                                                 "user_diamond_balance": {
                                                     "type": "integer",
@@ -5914,7 +6089,7 @@
                     "Quiz"
                 ],
                 "summary": "Normal Quiz Cevap Gönder",
-                "description": "Normal quiz oyununda soruya cevap gönderir.",
+                "description": "Normal quiz cevabı. earned_coins = ±question.coin_value (kolay=1, orta=2, zor=3). Premium aktifken coins 0'a inmez (min 1); düşük bakiyede requires_ad_watch açılmaz.",
                 "operationId": "9d0b0c7883477fafb9afe742cdd194e3",
                 "requestBody": {
                     "required": true,
@@ -5987,8 +6162,9 @@
                                             "example": "2"
                                         },
                                         "earned_coins": {
+                                            "description": "Kolay±1 Orta±2 Zor±3",
                                             "type": "integer",
-                                            "example": 50
+                                            "example": 2
                                         },
                                         "game_stats": {
                                             "type": "object"
@@ -8752,10 +8928,6 @@
         {
             "name": "Ads",
             "description": "Ads"
-        },
-        {
-            "name": "Ad Watch",
-            "description": "Ad Watch"
         },
         {
             "name": "Referral",

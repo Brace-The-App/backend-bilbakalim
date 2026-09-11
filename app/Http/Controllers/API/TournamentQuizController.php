@@ -128,8 +128,8 @@ class TournamentQuizController extends Controller
             ], 400);
         }
 
-        // Katılım ücreti kontrolü
-        if ($tournament->entry_fee > 0 && $user->coins < $tournament->entry_fee) {
+        // Katılım ücreti kontrolü (premium taban: ücret sonrası en az floor kalmalı)
+        if ($tournament->entry_fee > 0 && !$user->canAffordSpend((int) $tournament->entry_fee)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Yeterli jetonunuz yok.'
@@ -138,7 +138,7 @@ class TournamentQuizController extends Controller
 
         // Katılım ücretini düş
         if ($tournament->entry_fee > 0) {
-            $user->decrement('coins', $tournament->entry_fee);
+            $user->deductCoinsRespectingFloor((int) $tournament->entry_fee);
         }
 
         // Turnuvaya katıl
@@ -876,8 +876,10 @@ class TournamentQuizController extends Controller
 
         // Kullanıcının coins alanını güncelle (doğru cevap +coin, yanlış cevap -coin)
         $user->refresh(); // Güncel coin değerini al
-        $balanceBefore = $user->coins;
-        $newBalance = max(0, $balanceBefore + $coinChange); // Coin negatif olamaz (minimum 0)
+        $user->ensurePremiumCoinsFloor();
+        $user->refresh();
+        $balanceBefore = (int) $user->coins;
+        $newBalance = $user->clampCoinsBalance($balanceBefore + $coinChange);
 
         $user->update(['coins' => $newBalance]);
 

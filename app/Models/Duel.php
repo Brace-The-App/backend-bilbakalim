@@ -83,7 +83,7 @@ class Duel extends Model
      */
     public function getMultiplierValueAttribute(): int
     {
-        return match($this->multiplier) {
+        return match ($this->multiplier) {
             'x2' => 2,
             'x4' => 4,
             'x8' => 8,
@@ -92,10 +92,35 @@ class Duel extends Model
     }
 
     /**
-     * Soru değerini hesapla (taban 1 coin × multiplier)
+     * Soru jetoni × masa çarpanı.
+     * Örnek: zor (3) × x2 = 6. Maç içi ekstra çarpan (2/4/6/8) ayrı çarpılır.
+     */
+    public function stakeForQuestion(?Question $question = null): int
+    {
+        $q = $question;
+        if (!$q && $this->current_question_id) {
+            $q = $this->relationLoaded('currentQuestion')
+                ? $this->currentQuestion
+                : $this->currentQuestion()->first();
+        }
+
+        $base = 1;
+        if ($q) {
+            $fromCoin = (int) ($q->coin_value ?? 0);
+            $fromLevel = Question::coinValueForLevel($q->question_level);
+            // Önce kayıttaki coin_value; boş/0 ise seviyeden
+            $base = $fromCoin > 0 ? $fromCoin : ($fromLevel ?? 1);
+            $base = max(1, $base);
+        }
+
+        return $base * $this->multiplier_value;
+    }
+
+    /**
+     * Mevcut soru için stake (soru yoksa taban 1 × masa çarpanı).
      */
     public function getQuestionValueAttribute(): int
     {
-        return $this->multiplier_value;
+        return $this->stakeForQuestion();
     }
 }

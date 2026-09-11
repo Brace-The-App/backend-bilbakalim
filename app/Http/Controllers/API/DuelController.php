@@ -955,11 +955,13 @@ class DuelController extends Controller
                     'id' => $duel->challenger->id,
                     'name' => $duel->challenger->name,
                     'avatar' => $duel->challenger->avatar,
+                    'is_premium' => (bool) $duel->challenger->is_premium,
                 ],
                 'opponent' => [
                     'id' => $duel->opponent->id,
                     'name' => $duel->opponent->name,
                     'avatar' => $duel->opponent->avatar,
+                    'is_premium' => (bool) $duel->opponent->is_premium,
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -1004,7 +1006,7 @@ class DuelController extends Controller
      * @OA\Get(
      *     path="/api/duel/status/{duel_id}",
      *     summary="Düello Durumu",
-     *     description="Düello durumunu, mevcut soruyu ve oyuncu bilgilerini getirir.",
+     *     description="Düello durumu, mevcut soru ve oyuncular. question_value = mevcut_soru.coin_value × masa_çarpanı (kolay=1, orta=2, zor=3; x1/x2/x4/x8). Maç içi ekstra teklif çarpanı bu alana dahil değildir (cevap anında uygulanır). Oyuncu is_premium bilgisi döner. Premium üyede coins tabanı min 1.",
      *     tags={"Duel"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -1019,7 +1021,20 @@ class DuelController extends Controller
      *         description="Düello durumu",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="duel", type="object")
+     *             @OA\Property(
+     *                 property="duel",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=101),
+     *                 @OA\Property(property="multiplier", type="string", enum={"x1","x2","x4","x8"}, example="x2"),
+     *                 @OA\Property(property="status", type="string", example="active"),
+     *                 @OA\Property(property="current_question_number", type="integer", example=3),
+     *                 @OA\Property(property="question_value", type="integer", example=6, description="coin_value × masa çarpanı; örn. zor(3)×x2=6"),
+     *                 @OA\Property(property="current_question", type="object", nullable=true,
+     *                     @OA\Property(property="id", type="integer", example=1768),
+     *                     @OA\Property(property="question_level", type="string", enum={"easy","medium","hard"}, example="hard"),
+     *                     @OA\Property(property="coin_value", type="integer", example=3, description="Kolay=1 Orta=2 Zor=3")
+     *                 )
+     *             )
      *         )
      *     ),
      *     @OA\Response(
@@ -1063,6 +1078,7 @@ class DuelController extends Controller
                     'id' => $duel->challenger->id,
                     'name' => $duel->challenger->name,
                     'avatar' => $duel->challenger->avatar,
+                    'is_premium' => (bool) $duel->challenger->is_premium,
                     'coins_before' => $duel->challenger_coins_before,
                     'coins_after' => $duel->challenger_coins_after,
                     'current_coins' => (int) ($duel->challenger->coins ?? 0),
@@ -1071,6 +1087,7 @@ class DuelController extends Controller
                     'id' => $duel->opponent->id,
                     'name' => $duel->opponent->name,
                     'avatar' => $duel->opponent->avatar,
+                    'is_premium' => (bool) $duel->opponent->is_premium,
                     'coins_before' => $duel->opponent_coins_before,
                     'coins_after' => $duel->opponent_coins_after,
                     'current_coins' => (int) ($duel->opponent->coins ?? 0),
@@ -1127,6 +1144,7 @@ class DuelController extends Controller
                         'id' => $duel->challenger->id,
                         'name' => $duel->challenger->name,
                         'avatar' => $duel->challenger->avatar,
+                        'is_premium' => (bool) $duel->challenger->is_premium,
                     ],
                     'created_at' => $duel->created_at,
                 ];
@@ -1150,11 +1168,13 @@ class DuelController extends Controller
                         'id' => $duel->challenger->id,
                         'name' => $duel->challenger->name,
                         'avatar' => $duel->challenger->avatar,
+                        'is_premium' => (bool) $duel->challenger->is_premium,
                     ],
                     'opponent' => $duel->opponent ? [
                         'id' => $duel->opponent->id,
                         'name' => $duel->opponent->name,
                         'avatar' => $duel->opponent->avatar,
+                        'is_premium' => (bool) $duel->opponent->is_premium,
                     ] : null,
                     'started_at' => $duel->started_at,
                 ];
@@ -1458,7 +1478,7 @@ class DuelController extends Controller
             $opponent = User::findOrFail($duel->opponent_id);
 
             // Soru değeri (multiplier ile çarpılmış)
-            $questionValue = $duel->question_value; // 1 * multiplier
+            $questionValue = $duel->question_value; // soru.coin_value × masa çarpanı
 
             // Reddeden (opponent) kaybeder, isteği gönderen (challenger) kazanır (tam tutar; komisyon maç sonunda)
             $opponentLoss = $this->transferCoins($opponent, $challenger, $questionValue, $duel);
@@ -1876,7 +1896,7 @@ class DuelController extends Controller
      * @OA\Post(
      *     path="/api/duel/answer/{duel_id}",
      *     summary="Cevap Gönder",
-     *     description="Düello sorusuna cevap gönderir. Her iki oyuncu da cevap verdiğinde coin transferi yapılır.",
+     *     description="Düello sorusuna cevap. Stake = soru.coin_value (kolay=1/orta=2/zor=3) × masa çarpanı (x1/x2/x4/x8) × opsiyonel maç içi teklif (2/4/6/8). İkisi doğru: transfer yok. Biri doğru biri yanlış: kaybedenden kazanana aktarım (bakiyede ne varsa; premium min 1 kalır). selected_answer=0 süre bitimi/yanlış sayılır.",
      *     tags={"Duel"},
      *     security={{"sanctum":{}}},
      *     @OA\Parameter(
@@ -1891,11 +1911,11 @@ class DuelController extends Controller
      *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 @OA\Property(property="selected_answer", type="string", enum={"1", "2", "3", "4"}, example="2", description="Seçilen cevap")
+     *                 @OA\Property(property="selected_answer", type="string", enum={"0","1","2","3","4"}, example="2", description="0=süre bitti/cevap yok (yanlış)")
      *             )
      *         ),
      *         @OA\JsonContent(
-     *             @OA\Property(property="selected_answer", type="string", enum={"1", "2", "3", "4"}, example="2")
+     *             @OA\Property(property="selected_answer", type="string", enum={"0","1","2","3","4"}, example="2")
      *         )
      *     ),
      *     @OA\Response(
@@ -1906,7 +1926,8 @@ class DuelController extends Controller
      *             @OA\Property(property="is_correct", type="boolean", example=true),
      *             @OA\Property(property="correct_answer", type="string", example="2"),
      *             @OA\Property(property="both_answered", type="boolean", example=false),
-     *             @OA\Property(property="waiting_for_opponent", type="boolean", example=true)
+     *             @OA\Property(property="waiting_for_opponent", type="boolean", example=true),
+     *             @OA\Property(property="question_value", type="integer", example=6, description="Bu sorunun nihai stake değeri (coin_value × masa × teklif)")
      *         )
      *     ),
      *     @OA\Response(
@@ -1978,8 +1999,8 @@ class DuelController extends Controller
                 ? max(1, (int) $settings['current_question_multiplier'])
                 : 1;
 
-            // Temel soru değeri (1 * duel multiplier) ve soru bazlı çarpan ile çarpılmış nihai değer
-            $baseQuestionValue = $duel->question_value;
+            // Temel: soru.coin_value × masa çarpanı; maç içi teklif çarpanı ayrıca
+            $baseQuestionValue = $duel->stakeForQuestion($question);
             $questionValue = $baseQuestionValue * $currentMultiplier;
 
             // Cevap kaydı oluştur (henüz coin transferi yapma)
@@ -2071,6 +2092,7 @@ class DuelController extends Controller
                 'is_correct' => $isCorrect,
                 'both_answered' => $bothAnswered,
                 'waiting_for_opponent' => !$bothAnswered,
+                'question_value' => $questionValue,
             ], $this->correctAnswerRevealForQuestion($question, $isCorrect)));
 
         } catch (\Exception $e) {
@@ -2532,11 +2554,13 @@ class DuelController extends Controller
                     'id' => $duel->challenger->id,
                     'name' => $duel->challenger->name,
                     'avatar' => $duel->challenger->avatar,
+                    'is_premium' => (bool) $duel->challenger->is_premium,
                 ] : null,
                 'opponent' => $duel->opponent ? [
                     'id' => $duel->opponent->id,
                     'name' => $duel->opponent->name,
                     'avatar' => $duel->opponent->avatar,
+                    'is_premium' => (bool) $duel->opponent->is_premium,
                 ] : null,
                 'timestamp' => now()->toISOString()
             ]);
@@ -2677,6 +2701,7 @@ class DuelController extends Controller
                 'id' => null,
                 'name' => '—',
                 'avatar' => null,
+                'is_premium' => false,
             ];
         }
 
@@ -2684,6 +2709,7 @@ class DuelController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'avatar' => $user->avatar,
+            'is_premium' => (bool) $user->is_premium,
         ];
     }
 
@@ -2838,7 +2864,11 @@ class DuelController extends Controller
 
     private function subtractCoins(User $user, int $amount, ?Duel $duel = null, string $description = ''): int
     {
-        $amount = min(max(0, $amount), (int) $user->coins);
+        $user->ensurePremiumCoinsFloor();
+        $user->refresh();
+
+        $floor = $user->coinsFloor();
+        $amount = min(max(0, $amount), max(0, (int) $user->coins - $floor));
         if ($amount <= 0) {
             return 0;
         }

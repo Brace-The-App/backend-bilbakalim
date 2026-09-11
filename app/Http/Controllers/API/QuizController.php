@@ -152,7 +152,7 @@ class QuizController extends Controller
      * @OA\Post(
      *     path="/api/quiz/normal/answer",
      *     summary="Normal Quiz Cevap Gönder",
-     *     description="Normal quiz oyununda soruya cevap gönderir.",
+     *     description="Normal quiz cevabı. earned_coins = ±question.coin_value (kolay=1, orta=2, zor=3). Premium aktifken coins 0'a inmez (min 1); düşük bakiyede requires_ad_watch açılmaz.",
      *     tags={"Quiz"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -180,7 +180,7 @@ class QuizController extends Controller
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(property="is_correct", type="boolean", example=true),
      *             @OA\Property(property="correct_option", type="string", example="2"),
-     *             @OA\Property(property="earned_coins", type="integer", example=50),
+     *             @OA\Property(property="earned_coins", type="integer", example=2, description="Kolay±1 Orta±2 Zor±3"),
      *             @OA\Property(property="game_stats", type="object"),
      *             @OA\Property(property="next_question", type="object")
      *         )
@@ -295,11 +295,16 @@ class QuizController extends Controller
         if (!$isCorrect) {
             // Kullanıcının mevcut coin'ini kontrol et
             $user->refresh(); // Güncel coin değerini al
-            $userCoins = $user->coins;
+            $user->ensurePremiumCoinsFloor();
+            $user->refresh();
+            $userCoins = (int) $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
+            $floor = $user->coinsFloor();
+            $isPremiumFloor = $floor > 0;
 
-            // Eğer kullanıcının coini yeterli değilse veya 5 coin ve altındaysa, reklam/coin satın alma seçeneği sun
-            if ($userCoins < $coinDeduction || $userCoins <= 5) {
+            // Premium: tabanın altında kalmaz, reklam/satın alma kapısı açılmaz — oyun devam eder.
+            // Normal: yetersiz veya ≤5 ise reklam/coin satın alma seçeneği
+            if (!$isPremiumFloor && ($userCoins < $coinDeduction || $userCoins <= 5)) {
                 // Sonraki soruyu getir (kontrol için)
                 $nextQuestion = $this->getNextQuestion($game);
                 $nextQuestionCoinValue = $nextQuestion ? $nextQuestion->coin_value : 0;
@@ -307,17 +312,16 @@ class QuizController extends Controller
                 // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
                 if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
                     // Coin yeterli değil, reklam/coin satın alma seçeneği sun
-        $game->update([
-            'question_count' => $game->question_count + 1,
+                    $game->update([
+                        'question_count' => $game->question_count + 1,
                         'correct_answers' => $game->correct_answers,
                         'wrong_answers' => $game->wrong_answers + 1,
-            'coins_earned' => $game->coins_earned + $coinsChange,
-            'total_time_seconds' => $game->total_time_seconds + $timeSpent,
-            'settings' => $settings
-        ]);
+                        'coins_earned' => $game->coins_earned + $coinsChange,
+                        'total_time_seconds' => $game->total_time_seconds + $timeSpent,
+                        'settings' => $settings
+                    ]);
 
-                    // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
-                    $finalCoins = max(0, $userCoins - $coinDeduction);
+                    $finalCoins = $user->clampCoinsBalance($userCoins - $coinDeduction);
                     $user->update(['coins' => $finalCoins]);
 
                     return response()->json(array_merge([
@@ -341,12 +345,12 @@ class QuizController extends Controller
                 }
             }
 
-            // Coin yeterli ama eksiye gitmemesi için kontrol et
-            $finalCoins = max(0, $userCoins + $coinsChange);
+            // Premium taban veya normal: eksiye / tabanın altına gitmesin
+            $finalCoins = $user->clampCoinsBalance($userCoins + $coinsChange);
             $user->update(['coins' => $finalCoins]);
         } else {
             // Doğru cevap - coin ekle
-        $user->increment('coins', $coinsChange);
+            $user->increment('coins', $coinsChange);
         }
 
         $game->update([
@@ -756,7 +760,7 @@ class QuizController extends Controller
                 $selectedAnswerStr = (string) $selectedAnswer;
                 $secondOptionStr = (string) $request->second_option;
                 $isCorrect = ($correctAnswer === $selectedAnswerStr) ||
-                            ($correctAnswer === $secondOptionStr);
+                    ($correctAnswer === $secondOptionStr);
             } else {
                 // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
                 $isCorrect = (string) $question->correct_answer === (string) $selectedAnswer;
@@ -888,7 +892,7 @@ class QuizController extends Controller
 
         $totalCost = $jokerPrices[$jokerType] * $quantity;
 
-        if ($user->coins < $totalCost) {
+        if (!$user->canAffordSpend($totalCost)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Yeterli coin bulunmuyor.',
@@ -897,8 +901,8 @@ class QuizController extends Controller
             ], 400);
         }
 
-        // Coin'i düş ve joker'i ekle
-        $user->decrement('coins', $totalCost);
+        // Coin'i düş ve joker'i ekle (premium tabanın altına inmez)
+        $user->deductCoinsRespectingFloor($totalCost);
         $user->increment($jokerType . '_jokers', $quantity);
 
         // User'ı yeniden yükle ki güncel joker değerlerini alabilelim
@@ -1292,8 +1296,8 @@ class QuizController extends Controller
                 if ($adAppearanceFrequency > 0 && $i % $adAppearanceFrequency === 0 && $adCategory) {
                     $adQuestions = Question::where('is_active', true)
                         ->where('category_id', $adCategory->id)
-                ->inRandomOrder()
-                ->get();
+                        ->inRandomOrder()
+                        ->get();
 
                     if ($adQuestions->isNotEmpty()) {
                         $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
@@ -1308,7 +1312,7 @@ class QuizController extends Controller
                     $question = Question::where('question_level', 'easy')
                         ->where('is_active', true)
                         ->whereNotIn('id', $allQuestions->pluck('id'))
-                    ->inRandomOrder()
+                        ->inRandomOrder()
                         ->first();
                 } else {
                     $difficulties = ['easy', 'medium', 'hard'];

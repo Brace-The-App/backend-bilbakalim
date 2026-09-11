@@ -293,12 +293,12 @@ class PremiumQuizController extends Controller
                         $game->update(['settings' => $settings]);
                     }
 
-                // Çift cevap: iki seçenekten biri doğru olmalı
+                    // Çift cevap: iki seçenekten biri doğru olmalı
                     $correctAnswer = (string) $question->correct_answer;
                     $firstOptionStr = (string) $firstOption;
                     $secondOptionStr = (string) $request->second_option;
                     $isCorrect = ($correctAnswer === $firstOptionStr) ||
-                                ($correctAnswer === $secondOptionStr);
+                        ($correctAnswer === $secondOptionStr);
 
                     // Cevabı kaydet
                     GameAnswer::create([
@@ -315,7 +315,7 @@ class PremiumQuizController extends Controller
                     ]);
 
                     $answerAlreadySaved = true;
-            } else {
+                } else {
                     // Normal cevap - Tip uyumsuzluğunu önlemek için string'e çevir
                     $isCorrect = (string) $question->correct_answer === (string) $selectedOption;
                 }
@@ -326,18 +326,18 @@ class PremiumQuizController extends Controller
 
         // Cevabı kaydet (eğer daha önce kaydedilmediyse)
         if (!$answerAlreadySaved) {
-        GameAnswer::create([
-            'individual_game_id' => $game->id,
-            'game_session_id' => null, // Premium quiz için null
-            'user_id' => $user->id,
-            'question_id' => $question->id,
-            'selected_option' => $selectedOption,
-            'is_correct' => $isCorrect,
-            'time_spent' => $timeSpent,
-            'joker_used' => $jokerUsed,
-            'answered_at' => now(),
+            GameAnswer::create([
+                'individual_game_id' => $game->id,
+                'game_session_id' => null, // Premium quiz için null
+                'user_id' => $user->id,
+                'question_id' => $question->id,
+                'selected_option' => $selectedOption,
+                'is_correct' => $isCorrect,
+                'time_spent' => $timeSpent,
+                'joker_used' => $jokerUsed,
+                'answered_at' => now(),
                 'user_answer' => $selectedOption ?? null
-        ]);
+            ]);
         }
 
         // Oyun istatistiklerini güncelle
@@ -358,11 +358,16 @@ class PremiumQuizController extends Controller
         if (!$isCorrect) {
             // Kullanıcının mevcut coin'ini kontrol et
             $user->refresh(); // Güncel coin değerini al
-            $userCoins = $user->coins;
+            $user->ensurePremiumCoinsFloor();
+            $user->refresh();
+            $userCoins = (int) $user->coins;
             $coinDeduction = abs($coinsChange); // Coin düşüş miktarı (pozitif değer)
+            $floor = $user->coinsFloor();
+            $isPremiumFloor = $floor > 0;
 
-            // Eğer kullanıcının coini yeterli değilse veya 5 coin ve altındaysa, reklam/coin satın alma seçeneği sun
-            if ($userCoins < $coinDeduction || $userCoins <= 5) {
+            // Premium: 0'a düşmez, reklam kapısı yok — oyun devam.
+            // Normal: yetersiz veya ≤5 → oyun bitir + reklam/satın alma
+            if (!$isPremiumFloor && ($userCoins < $coinDeduction || $userCoins <= 5)) {
                 // Sonraki soruyu getir (kontrol için)
                 $nextQuestion = $this->getNextPremiumQuestion($game);
                 $nextQuestionCoinValue = $nextQuestion ? $nextQuestion->coin_value : 0;
@@ -370,47 +375,45 @@ class PremiumQuizController extends Controller
                 // Eğer bir sonraki soru için yeterli coin yoksa (5 coin ve altı) veya mevcut soru için coin yoksa
                 if ($userCoins < $coinDeduction || ($nextQuestion && $userCoins <= 5 && $userCoins < $nextQuestionCoinValue)) {
                     // Coin yeterli değil, reklam/coin satın alma seçeneği sun
-            $game->update([
-                'correct_answers' => $game->correct_answers,
-                'wrong_answers' => $game->wrong_answers + 1,
-                'coins_earned' => $game->coins_earned + $coinsChange,
-                'total_time_seconds' => $game->total_time_seconds + $timeSpent,
-                'status' => 'completed',
-                'ended_at' => now(),
-                'settings' => $settings
-            ]);
+                    $game->update([
+                        'correct_answers' => $game->correct_answers,
+                        'wrong_answers' => $game->wrong_answers + 1,
+                        'coins_earned' => $game->coins_earned + $coinsChange,
+                        'total_time_seconds' => $game->total_time_seconds + $timeSpent,
+                        'status' => 'completed',
+                        'ended_at' => now(),
+                        'settings' => $settings
+                    ]);
 
-                    // Kullanıcının coin'ini güncelle (eksiye gitmemesi için max(0, ...) kullan)
-                    $finalCoins = max(0, $userCoins - $coinDeduction);
+                    $finalCoins = $user->clampCoinsBalance($userCoins - $coinDeduction);
                     $user->update(['coins' => $finalCoins]);
 
-            // Socket.IO'ya oyun bitiş bildirimi gönder
-            $this->broadcastQuizCompleted($game, $user, [], []);
+                    // Socket.IO'ya oyun bitiş bildirimi gönder
+                    $this->broadcastQuizCompleted($game, $user, [], []);
 
-            return response()->json(array_merge([
-                'success' => false,
+                    return response()->json(array_merge([
+                        'success' => false,
                         'message' => 'Yeterli jetonunuz yok. Reklam izleyerek veya jeton satın alarak devam edebilirsiniz.',
-                'is_correct' => false,
-                'earned_coins' => $coinsChange,
+                        'is_correct' => false,
+                        'earned_coins' => $coinsChange,
                         'requires_coin_purchase' => true,
                         'requires_ad_watch' => true,
                         'user_coins' => $finalCoins,
                         'required_coins' => $coinDeduction,
                         'next_question_coin_value' => $nextQuestionCoinValue,
-                'game_stats' => [
-                    'total_questions' => $game->question_count,
-                    'correct_answers' => $game->correct_answers,
-                    'wrong_answers' => $game->wrong_answers,
-                    'total_coins' => $game->coins_earned,
+                        'game_stats' => [
+                            'total_questions' => $game->question_count,
+                            'correct_answers' => $game->correct_answers,
+                            'wrong_answers' => $game->wrong_answers,
+                            'total_coins' => $game->coins_earned,
                             'user_coins' => $finalCoins
-                ],
-                'game_completed' => true
-            ], $this->correctAnswerRevealForQuestion($question, false)));
+                        ],
+                        'game_completed' => true
+                    ], $this->correctAnswerRevealForQuestion($question, false)));
                 }
             }
 
-            // Coin yeterli ama eksiye gitmemesi için kontrol et
-            $finalCoins = max(0, $userCoins + $coinsChange);
+            $finalCoins = $user->clampCoinsBalance($userCoins + $coinsChange);
             $user->update(['coins' => $finalCoins]);
         } else {
             // Doğru cevap - coin ekle
@@ -740,7 +743,7 @@ class PremiumQuizController extends Controller
                 $selectedAnswerStr = (string) $selectedAnswer;
                 $secondOptionStr = (string) $request->second_option;
                 $isCorrect = ($correctAnswer === $selectedAnswerStr) ||
-                            ($correctAnswer === $secondOptionStr);
+                    ($correctAnswer === $secondOptionStr);
             } else {
                 // Normal cevap kontrolü - Tip uyumsuzluğunu önlemek için string'e çevir
                 $isCorrect = (string) $question->correct_answer === (string) $selectedAnswer;
@@ -1225,8 +1228,8 @@ class PremiumQuizController extends Controller
                 $tournamentUser->refresh();
             }
 
-        return response()->json([
-            'success' => true,
+            return response()->json([
+                'success' => true,
                 'game_type' => 'tournament',
                 'jokers' => [
                     'fifty_fifty' => $answersDetail['jokers']['fifty_fifty'] ?? 0,
@@ -1318,7 +1321,7 @@ class PremiumQuizController extends Controller
 
         $totalCost = $jokerPrices[$jokerType] * $quantity;
 
-        if ($user->coins < $totalCost) {
+        if (!$user->canAffordSpend($totalCost)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Yeterli jetonunuz yok.',
@@ -1327,8 +1330,8 @@ class PremiumQuizController extends Controller
             ], 400);
         }
 
-        // Jetonu düş ve joker ekle
-        $user->decrement('coins', $totalCost);
+        // Jetonu düş ve joker ekle (premium tabanın altına inmez)
+        $user->deductCoinsRespectingFloor($totalCost);
         $user->increment($jokerType . '_jokers', $quantity);
 
         return response()->json([
@@ -1693,8 +1696,8 @@ class PremiumQuizController extends Controller
             if ($adAppearanceFrequency > 0 && $i % $adAppearanceFrequency === 0 && $adCategory) {
                 $adQuestions = Question::where('is_active', true)
                     ->where('category_id', $adCategory->id)
-            ->inRandomOrder()
-            ->get();
+                    ->inRandomOrder()
+                    ->get();
 
                 if ($adQuestions->isNotEmpty()) {
                     $adQuestion = $adQuestions->get($adQuestionIndex % $adQuestions->count());
@@ -1707,9 +1710,9 @@ class PremiumQuizController extends Controller
             // Normal soru seçimi: İlk 7 orta, sonraki 8 zor
             if ($allQuestions->where('question_level', 'medium')->count() < 7) {
                 $question = Question::where('question_level', 'medium')
-            ->where('is_active', true)
+                    ->where('is_active', true)
                     ->whereNotIn('id', $allQuestions->pluck('id'))
-            ->inRandomOrder()
+                    ->inRandomOrder()
                     ->first();
             } else {
                 $question = Question::where('question_level', 'hard')

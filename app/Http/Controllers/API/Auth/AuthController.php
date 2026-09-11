@@ -163,8 +163,11 @@ class AuthController extends Controller
         }
         $user->forceFill($fill)->save();
 
+        $user->ensurePremiumCoinsFloor();
+        $user = $user->fresh();
+
         $responseData = [];
-        $responseData['user'] = UserResource::make($user->fresh());
+        $responseData['user'] = UserResource::make($user);
         $responseData['accessToken'] = $token->plainTextToken;
         return Response::withData(true, "Tebrikler başarılı bir şekilde giriş yaptınız.", $responseData);
     }
@@ -435,7 +438,7 @@ class AuthController extends Controller
      * @OA\Get(
      *     path="/api/auth/me",
      *     summary="User Detail",
-     *     description="Get user detail",
+     *     description="Kullanıcı detayı. Aktif premium ise coins 0 ise otomatik min 1'e tamamlanır (premium jeton tabanı). is_premium RevenueCat ile override edilebilir.",
      *     operationId="detail",
      *     tags={"Auth"},
      *     security={{"sanctum":{}}},
@@ -448,7 +451,7 @@ class AuthController extends Controller
      *             @OA\Property(property="data", type="object",
      *                 @OA\Property(property="id", type="integer", example=1),
      *                 @OA\Property(property="name", type="string", example="Test User"),
-     *                 @OA\Property(property="coins", type="integer", example=1200),
+     *                 @OA\Property(property="coins", type="integer", example=1, description="Premium aktifken asla 0 olmaz (min 1)"),
      *                 @OA\Property(property="diamonds", type="integer", example=10),
      *                 @OA\Property(property="is_premium", type="boolean", example=true, description="RevenueCat sonucuna göre hesaplanan premium durumu"),
      *                 @OA\Property(property="revenuecat", type="object",
@@ -471,6 +474,9 @@ class AuthController extends Controller
                 []
             );
         }
+
+        $this->user->ensurePremiumCoinsFloor();
+        $this->user->refresh();
 
         $resourceData = UserResource::make($this->user)->resolve();
         $revenueCat = $this->fetchRevenueCatPremiumStatus($this->user);

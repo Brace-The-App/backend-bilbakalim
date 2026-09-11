@@ -11,6 +11,7 @@ use App\Models\Payment;
 use App\Models\CoinPackage;
 use App\Models\CoinPurchase;
 use App\Models\PremiumPackage;
+use App\Services\PurchaseSaleSmsNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -30,7 +31,7 @@ class PaymentController extends Controller
      * @OA\Post(
      *     path="/api/payments/initiate",
      *     summary="Ödeme işle",
-     *     description="RevenueCat onayı sonrası çağrılır. type değerine göre coin/elmas/premium/joker kullanıcı hesabına tanımlanır.",
+     *     description="RevenueCat onayı sonrası çağrılır. type=premium: is_premium + süre; coins 0 ise min 1 yapılır (premium jeton tabanı). type=coin/diamond/joker ilgili grant.",
      *     tags={"Payments"},
      *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
@@ -38,7 +39,7 @@ class PaymentController extends Controller
      *         @OA\MediaType(
      *             mediaType="application/x-www-form-urlencoded",
      *             @OA\Schema(
-     *                 @OA\Property(property="type", type="string", enum={"coin","diamond","premium","joker"}, description="Satın alma tipi", example="coin"),
+     *                 @OA\Property(property="type", type="string", enum={"coin","diamond","premium","joker"}, description="Satın alma tipi", example="premium"),
      *                 @OA\Property(property="package_id", type="integer", description="Paket ID", example=1),
      *                 @OA\Property(property="status", type="string", enum={"completed","failed"}, description="Ödeme durumu", example="completed"),
      *                 @OA\Property(property="transaction_id", type="string", description="İşlem ID", example="txn_123456"),
@@ -46,7 +47,7 @@ class PaymentController extends Controller
      *             )
      *         ),
      *         @OA\JsonContent(
-     *             @OA\Property(property="type", type="string", enum={"coin","diamond","premium","joker"}, example="coin"),
+     *             @OA\Property(property="type", type="string", enum={"coin","diamond","premium","joker"}, example="premium"),
      *             @OA\Property(property="package_id", type="integer", example=1),
      *             @OA\Property(property="status", type="string", enum={"completed","failed"}, example="completed"),
      *             @OA\Property(property="transaction_id", type="string", example="txn_123456"),
@@ -61,9 +62,9 @@ class PaymentController extends Controller
      *             @OA\Property(property="message", type="string", example="Ödeme başarıyla tamamlandı."),
      *             @OA\Property(property="data", type="object",
      *                 @OA\Property(property="payment", type="object"),
-     *                 @OA\Property(property="grant_type", type="string", example="coin"),
+     *                 @OA\Property(property="grant_type", type="string", example="premium"),
      *                 @OA\Property(property="amount", type="string", example="39.99 TRY"),
-     *                 @OA\Property(property="user_coins", type="integer", example=1600),
+     *                 @OA\Property(property="user_coins", type="integer", example=1, description="Premium sonrası min 1 olabilir"),
      *                 @OA\Property(property="user_diamond_balance", type="integer", example=50),
      *                 @OA\Property(property="is_premium", type="boolean", example=true),
      *                 @OA\Property(property="premium_expires_at", type="string", nullable=true, example="2026-04-08T12:00:00Z")
@@ -281,6 +282,9 @@ class PaymentController extends Controller
                         'premium_expires_at' => $newExpireAt,
                     ])->save();
 
+                    // Premium aktifken jeton 0'da kalmasın (min 1)
+                    $user->ensurePremiumCoinsFloor();
+
                     if ((int) $selectedPackage->gift_coins > 0) {
                         $user->increment('coins', (int) $selectedPackage->gift_coins);
                     }
@@ -313,6 +317,15 @@ class PaymentController extends Controller
             }
 
             DB::commit();
+
+            if ($request->status === 'completed') {
+                app(PurchaseSaleSmsNotifier::class)->notifyPayment(
+                    $payment->fresh(),
+                    $user->fresh(),
+                    $type,
+                    $selectedPackage
+                );
+            }
 
             return response()->json([
                 'success' => true,

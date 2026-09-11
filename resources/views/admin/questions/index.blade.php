@@ -490,7 +490,7 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Seviye *</label>
-                                <select name="question_level" class="form-select" required>
+                                <select name="question_level" class="form-select js-question-level" required>
                                     <option value="easy">Kolay</option>
                                     <option value="medium">Orta</option>
                                     <option value="hard">Zor</option>
@@ -498,7 +498,8 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Coin Değeri</label>
-                                <input type="number" name="coin_value" class="form-control" value="10">
+                                <input type="number" name="coin_value" class="form-control js-question-coin" value="1" readonly>
+                                <div class="form-text">Otomatik: Kolay=1 · Orta=2 · Zor=3</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Kategori *</label>
@@ -766,7 +767,7 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Seviye *</label>
-                                <select name="question_level" id="edit-level" class="form-select" required>
+                                <select name="question_level" id="edit-level" class="form-select js-question-level" required>
                                     <option value="easy">Kolay</option>
                                     <option value="medium">Orta</option>
                                     <option value="hard">Zor</option>
@@ -774,7 +775,8 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Coin Değeri</label>
-                                <input type="number" name="coin_value" id="edit-coin" class="form-control">
+                                <input type="number" name="coin_value" id="edit-coin" class="form-control js-question-coin" readonly>
+                                <div class="form-text">Otomatik: Kolay=1 · Orta=2 · Zor=3</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Kategori *</label>
@@ -1006,6 +1008,18 @@
 @push('scripts')
     <script>
         $(document).ready(function() {
+            var QUESTION_COIN_BY_LEVEL = @json(config('app.coin_values_by_level', ['easy' => 1, 'medium' => 2, 'hard' => 3]));
+
+            function syncQuestionCoinFromLevel($levelSelect) {
+                var level = $levelSelect.val();
+                var coins = QUESTION_COIN_BY_LEVEL[level] || 1;
+                $levelSelect.closest('form').find('.js-question-coin').val(coins);
+            }
+
+            $(document).on('change', '.js-question-level', function () {
+                syncQuestionCoinFromLevel($(this));
+            });
+
             // URL'den sayfa numarasını al
             function getCurrentPageFromUrl() {
                 var urlParams = new URLSearchParams(window.location.search);

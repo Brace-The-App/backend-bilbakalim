@@ -123,7 +123,10 @@ class QuestionAnswerStatsService
         }
 
         DB::transaction(function () use ($question, $old, $observed, $adminId, $logAction) {
-            $question->update(['question_level' => $observed]);
+            $question->update([
+                'question_level' => $observed,
+                // coin_value: Question::saving → coinValueForLevel(observed)
+            ]);
 
             QuestionAdminLog::create([
                 'question_id' => $question->id,
@@ -131,7 +134,7 @@ class QuestionAnswerStatsService
                 'action' => $logAction,
                 'field' => 'question_level',
                 'old_value' => $old,
-                'new_value' => $observed,
+                'new_value' => $observed . ' (coin=' . Question::coinValueForLevel($observed) . ')',
             ]);
         });
 

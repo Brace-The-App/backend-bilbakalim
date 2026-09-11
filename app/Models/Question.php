@@ -44,6 +44,49 @@ class Question extends Model
         'ai_quality_review_id' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (Question $question) {
+            $mapped = self::coinValueForLevel($question->question_level);
+            if ($mapped !== null) {
+                $question->coin_value = $mapped;
+            }
+        });
+    }
+
+    /**
+     * Kolay=1, Orta=2, Zor=3 (config: app.coin_values_by_level).
+     */
+    public static function coinValueForLevel(?string $level): ?int
+    {
+        if ($level === null || $level === '') {
+            return null;
+        }
+
+        $map = config('app.coin_values_by_level', [
+            'easy' => 1,
+            'medium' => 2,
+            'hard' => 3,
+        ]);
+
+        if (!isset($map[$level])) {
+            return null;
+        }
+
+        return max(1, (int) $map[$level]);
+    }
+
+    public function syncCoinValueFromLevel(bool $save = false): int
+    {
+        $coins = self::coinValueForLevel($this->question_level) ?? 1;
+        $this->coin_value = $coins;
+        if ($save) {
+            $this->save();
+        }
+
+        return $coins;
+    }
+
     // Relationships
     public function category(): BelongsTo
     {
